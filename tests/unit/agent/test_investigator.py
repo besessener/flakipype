@@ -5,7 +5,15 @@ from flakipype.agent.finding_tools import FindingTools
 from flakipype.agent.investigator import Investigator, ModelSettings, Status
 from flakipype.agent.masking import Masker
 from flakipype.agent.pipeline import finding_text
-from flakipype.agent.tools import Mode, PolicyGate, RiskLevel, Tool, deny_all
+from flakipype.agent.tools import (
+    ActionRequest,
+    Mode,
+    PolicyGate,
+    PreparedAction,
+    RiskLevel,
+    Tool,
+    deny_all,
+)
 
 from support.fake_anthropic import ScriptedModel, call, message, text, thinking, verdict_input
 from support.fake_sources import FakeContents, FakeLogs, evidence, finding
@@ -145,7 +153,11 @@ def test_model_errors_are_reported() -> None:
 
 
 def test_unknown_tools_failing_tools_and_the_gate_answer_with_errors() -> None:
-    write_tool = Tool("rerun", "Rerun a job.", RiskLevel.WRITE, Nothing, lambda _: "done")
+    declined: list[str] = []
+    action = PreparedAction(
+        ActionRequest("Rerun?", ()), run=lambda: "done", declined=lambda: declined.append("rerun")
+    )
+    write_tool = Tool("rerun", "Rerun a job.", RiskLevel.WRITE, Nothing, lambda _: action)
     model = ScriptedModel(
         [
             message(
@@ -161,7 +173,10 @@ def test_unknown_tools_failing_tools_and_the_gate_answer_with_errors() -> None:
 
     results = model.tool_results(1)
     assert results["toolu_1"]["content"] == "There is no tool named teleport."
-    assert results["toolu_2"]["content"] == "rerun is not permitted in this mode."
+    assert results["toolu_2"]["content"] == (
+        "rerun: the user declined. Do not ask for it again in this turn."
+    )
+    assert declined == ["rerun"]
     assert "not a job of this workflow" in results["toolu_3"]["content"]
     assert all(result["is_error"] for result in results.values())
 

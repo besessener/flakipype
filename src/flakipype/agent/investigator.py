@@ -181,10 +181,8 @@ class Investigator:
         tool = self._tools.get(use.name)
         if tool is None:
             return f"There is no tool named {use.name}.", True
-        if not self._gate.permits(tool):
-            return f"{use.name} is not permitted in this mode.", True
         try:
-            text = self._masker.mask(tool.invoke(dict(use.input)))
+            text = self._masker.mask(tool.invoke(dict(use.input), self._gate))
         except ToolError as error:
             return self._masker.mask(str(error)), True
         self._results[use.id] = text

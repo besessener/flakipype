@@ -1,13 +1,17 @@
 """The chat behind the terminal UI: slash commands, questions to the agent, sessions."""
 
 import json
+import re
+import threading
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from flakipype.actions.watch import WatchedRun
 from flakipype.agent.orchestrator import ChatAgent, StepListener, ignore_steps
+from flakipype.agent.tools import Confirmer, ToolDeclinedError, ToolError
 from flakipype.agent.verdict import Verdict
 from flakipype.flaky.findings import FindingKind
 from flakipype.github.actions import GitHubApiError
@@ -20,6 +24,8 @@ _TITLE_LENGTH = 60
 _RECENT_SESSIONS = 10
 _ALL = "all"
 _FRESH = "--fresh"
+_ALL_JOBS = "--all"
+_REPEATS = re.compile(r"x(\d+)")
 
 HELP = """\
 **Commands**
@@ -28,6 +34,10 @@ HELP = """\
 - `/findings` – list the findings of the current scan
 - `/investigate N [N …] | all [--fresh]` – let the agent investigate findings
 - `/why N` – show the verdict for finding N with its evidence
+- `/rerun N [--all]` – rerun the failed jobs (or all jobs) of finding N's newest run
+- `/dispatch N [ref] [xK]` – start finding N's workflow on the default branch or `ref`, K times
+- `/runs` – runs started in this session · `/cancel R` – cancel run R
+- `/actions` – the reruns, dispatches and cancels requested in this session
 - `/budget` – tokens used in this session
 - `/sessions` – recent sessions · `/resume N` – continue one · `/new` – start over
 - `/help` – this list · `/quit` – leave (also Ctrl+Q)
@@ -65,19 +75,24 @@ class _Session:
 
 
 class ChatService:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - collaborators of the chat, all keyword-only
         self,
         *,
         workspace: ChatWorkspace,
         agent: ChatAgent,
         sessions: SessionStore,
+        confirmer: Confirmer,
         now: Callable[[], datetime],
     ) -> None:
         self._workspace = workspace
         self._agent = agent
         self._sessions = sessions
+        # The window sets confirmer.ask once it can show a dialog.
+        self.confirmer = confirmer
         self._now = now
         self._session = _Session()
+        # Run notes are saved from the polling thread while a turn may be saving too.
+        self._saving = threading.Lock()
 
     @property
     def workspace(self) -> ChatWorkspace:
@@ -100,6 +115,18 @@ class ChatService:
             return self._command(text)
         answer = self._guarded(lambda: self._ask(text, on_step))
         return self._record([ChatEntry(EntryKind.USER, text), answer])
+
+    def poll(self) -> list[ChatEntry]:
+        """Reads the started runs once; a note for each run that finished, also kept."""
+        notes = [ChatEntry(EntryKind.NOTE, note) for note in self._workspace.actions.poll()]
+        if notes:
+            self._session.entries.extend(notes)
+            if self._session.session_id is not None:
+                self._save()
+        return notes
+
+    def watched_runs(self) -> list[WatchedRun]:
+        return self._workspace.actions.watched
 
     def sidebar(self) -> list[SidebarItem]:
         findings = self._workspace.finding_list()
@@ -134,6 +161,11 @@ class ChatService:
             "/why": self._why,
             "/budget": lambda _: self._note(f"Tokens used in this session: {self.tokens:,}"),
             "/sessions": lambda _: self._note(self._session_list()),
+            "/rerun": self._rerun,
+            "/dispatch": self._dispatch,
+            "/cancel": self._cancel,
+            "/runs": lambda _: self._note(self._workspace.watched_runs()),
+            "/actions": lambda _: self._note(self._workspace.actions.audit_text()),
         }
         if name == "/new":
             self._start_over()
@@ -173,6 +205,42 @@ class ChatService:
             return ChatEntry(EntryKind.ERROR, "Which finding? E.g. /why 1.")
         return self._note(self._workspace.verdict(numbers[0]))
 
+    def _rerun(self, arguments: list[str]) -> ChatEntry:
+        numbers = _numbers(arguments)
+        if not numbers:
+            return ChatEntry(EntryKind.ERROR, "Which finding? E.g. /rerun 2 or /rerun 2 --all.")
+        tool = "rerun_run" if _ALL_JOBS in arguments else "rerun_failed"
+        return self._act(tool, {"finding": numbers[0]})
+
+    def _dispatch(self, arguments: list[str]) -> ChatEntry:
+        if not arguments or not arguments[0].lstrip("#").isdigit():
+            return ChatEntry(
+                EntryKind.ERROR, "Which finding? E.g. /dispatch 2 or /dispatch 2 main x3."
+            )
+        request: dict[str, object] = {"finding": int(arguments[0].lstrip("#"))}
+        for argument in arguments[1:]:
+            repeats = _REPEATS.fullmatch(argument)
+            if repeats:
+                request["repeats"] = int(repeats.group(1))
+            else:
+                request["ref"] = argument
+        return self._act("dispatch", request)
+
+    def _cancel(self, arguments: list[str]) -> ChatEntry:
+        numbers = _numbers([argument.lstrip("Rr") for argument in arguments])
+        if not numbers:
+            return ChatEntry(EntryKind.ERROR, "Which run? E.g. /cancel R1 (see /runs).")
+        return self._act("cancel", {"run": numbers[0]})
+
+    def _act(self, tool: str, arguments: dict[str, object]) -> ChatEntry:
+        try:
+            with self._workspace.actions.commanded():
+                return self._note(self._agent.run_tool(tool, arguments))
+        except ToolDeclinedError:
+            return self._note("Not run.")
+        except ToolError as error:
+            return ChatEntry(EntryKind.ERROR, str(error))
+
     def _guarded(self, action: Callable[[], ChatEntry]) -> ChatEntry:
         try:
             return action()
@@ -185,15 +253,16 @@ class ChatService:
         return new
 
     def _save(self) -> None:
-        data = json.dumps(self._document())
-        now = self._now().isoformat()
-        if self._session.session_id is None:
-            first = next(e.text for e in self._session.entries if e.kind is EntryKind.USER)
-            self._session.session_id = self._sessions.create(
-                first[:_TITLE_LENGTH], now=now, data=data
-            )
-        else:
-            self._sessions.update(self._session.session_id, now=now, data=data)
+        with self._saving:
+            data = json.dumps(self._document())
+            now = self._now().isoformat()
+            if self._session.session_id is None:
+                first = next(e.text for e in self._session.entries if e.kind is EntryKind.USER)
+                self._session.session_id = self._sessions.create(
+                    first[:_TITLE_LENGTH], now=now, data=data
+                )
+            else:
+                self._sessions.update(self._session.session_id, now=now, data=data)
 
     def _document(self) -> dict[str, Any]:
         return {
@@ -202,6 +271,7 @@ class ChatService:
             "scan": asdict(self._workspace.request),
             "findings": [asdict(item) for item in self.sidebar()],
             "chat_tokens": self._session.chat_tokens,
+            "actions": self._workspace.actions.state(),
         }
 
     def _session_list(self) -> str:
@@ -216,6 +286,7 @@ class ChatService:
     def _start_over(self) -> None:
         self._session = _Session()
         self._agent.restore([])
+        self._workspace.actions.reset()
 
     def _resume(self, arguments: list[str]) -> ChatEntry:
         numbers = _numbers(arguments)
@@ -236,6 +307,10 @@ class ChatService:
         )
         self._workspace.report = None
         self._workspace.results = {}
+        if "actions" in document:
+            self._workspace.actions.restore(document["actions"])
+        else:
+            self._workspace.actions.reset()
         return ChatEntry(EntryKind.NOTE, f"Resumed session {numbers[0]}. The next action rescans.")
 
 

@@ -5,7 +5,18 @@ from pydantic import BaseModel
 
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Limits, RunBudget
 from flakipype.agent.prompts import data_block
-from flakipype.agent.tools import Mode, PolicyGate, RiskLevel, Tool, ToolError, deny_all
+from flakipype.agent.tools import (
+    ActionRequest,
+    Confirmer,
+    Mode,
+    PolicyGate,
+    PreparedAction,
+    RiskLevel,
+    Tool,
+    ToolDeclinedError,
+    ToolError,
+    deny_all,
+)
 from flakipype.agent.verdict import (
     Classification,
     Confidence,
@@ -23,8 +34,26 @@ class Echo(BaseModel):
     word: str
 
 
+REQUEST = ActionRequest("Echo?", ("loudly",))
+ASK_NOBODY = PolicyGate(Mode.ASK, deny_all)
+
+
 def tool(risk: RiskLevel = RiskLevel.READ) -> Tool:
     return Tool("echo", "Echo a word.", risk, Echo, lambda given: given.word.upper())
+
+
+@dataclass
+class Shout:
+    """A writing tool: prepares an action and remembers what became of it."""
+
+    events: list[str]
+
+    def __call__(self, given: Echo) -> PreparedAction:
+        def run() -> str:
+            self.events.append("ran")
+            return given.word.upper()
+
+        return PreparedAction(REQUEST, run=run, declined=lambda: self.events.append("declined"))
 
 
 @dataclass
@@ -47,9 +76,9 @@ def test_tool_definition_and_validated_invocation() -> None:
     echo = tool()
 
     assert echo.definition()["input_schema"]["required"] == ["word"]
-    assert echo.invoke({"word": "hi"}) == "HI"
+    assert echo.invoke({"word": "hi"}, ASK_NOBODY) == "HI"
     with pytest.raises(ToolError, match="Invalid input for echo"):
-        echo.invoke({"wrong": 1})
+        echo.invoke({"wrong": 1}, ASK_NOBODY)
 
 
 @pytest.mark.parametrize(
@@ -62,13 +91,50 @@ def test_tool_definition_and_validated_invocation() -> None:
     ],
 )
 def test_policy_gate(risk: RiskLevel, mode: Mode, confirmed: bool, permitted: bool) -> None:  # noqa: FBT001 - parametrised test data
-    gate = PolicyGate(mode, lambda _: confirmed)
+    asked: list[ActionRequest] = []
 
-    assert gate.permits(tool(risk)) is permitted
+    def confirm(request: ActionRequest) -> bool:
+        asked.append(request)
+        return confirmed
+
+    gate = PolicyGate(mode, confirm)
+
+    assert gate.permits(risk, REQUEST) is permitted
+    assert asked == ([REQUEST] if risk is RiskLevel.WRITE else [])
 
 
 def test_headless_runs_confirm_nothing() -> None:
-    assert not PolicyGate(Mode.ASK, deny_all).permits(tool(RiskLevel.WRITE))
+    assert not ASK_NOBODY.permits(RiskLevel.WRITE, REQUEST)
+
+
+def test_a_confirmed_action_runs() -> None:
+    events: list[str] = []
+    shout = Tool("shout", "Shout a word.", RiskLevel.WRITE, Echo, Shout(events))
+
+    assert shout.invoke({"word": "hi"}, PolicyGate(Mode.ASK, lambda _: True)) == "HI"
+    assert events == ["ran"]
+
+
+def test_a_declined_action_does_not_run_and_tells_the_model_to_stop() -> None:
+    events: list[str] = []
+    shout = Tool("shout", "Shout a word.", RiskLevel.WRITE, Echo, Shout(events))
+
+    with pytest.raises(ToolDeclinedError, match=r"declined\. Do not ask for it again"):
+        shout.invoke({"word": "hi"}, ASK_NOBODY)
+    assert events == ["declined"]
+
+
+def test_a_writing_tool_must_prepare_a_request() -> None:
+    with pytest.raises(TypeError, match="must prepare an action request"):
+        tool(RiskLevel.WRITE).invoke({"word": "hi"}, PolicyGate(Mode.AUTO, deny_all))
+
+
+def test_the_confirmer_declines_until_someone_can_ask() -> None:
+    confirmer = Confirmer()
+    assert not confirmer(REQUEST)
+
+    confirmer.ask = lambda request: request.title == "Echo?"
+    assert confirmer(REQUEST)
 
 
 def test_budget_counts_rounds_tokens_and_time() -> None:

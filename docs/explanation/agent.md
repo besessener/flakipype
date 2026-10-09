@@ -15,8 +15,9 @@ and history the way an engineer would. That is the agent's job.
 
 - **In**: investigating findings and explaining them with cited evidence; a
   chat to ask about them; a headless `flakipype investigate` for scripts.
-- **Out**: rerunning or dispatching workflows (M4, see [actions](actions.md)),
-  changing code or opening pull requests (M5). In M3 every tool only reads.
+- **Out**: changing code or opening pull requests (M5). Investigators only
+  read. The chat model can also rerun and dispatch workflows, each confirmed
+  by you (M4, see [actions](actions.md)).
 
 ## Roles
 
@@ -61,9 +62,11 @@ enforces that. A second `revise` after the one round trip counts as low
 confidence. If no review comes back, the verdict is shown as not reviewed.
 
 **Orchestrator.** In the chat: a model with its own conversation and four
-tools — `scan`, `list_findings`, `investigate` (findings by number) and
-`show_verdict` — that answers your questions and starts investigators
-through them. Slash commands do the same without the model. Headless,
+reading tools — `scan`, `list_findings`, `investigate` (findings by number)
+and `show_verdict` — that answers your questions and starts investigators
+through them. Its action tools (`rerun_failed`, `rerun_run`, `dispatch`,
+`cancel`, and `watched_runs` to read their state) are described in
+[actions](actions.md). Slash commands do the same without the model. Headless,
 `flakipype investigate` has no orchestrator model: it investigates the
 selected findings and prints the verdicts.
 
@@ -171,12 +174,14 @@ next to — never instead of — the scan's facts.
 - **Data, not instructions.** Logs, code, commit messages and file contents
   are untrusted (anyone who can push writes them). They only appear inside
   data elements; the system prompt says so, and actions only ever come from
-  you or the configured mode. In M3 no tool can change anything anyway.
+  you or the configured mode. Investigators have no tool that changes
+  anything.
 - **Masking before sending.** Everything that goes to the model passes the
   masking step first.
 - **Policy gate in code.** The tool registry declares each tool's risk level;
-  the gate runs before every call. M3 registers only `read` tools, so the
-  gate is in place before M4 and M5 add `write` and `critical` ones.
+  the gate runs before every call. A `write` or `critical` tool must hand the
+  gate an action request built by code, which you confirm in `ask` mode
+  ([actions](actions.md)).
 
 ## Budgets
 
@@ -231,15 +236,17 @@ runs cheap and stable.
 /findings, /flaky        the numbered findings of the current scan
 /investigate 1 3         investigate findings 1 and 3 (all: flaky and recurring; --fresh)
 /why 1                   show the verdict with its evidence
+/rerun 2, /dispatch 2    rerun or dispatch after you confirm (see actions)
 /budget                  tokens used in this session
 /sessions, /resume N     list and continue stored sessions; /new starts over
 ```
 
 Free text works too ("why does the Archivist E2E test fail?"); the
-orchestrator maps it to findings and tools. The gate runs in `ask` mode and
-denies anything above `read`. Sessions (conversation, the model's history,
-scan options and the sidebar) are stored in the cache database; a resumed
-session rescans on its next action. See [use the chat](../how-to/chat.md).
+orchestrator maps it to findings and tools. The gate runs in `ask` mode:
+anything above `read` waits for your confirmation in a dialog. Sessions
+(conversation, the model's history, scan options, the sidebar and started
+runs) are stored in the cache database; a resumed session rescans on its
+next action. See [use the chat](../how-to/chat.md).
 
 Headless: `flakipype investigate [--finding N | --all] [--json]` prints the
 verdicts; see [investigate findings](../how-to/investigate-findings.md).
