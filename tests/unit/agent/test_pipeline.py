@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget
@@ -53,8 +55,9 @@ def test_accepted_verdict() -> None:
     assert result.review == "accepted: checked"
     assert (result.rounds, result.tokens) == (3, 3_600)
     reviewer_request = model.requests[2]
-    assert reviewer_request["tool_choice"] == {"type": "tool", "name": "submit_review"}
-    assert "thinking" not in reviewer_request
+    # Some models only accept tool_choice auto; the reviewer is asked, not forced.
+    assert "tool_choice" not in reviewer_request
+    assert reviewer_request["thinking"] == {"type": "adaptive"}
     assert QUOTE in reviewer_request["messages"][0]["content"]
 
 
@@ -142,21 +145,34 @@ def test_failed_investigation_is_not_reviewed() -> None:
     assert (result.status, result.verdict, result.review) == (Status.NO_VERDICT, None, "")
 
 
+def reviewer_for(model: ScriptedModel) -> Reviewer:
+    budget = InvestigationBudget(Limits(), RunBudget(10**6), lambda: 0.0)
+    return Reviewer(client=model.client(), settings=ModelSettings(model="m-1"), budget=budget)
+
+
+def test_a_reviewer_answering_in_prose_is_nudged_once() -> None:
+    model = ScriptedModel([message(text("Looks fine to me.")), review("accept")])
+    verdict = Verdict.model_validate(verdict_input(QUOTE, "toolu_1"))
+
+    result = reviewer_for(model).review("finding", verdict, Masker())
+
+    assert result.decision is Decision.ACCEPT
+    assert model.requests[1]["messages"][-1]["content"] == "Answer by calling submit_review."
+
+
 @pytest.mark.parametrize(
-    "answer",
+    "answers",
     [
-        message(text("Looks fine to me.")),
-        message(call("toolu_r", "submit_review", {"decision": "approve"})),
+        [message(text("Looks fine to me.")), message(text("Really fine."))],
+        [message(call("toolu_r", "submit_review", {"decision": "approve"}))],
     ],
 )
-def test_unusable_reviews_raise(answer: dict[str, object]) -> None:
-    model = ScriptedModel([answer])
-    budget = InvestigationBudget(Limits(), RunBudget(10**6), lambda: 0.0)
-    reviewer = Reviewer(client=model.client(), settings=ModelSettings(model="m-1"), budget=budget)
+def test_unusable_reviews_raise(answers: list[dict[str, Any] | int]) -> None:
+    model = ScriptedModel(answers)
     verdict = Verdict.model_validate(verdict_input(QUOTE, "toolu_1"))
 
     with pytest.raises(ReviewUnavailableError):
-        reviewer.review("finding", verdict, Masker())
+        reviewer_for(model).review("finding", verdict, Masker())
 
 
 def test_review_decisions_are_complete() -> None:

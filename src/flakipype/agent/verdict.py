@@ -7,6 +7,8 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 _WHITESPACE = re.compile(r"\s+")
+# The finding itself can be cited under this id.
+FINDING_REFERENCE = "finding"
 _MIN_QUOTE = 3
 
 
@@ -80,8 +82,8 @@ def _normalise(text: str) -> str:
 
 
 def citation_problems(verdict: Verdict, results: Mapping[str, str]) -> list[str]:
-    """Quotes that do not appear in the tool result they claim to come from."""
-    problems = []
+    """Quotes that do not appear in their tool result, and evidence that only repeats the scan."""
+    problems = _evidence_rule_problems(verdict)
     for item in [*verdict.evidence, *verdict.counter_evidence]:
         result = results.get(item.tool_call_id)
         quote = _normalise(item.quote)
@@ -93,6 +95,20 @@ def citation_problems(verdict: Verdict, results: Mapping[str, str]) -> list[str]
             problems.append(
                 f"the quote for {item.location} is not in the result of {item.tool_call_id}"
             )
+    return problems
+
+
+def _evidence_rule_problems(verdict: Verdict) -> list[str]:
+    problems = [
+        f"evidence quoted from the finding must have kind 'scan', not '{item.kind.value}'"
+        for item in [*verdict.evidence, *verdict.counter_evidence]
+        if item.tool_call_id == FINDING_REFERENCE and item.kind is not EvidenceKind.SCAN
+    ]
+    if all(item.tool_call_id == FINDING_REFERENCE for item in verdict.evidence):
+        problems.append(
+            "cite at least one log, history, commit or file result; the finding alone only "
+            "repeats what the scan already knows"
+        )
     return problems
 
 

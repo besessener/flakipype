@@ -62,10 +62,25 @@ def test_tool_calls_then_a_cited_verdict() -> None:
     assert set(agent.results) == {"finding", "toolu_1"}
 
 
-def test_the_finding_itself_can_be_cited() -> None:
-    model = ScriptedModel([message(submit("toolu_1", "Runs with a proven flaky event", "finding"))])
+def test_the_finding_can_be_cited_next_to_tool_results() -> None:
+    arguments = verdict_input(QUOTE, "toolu_1")
+    scan_quote = {**arguments["evidence"][0], "kind": "scan", "tool_call_id": "finding"}
+    arguments["evidence"].append({**scan_quote, "quote": "Runs with a proven flaky event"})
+    model = ScriptedModel([message(EXCERPT), message(call("toolu_2", "submit_verdict", arguments))])
 
     assert investigator(model).start(finding_text(finding())).status is Status.COMPLETED
+
+
+def test_evidence_from_the_finding_alone_is_sent_back() -> None:
+    only_finding = submit("toolu_1", "Runs with a proven flaky event", "finding")
+    model = ScriptedModel([message(only_finding), message(EXCERPT), message(submit("toolu_2"))])
+
+    outcome = investigator(model).start(finding_text(finding()))
+
+    assert outcome.status is Status.COMPLETED
+    rejection = model.tool_results(1)["toolu_1"]["content"]
+    assert "kind 'scan'" in rejection
+    assert "cite at least one log, history, commit or file result" in rejection
 
 
 def test_invented_quotes_are_sent_back_then_fixed() -> None:

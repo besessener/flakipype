@@ -156,6 +156,9 @@ Rules the prompts state and the reviewer checks:
 - **Unclear is a valid answer** and better than a guess.
 - Counter-evidence is mandatory to consider; an empty list must be a
   conscious claim.
+- At least one evidence item must quote a log, history, commit or file
+  result; quotes from the finding (kind `scan`) alone are rejected, because
+  they only repeat the scan. Enforced by the citation check.
 
 Verdicts are shown as the **model's assessment, with its evidence**, always
 next to — never instead of — the scan's facts.
@@ -195,11 +198,12 @@ and in the summary.
 - Anthropic Messages API (api.anthropic.com or Azure AI Foundry), the
   configured model for all roles; a cheaper model for the reviewer can be
   configured later if evaluations show it is good enough.
-- Tool use with `tool_choice: any` until the investigator submits; parallel
-  tool calls allowed.
-- Thinking for the investigator: `adaptive` by default; `enabled` with a token budget or
-  `off` for models without it (`[agent] thinking`). The reviewer runs without thinking:
-  the API cannot combine a forced tool call (`submit_review`) with extended thinking.
+- Tool use with `tool_choice: auto` everywhere; parallel tool calls allowed.
+  Newer models refuse `any` and forced tools, so a model that stops without
+  calling `submit_verdict` or `submit_review` is nudged once.
+- Thinking for investigator and reviewer: `adaptive` by default. `enabled`
+  (with a token budget) and `off` exist for older models; newer ones, like
+  the one flakipype was first run against, only accept `adaptive`.
 - Prompt caching for the system prompt and tool definitions, which are the
   same for every investigation.
 

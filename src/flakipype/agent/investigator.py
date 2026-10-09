@@ -13,10 +13,9 @@ from flakipype.agent.budget import BudgetExceededError, InvestigationBudget
 from flakipype.agent.masking import Masker
 from flakipype.agent.prompts import INVESTIGATOR_SYSTEM
 from flakipype.agent.tools import PolicyGate, Tool, ToolError
-from flakipype.agent.verdict import Verdict, citation_problems
+from flakipype.agent.verdict import FINDING_REFERENCE, Verdict, citation_problems
 
 SUBMIT_VERDICT = "submit_verdict"
-FINDING_REFERENCE = "finding"
 _CORRECTIONS = 2
 _NUDGES = 1
 _NUDGE = "Continue the investigation and finish by calling submit_verdict."
