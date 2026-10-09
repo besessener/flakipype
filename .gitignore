@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Tooling caches and reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.import_linter_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+mutants/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.secrets
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
