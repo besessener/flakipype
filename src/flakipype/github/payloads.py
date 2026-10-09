@@ -204,3 +204,79 @@ class LoginPayload(BaseModel):
     model_config = _IGNORE_EXTRA
 
     login: str
+
+
+class PermissionsPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    push: bool = False
+
+
+class RepositoryAccessPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    default_branch: str
+    permissions: PermissionsPayload = PermissionsPayload()
+
+
+class FileContentPayload(BaseModel):
+    """`GET …/contents/{path}` for a file: base64 content, or none above GitHub's size limit."""
+
+    model_config = _IGNORE_EXTRA
+
+    type: str
+    encoding: str = ""
+    content: str = ""
+
+
+class TreeEntryPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    path: str
+    type: str
+
+
+class TreePayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    truncated: bool = False
+    tree: list[TreeEntryPayload]
+
+
+class PullHeadPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    ref: str
+
+
+class PullPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    number: int
+    html_url: str
+    body: str | None = None
+    head: PullHeadPayload
+
+
+class CommitOidPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    oid: str
+
+
+class CreatedCommitPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    commit: CommitOidPayload
+
+
+class CommitMutationData(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True, populate_by_name=True)
+
+    created: CreatedCommitPayload = Field(alias="createCommitOnBranch")
+
+
+class CommitMutationPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    data: CommitMutationData

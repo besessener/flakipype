@@ -4,7 +4,7 @@ import os
 import platform
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,6 +16,7 @@ import keyring
 
 from flakipype.actions.service import ActionService
 from flakipype.agent.budget import Limits
+from flakipype.agent.fix_pipeline import FixConfig, propose_fix
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, workspace_tools
@@ -24,11 +25,15 @@ from flakipype.agent.tools import Confirmer, Mode, PolicyGate
 from flakipype.config.paths import AppPaths, app_paths
 from flakipype.config.secrets import LLM_API_KEY, default_secret_store
 from flakipype.config.settings import Settings, SettingsError, load_settings
+from flakipype.fix.delivery import Delivery
+from flakipype.fix.service import FixService
+from flakipype.fix.verify import Verifier, VerifyGitHub
 from flakipype.github.actions import ActionsClient
 from flakipype.github.binary import GhInstaller
 from flakipype.github.contents import ContentsClient
 from flakipype.github.gh import GhCli
 from flakipype.github.provider import ManagedGh
+from flakipype.github.pulls import PullRequests
 from flakipype.github.runs import RunControl
 from flakipype.investigate.chat import ChatService
 from flakipype.investigate.service import InvestigationService
@@ -169,6 +174,30 @@ def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
         yield agentic.service, agentic.settings
 
 
+def _fix_service(
+    agentic: _Agentic, actions: ActionService, now: Callable[[], datetime]
+) -> FixService:
+    fix, config, pulls = agentic.settings.fix, agentic.config, PullRequests(agentic.gh)
+    verifier = Verifier(
+        github=VerifyGitHub(
+            runs=RunControl(agentic.gh), logs=ActionsClient(agentic.gh), comments=pulls
+        ),
+        actions=actions,
+        now=now,
+    )
+    fix_config = FixConfig(
+        client=config.client, settings=config.settings,
+        limits=Limits(rounds=fix.max_rounds, tokens=fix.max_tokens, seconds=fix.max_seconds),
+        masker=config.masker, logs=config.logs, contents=config.contents, files=pulls,
+        clock=time.monotonic, excerpt_lines=config.excerpt_lines,
+    )  # fmt: skip
+    return FixService(
+        pulls=pulls, delivery=Delivery(pulls=pulls, verifier=verifier, now=now),
+        verifier=verifier, actions=actions, audit=agentic.cache.audit,
+        propose=partial(propose_fix, fix_config), settings=fix, now=now,
+    )  # fmt: skip
+
+
 @contextmanager
 def open_chat() -> Iterator[tuple[ChatService, Settings]]:
     with _open_agentic() as agentic:
@@ -189,8 +218,11 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
             owner=settings.github.owner,
             now=now,
         )
-        workspace = ChatWorkspace(agentic.service, request, actions=actions)
+        workspace = ChatWorkspace(
+            agentic.service, request, actions=actions, fixes=_fix_service(agentic, actions, now)
+        )
         confirmer = Confirmer()
+        gate = PolicyGate(Mode.ASK, confirmer)
         agent = ChatAgent(
             client=agentic.config.client,
             settings=ChatSettings(
@@ -199,13 +231,14 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
                 turn_tokens=settings.agent.max_tokens_per_investigation,
             ),
             tools=workspace_tools(workspace),
-            gate=PolicyGate(Mode.ASK, confirmer),
+            gate=gate,
             masker=agentic.config.masker,
             clock=time.monotonic,
         )
         chat = ChatService(
             workspace=workspace,
             agent=agent,
+            gate=gate,
             sessions=agentic.cache.sessions,
             confirmer=confirmer,
             now=now,

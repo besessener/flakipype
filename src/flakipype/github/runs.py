@@ -46,6 +46,12 @@ class JobState:
     conclusion: str | None
 
 
+@dataclass(frozen=True)
+class CommitRun:
+    run_id: int
+    event: str
+
+
 def workflow_file(workflow_path: str) -> str:
     """GitHub accepts a workflow's file name wherever it wants a workflow id."""
     return quote(PurePosixPath(workflow_path).name, safe="")
@@ -89,6 +95,14 @@ class RunControl:
         path = f"repos/{repository}/actions/workflows/{workflow_file(workflow_path)}/runs?{query}"
         page = parse_answer(RunsPage.model_validate_json, self._get(path))
         return sorted(run.id for run in page.workflow_runs)
+
+    def commit_runs(self, repository: str, workflow_path: str, commit: str) -> list[CommitRun]:
+        """Runs of the workflow on one commit, oldest first."""
+        query = urlencode({"head_sha": commit, "per_page": _DISPATCHED_RUNS_LISTED})
+        path = f"repos/{repository}/actions/workflows/{workflow_file(workflow_path)}/runs?{query}"
+        page = parse_answer(RunsPage.model_validate_json, self._get(path))
+        runs = sorted(page.workflow_runs, key=lambda run: run.created_at)
+        return [CommitRun(run.id, run.event) for run in runs]
 
     def login(self) -> str:
         return parse_answer(LoginPayload.model_validate_json, self._get("user")).login

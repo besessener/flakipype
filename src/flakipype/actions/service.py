@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
@@ -10,9 +10,10 @@ from uuid import uuid4
 
 from flakipype.actions.api import RunApi, WorkflowFiles
 from flakipype.actions.dispatchable import dispatch_problem
+from flakipype.actions.refusal import from_github, refusal
 from flakipype.actions.targets import check_owner, newest_failed_run, newest_run
 from flakipype.actions.watch import RunKind, RunWatch, WatchedRun
-from flakipype.agent.tools import ActionRequest, PreparedAction, ToolError
+from flakipype.agent.tools import ActionRequest, Answer, PreparedAction, ToolError
 from flakipype.config.settings import ActionSettings
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.flaky.model import FAILED_CONCLUSIONS, WorkflowRun
@@ -21,9 +22,6 @@ from flakipype.github.actions import GitHubApiError
 from flakipype.github.runs import RunState
 from flakipype.store.audit import AuditEntry, AuditLog
 
-_HTTP_FORBIDDEN = 403
-_CONFIRMED = "confirmed"
-_DECLINED = "declined"
 _WATCHING = "It is watched; a note follows when it finishes."
 
 
@@ -44,24 +42,6 @@ class _Dispatch:
     ref: str
     commit: str
     repeats: int
-
-
-def refusal(error: GitHubApiError) -> str:
-    if error.status == _HTTP_FORBIDDEN:
-        return (
-            f"GitHub refused: {error}. flakipype needs write access to Actions: the repo scope "
-            "for a classic token or gh auth login, or 'Actions: read and write' for a "
-            "fine-grained token."
-        )
-    return f"GitHub: {error}"
-
-
-@contextmanager
-def _from_github() -> Iterator[None]:
-    try:
-        yield
-    except GitHubApiError as error:
-        raise ToolError(refusal(error)) from error
 
 
 class ActionService:
@@ -89,6 +69,46 @@ class ActionService:
     @property
     def watched(self) -> list[WatchedRun]:
         return list(self._watch.runs)
+
+    @property
+    def origin(self) -> str:
+        return self._origin
+
+    @property
+    def owner(self) -> str:
+        return self._owner
+
+    @property
+    def max_per_session(self) -> int:
+        return self._settings.max_per_session
+
+    def find(self, number: int) -> WatchedRun | None:
+        return self._watch.find(number)
+
+    def watch(self, run: WatchedRun) -> WatchedRun:
+        """Watch a run flakipype did not start, e.g. a pull request's checks; costs no budget."""
+        return self._watch.add(run)
+
+    def rerun_authorised(self, run: WatchedRun, label: str) -> WatchedRun | None:
+        """Rerun a finished watched run that a confirmed fix covers; None if the budget is used."""
+        if run.run_id is None or self.used >= self._settings.max_per_session:
+            return None
+        self._runs.rerun(run.repository, run.run_id)
+        self.used += 1
+        return self._watch.add(
+            replace(
+                run, number=0, label=label, started=self._now(), attempt=run.attempt + 1,
+                before=run.conclusion, status="queued", conclusion=None, detail="", done=False,
+            )
+        )  # fmt: skip
+
+    def dispatch_authorised(self, template: WatchedRun) -> WatchedRun | None:
+        """Dispatch for a confirmed fix; None if the budget is used up."""
+        if self.used >= self._settings.max_per_session:
+            return None
+        run_id = self._runs.dispatch(template.repository, template.workflow_path, template.ref)
+        self.used += 1
+        return self._watch.add(replace(template, run_id=run_id, started=self._now()))
 
     @contextmanager
     def commanded(self) -> Iterator[None]:
@@ -128,7 +148,7 @@ class ActionService:
         key = finding.key
         check_owner(key.repository, self._owner)
         self._check_room(repeats)
-        with _from_github():
+        with from_github():
             name = ref or self._runs.default_branch(key.repository)
             commit = self._runs.ref_commit(key.repository, name)
             if commit is None:
@@ -222,7 +242,7 @@ class ActionService:
     def _checked_run(self, run: WorkflowRun) -> RunState:
         check_owner(run.repository, self._owner)
         self._check_room(1)
-        with _from_github():
+        with from_github():
             state = self._runs.run_state(run.repository, run.run_id)
         if not state.completed:
             message = f"Run {run.run_id} is still running; it can be rerun when it has finished."
@@ -230,7 +250,7 @@ class ActionService:
         return state
 
     def _rerun_request(self, title: str, run: WorkflowRun, state: RunState) -> ActionRequest:
-        with _from_github():
+        with from_github():
             jobs = self._runs.job_states(run.repository, run.run_id, state.attempt)
         failed = ", ".join(
             sorted({job.name for job in jobs if job.conclusion in FAILED_CONCLUSIONS})
@@ -320,13 +340,13 @@ class ActionService:
                 )
             )  # fmt: skip
 
-        def run() -> str:
+        def run(answer: Answer) -> str:
             try:
                 started = start()
             except GitHubApiError as error:
-                record(_CONFIRMED, f"failed: {error}")
+                record(answer.value, f"failed: {error}")
                 raise ToolError(refusal(error)) from error
-            record(_CONFIRMED, started.outcome, started.run_id)
+            record(answer.value, started.outcome, started.run_id)
             return started.outcome
 
-        return PreparedAction(request, run, lambda: record(_DECLINED, "not run"))
+        return PreparedAction(request, run, lambda answer: record(answer.value, "not run"))

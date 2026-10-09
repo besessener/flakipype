@@ -11,11 +11,11 @@ from typing import Any
 
 from flakipype.actions.watch import WatchedRun
 from flakipype.agent.orchestrator import ChatAgent, StepListener, ignore_steps
-from flakipype.agent.tools import Confirmer, ToolDeclinedError, ToolError
+from flakipype.agent.tools import Confirmer, Mode, PolicyGate, ToolDeclinedError, ToolError
 from flakipype.agent.verdict import Verdict
 from flakipype.flaky.findings import FindingKind
 from flakipype.github.actions import GitHubApiError
-from flakipype.investigate.chat_text import finding_title, kind_label
+from flakipype.investigate.chat_text import HELP, finding_title, kind_label
 from flakipype.investigate.workspace import ChatWorkspace
 from flakipype.scan.service import ScanRequest
 from flakipype.store.sessions import SessionStore
@@ -26,23 +26,13 @@ _ALL = "all"
 _FRESH = "--fresh"
 _ALL_JOBS = "--all"
 _REPEATS = re.compile(r"x(\d+)")
-
-HELP = """\
-**Commands**
-
-- `/scan [days]` – scan the workflow runs and number the findings
-- `/findings` – list the findings of the current scan
-- `/investigate N [N …] | all [--fresh]` – let the agent investigate findings
-- `/why N` – show the verdict for finding N with its evidence
-- `/rerun N [--all]` – rerun the failed jobs (or all jobs) of finding N's newest run
-- `/dispatch N [ref] [xK]` – start finding N's workflow on the default branch or `ref`, K times
-- `/runs` – runs started in this session · `/cancel R` – cancel run R
-- `/actions` – the reruns, dispatches and cancels requested in this session
-- `/budget` – tokens used in this session
-- `/sessions` – recent sessions · `/resume N` – continue one · `/new` – start over
-- `/help` – this list · `/quit` – leave (also Ctrl+Q)
-
-Or just ask, e.g. *why does the E2E test of Archivist fail?*"""
+_MODES = {
+    Mode.ASK: "Mode: ask. Every action asks you first.",
+    Mode.AUTO: (
+        "Mode: auto. Actions run without asking, within this session's budgets; a fix with "
+        "warnings is not pushed, and fixes are always draft pull requests."
+    ),
+}
 
 
 class EntryKind(StrEnum):
@@ -80,12 +70,14 @@ class ChatService:
         *,
         workspace: ChatWorkspace,
         agent: ChatAgent,
+        gate: PolicyGate,
         sessions: SessionStore,
         confirmer: Confirmer,
         now: Callable[[], datetime],
     ) -> None:
         self._workspace = workspace
         self._agent = agent
+        self._gate = gate
         self._sessions = sessions
         # The window sets confirmer.ask once it can show a dialog.
         self.confirmer = confirmer
@@ -106,6 +98,10 @@ class ChatService:
     def tokens(self) -> int:
         return self._session.chat_tokens + self._workspace.tokens
 
+    @property
+    def mode(self) -> Mode:
+        return self._gate.mode
+
     def handle(self, line: str, on_step: StepListener = ignore_steps) -> list[ChatEntry]:
         """Answer one line of input; the returned entries are also kept in the session."""
         text = line.strip()
@@ -117,8 +113,9 @@ class ChatService:
         return self._record([ChatEntry(EntryKind.USER, text), answer])
 
     def poll(self) -> list[ChatEntry]:
-        """Reads the started runs once; a note for each run that finished, also kept."""
-        notes = [ChatEntry(EntryKind.NOTE, note) for note in self._workspace.actions.poll()]
+        """Reads started runs and verifications once; a note for each one that finished, kept."""
+        finished = [*self._workspace.actions.poll(), *self._workspace.fixes.poll()]
+        notes = [ChatEntry(EntryKind.NOTE, note) for note in finished]
         if notes:
             self._session.entries.extend(notes)
             if self._session.session_id is not None:
@@ -127,6 +124,12 @@ class ChatService:
 
     def watched_runs(self) -> list[WatchedRun]:
         return self._workspace.actions.watched
+
+    @property
+    def unfinished(self) -> bool:
+        """Whether a started run or a fix's verification still needs polling."""
+        runs = any(not run.done for run in self._workspace.actions.watched)
+        return runs or any(not pull.verified for pull in self._workspace.fixes.pulls)
 
     def sidebar(self) -> list[SidebarItem]:
         findings = self._workspace.finding_list()
@@ -166,6 +169,8 @@ class ChatService:
             "/cancel": self._cancel,
             "/runs": lambda _: self._note(self._workspace.watched_runs()),
             "/actions": lambda _: self._note(self._workspace.actions.audit_text()),
+            "/fix": self._fix,
+            "/mode": self._mode,
         }
         if name == "/new":
             self._start_over()
@@ -232,12 +237,28 @@ class ChatService:
             return ChatEntry(EntryKind.ERROR, "Which run? E.g. /cancel R1 (see /runs).")
         return self._act("cancel", {"run": numbers[0]})
 
+    def _fix(self, arguments: list[str]) -> ChatEntry:
+        numbers = _numbers(arguments)
+        if not numbers:
+            return ChatEntry(EntryKind.ERROR, "Which finding? E.g. /fix 2 or /fix 2 --fresh.")
+        if _FRESH in arguments:
+            self._workspace.discard_fix(numbers[0])
+        return self._act("fix", {"finding": numbers[0]})
+
+    def _mode(self, arguments: list[str]) -> ChatEntry:
+        if not arguments:
+            return self._note(_MODES[self._gate.mode])
+        if arguments[0] not in set(Mode):
+            return ChatEntry(EntryKind.ERROR, "Which mode? /mode ask or /mode auto.")
+        self._gate.mode = Mode(arguments[0])
+        return self._note(_MODES[self._gate.mode])
+
     def _act(self, tool: str, arguments: dict[str, object]) -> ChatEntry:
         try:
             with self._workspace.actions.commanded():
                 return self._note(self._agent.run_tool(tool, arguments))
-        except ToolDeclinedError:
-            return self._note("Not run.")
+        except ToolDeclinedError as error:
+            return self._note("Not run." if self._gate.mode is Mode.ASK else str(error))
         except ToolError as error:
             return ChatEntry(EntryKind.ERROR, str(error))
 
@@ -272,6 +293,7 @@ class ChatService:
             "findings": [asdict(item) for item in self.sidebar()],
             "chat_tokens": self._session.chat_tokens,
             "actions": self._workspace.actions.state(),
+            "fix": self._workspace.fixes.state(),
         }
 
     def _session_list(self) -> str:
@@ -287,6 +309,8 @@ class ChatService:
         self._session = _Session()
         self._agent.restore([])
         self._workspace.actions.reset()
+        self._workspace.fixes.reset()
+        self._gate.mode = Mode.ASK
 
     def _resume(self, arguments: list[str]) -> ChatEntry:
         numbers = _numbers(arguments)
@@ -311,6 +335,11 @@ class ChatService:
             self._workspace.actions.restore(document["actions"])
         else:
             self._workspace.actions.reset()
+        if "fix" in document:
+            self._workspace.fixes.restore(document["fix"])
+        else:
+            self._workspace.fixes.reset()
+        self._gate.mode = Mode.ASK
         return ChatEntry(EntryKind.NOTE, f"Resumed session {numbers[0]}. The next action rescans.")
 
 

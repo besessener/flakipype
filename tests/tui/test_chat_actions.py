@@ -1,17 +1,17 @@
 from collections.abc import Callable
 
 from textual.pilot import Pilot
-from textual.widgets import Input, Markdown, Static
+from textual.widgets import Markdown, Static
 
 from flakipype.agent.tools import Confirmer
 from flakipype.github.runs import JobState
 from flakipype.store.database import ScanCache
 from flakipype.tui.chat import ChatApp, runs_text
-from flakipype.tui.confirm import ConfirmScreen
 
 from support.fake_anthropic import ScriptedModel
 from support.fake_chat import chat_service
 from support.fake_runs import DISPATCHABLE, E2E, FakeRuns, state
+from support.pilot import ask, settle
 
 SIZE = (120, 40)
 
@@ -24,24 +24,6 @@ def failed_lint_run() -> FakeRuns:
 
 def app_for(cache: ScanCache, started: FakeRuns) -> ChatApp:
     return ChatApp(chat_service(cache, ScriptedModel([]), runs=started), "octo-org on github.com")
-
-
-async def settle(pilot: Pilot[None]) -> None:
-    await pilot.pause()
-    await pilot.app.workers.wait_for_complete()
-    await pilot.pause()
-
-
-async def ask(pilot: Pilot[None], line: str) -> ConfirmScreen:
-    """Sends a line that needs confirmation and waits for the dialog."""
-    pilot.app.query_one("#prompt", Input).cursor_blink = False
-    prompt = pilot.app.query_one("#prompt", Input)
-    prompt.value = line
-    prompt.focus()
-    await pilot.press("enter")
-    while not isinstance(pilot.app.screen, ConfirmScreen):
-        await pilot.pause(0.05)
-    return pilot.app.screen
 
 
 def last_entry(app: ChatApp) -> str:

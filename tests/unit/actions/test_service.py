@@ -1,9 +1,11 @@
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
 
 from flakipype.actions.service import ActionService
-from flakipype.agent.tools import PreparedAction, ToolError
+from flakipype.actions.watch import RunKind, WatchedRun
+from flakipype.agent.tools import Answer, PreparedAction, ToolError
 from flakipype.config.settings import ActionSettings
 from flakipype.github.actions import GitHubApiError
 from flakipype.github.runs import JobState
@@ -49,7 +51,7 @@ def test_a_confirmed_rerun_of_failed_jobs_starts_and_watches_it(cache: ScanCache
     actions = service(cache, runs)
 
     prepared = rerun_failed(actions)
-    outcome = prepared.run()
+    outcome = prepared.run(Answer.CONFIRMED)
 
     assert prepared.request.title == "Rerun failed jobs?"
     assert prepared.request.details == (
@@ -75,7 +77,7 @@ def test_a_declined_action_is_audited_and_does_nothing(cache: ScanCache) -> None
     actions = service(cache, runs)
 
     with actions.commanded():
-        rerun_failed(actions).declined()
+        rerun_failed(actions).declined(Answer.DECLINED)
 
     assert not [call for call in runs.calls if call.startswith("rerun")]
     assert actions.used == 0
@@ -101,7 +103,7 @@ def test_a_whole_rerun_takes_the_newest_run_of_any_result(cache: ScanCache) -> N
     actions = service(cache, runs)
 
     prepared = actions.rerun_run(e2e_finding(), e2e_evidence(newest="success"), run_id=None)
-    prepared.run()
+    prepared.run(Answer.CONFIRMED)
 
     assert prepared.request.title == "Rerun all jobs?"
     assert "failed jobs: none" in prepared.request.details[1]
@@ -123,7 +125,7 @@ def test_the_budget_is_a_hard_limit(cache: ScanCache) -> None:
 
     with pytest.raises(ToolError, match="Only 2 of this session's 2 reruns and dispatches"):
         actions.dispatch(e2e_finding(), None, 3)
-    actions.dispatch(e2e_finding(), None, 2).run()
+    actions.dispatch(e2e_finding(), None, 2).run(Answer.CONFIRMED)
 
     with pytest.raises(ToolError, match="Action budget used up: 2 of 2"):
         rerun_failed(actions)
@@ -144,7 +146,7 @@ def test_a_repeated_dispatch_on_the_default_branch(cache: ScanCache) -> None:
 
     with actions.commanded():
         prepared = actions.dispatch(e2e_finding(), None, 3)
-        outcome = prepared.run()
+        outcome = prepared.run(Answer.CONFIRMED)
 
     assert prepared.request.details == (
         "octo-org/app · E2E (.github/workflows/e2e.yml)",
@@ -169,7 +171,7 @@ def test_a_single_dispatch_on_a_named_ref(cache: ScanCache) -> None:
     actions = service(cache, runs)
 
     prepared = actions.dispatch(e2e_finding(), "v1", 1)
-    prepared.run()
+    prepared.run(Answer.CONFIRMED)
 
     assert prepared.request.details[1] == "on v1 at abcdef0 · 1 run, without inputs"
     assert actions.watched[0].label == "dispatch"
@@ -204,7 +206,7 @@ def test_github_errors_become_tool_errors_with_a_next_step(cache: ScanCache) -> 
     prepared = rerun_failed(actions)
 
     with pytest.raises(ToolError, match="'Actions: read and write' for a fine-grained token"):
-        prepared.run()
+        prepared.run(Answer.CONFIRMED)
     runs.errors["ref_commit"] = GitHubApiError("Server Error (HTTP 500)", 500)
     with pytest.raises(ToolError, match=r"GitHub: Server Error \(HTTP 500\)"):
         actions.dispatch(e2e_finding(), None, 1)
@@ -218,7 +220,7 @@ def test_only_watched_unfinished_runs_can_be_cancelled(cache: ScanCache) -> None
     runs = failed_run()
     runs.dispatch_ids = [70, None]
     actions = service(cache, runs)
-    actions.dispatch(e2e_finding(), None, 2).run()
+    actions.dispatch(e2e_finding(), None, 2).run(Answer.CONFIRMED)
 
     with pytest.raises(ToolError, match="R9 is not a run started in this session"):
         actions.cancel(9)
@@ -229,7 +231,7 @@ def test_only_watched_unfinished_runs_can_be_cancelled(cache: ScanCache) -> None
         "R1 octo-org/app · E2E dispatch 1/2",
         "run 70 · queued",
     )
-    assert prepared.run().startswith("Cancel requested for R1.")
+    assert prepared.run(Answer.CONFIRMED).startswith("Cancel requested for R1.")
     assert "cancel octo-org/app 70" in runs.calls
     assert actions.used == 2
 
@@ -244,7 +246,7 @@ def test_only_watched_unfinished_runs_can_be_cancelled(cache: ScanCache) -> None
 def test_the_session_state_survives_a_resume(cache: ScanCache) -> None:
     runs = failed_run()
     actions = service(cache, runs)
-    rerun_failed(actions).run()
+    rerun_failed(actions).run(Answer.CONFIRMED)
 
     resumed = service(cache, runs)
     resumed.restore(actions.state())
@@ -255,6 +257,45 @@ def test_the_session_state_survives_a_resume(cache: ScanCache) -> None:
     assert resumed.audit_text().startswith("Actions in this session:\n- 08:00 `rerun_failed`")
 
 
+def test_authorised_reruns_and_dispatches_use_the_budget(cache: ScanCache) -> None:
+    runs = failed_run()
+    runs.dispatch_ids = [70]
+    actions = service(cache, runs, ActionSettings(max_per_session=2))
+    template = WatchedRun(
+        number=0, kind=RunKind.DISPATCH, repository="octo-org/app", workflow_path=E2E,
+        workflow_name="E2E", label="verify 1/3", commit="c0ffee1", ref="flakipype/fix-e2e-1",
+        started=START, run_id=None, attempt=1,
+    )  # fmt: skip
+
+    dispatched = actions.dispatch_authorised(template)
+    assert dispatched is not None
+    finished = replace(dispatched, conclusion="failure", done=True)
+    rerun = actions.rerun_authorised(finished, "verify 2/3")
+
+    assert rerun is not None
+    assert (dispatched.number, dispatched.run_id) == (1, 70)
+    assert (rerun.number, rerun.label, rerun.attempt, rerun.before, rerun.done) == (
+        2, "verify 2/3", 2, "failure", False,
+    )  # fmt: skip
+    assert "rerun octo-org/app 70" in runs.calls
+    assert actions.used == 2
+    assert actions.rerun_authorised(finished, "verify 3/3") is None
+    assert actions.dispatch_authorised(template) is None
+    assert cache.audit.entries(actions.session) == []
+
+
+def test_an_authorised_rerun_needs_a_run_id(cache: ScanCache) -> None:
+    actions = service(cache, failed_run())
+    unlocated = WatchedRun(
+        number=1, kind=RunKind.DISPATCH, repository="octo-org/app", workflow_path=E2E,
+        workflow_name="E2E", label="dispatch", commit="c0ffee1", ref="main", started=START,
+        run_id=None, attempt=1,
+    )  # fmt: skip
+
+    assert actions.rerun_authorised(unlocated, "verify 2/3") is None
+    assert actions.used == 0
+
+
 def test_no_actions_yet(cache: ScanCache) -> None:
     assert service(cache, FakeRuns()).audit_text() == "No actions requested in this session."
 
@@ -262,6 +303,6 @@ def test_no_actions_yet(cache: ScanCache) -> None:
 def test_start_time_is_recorded(cache: ScanCache) -> None:
     runs = failed_run()
     actions = service(cache, runs)
-    rerun_failed(actions).run()
+    rerun_failed(actions).run(Answer.CONFIRMED)
 
     assert actions.watched[0].started == datetime.fromisoformat("2026-10-01T08:00:00+00:00")

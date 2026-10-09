@@ -6,18 +6,19 @@ layers; a higher layer may import a lower one, never the reverse, and packages
 on the same layer do not import each other.
 
 ```text
-cli                           Typer entry point, composition root (cli/wiring.py)
- └─ tui                       Textual: setup wizard, chat window, confirmation dialog
-     └─ investigate           scan and investigate findings; verdict cache; the chat's workspace and commands
-         └─ actions           reruns, dispatches, cancels: targets, budget, audit, watched runs
-             ├─ agent         investigator, reviewer, chat orchestrator, tools, policy gate, budgets, masking
-             ├─ setup         setup and health checks (wizard, headless, doctor)
-             └─ scan          scan an owner: fetch, cache, detect, rank
-                 ├─ llm       Anthropic Messages API client
-                 ├─ github    gh CLI wrapper; Actions, runs, commits, files; downloads gh
-                 └─ store     SQLite cache, chat sessions and the action audit log
-                     ├─ flaky   pure detection, scoring, findings, log excerpts
-                     └─ config  settings and secret storage
+cli                               Typer entry point, composition root (cli/wiring.py)
+ └─ tui                           Textual: setup wizard, chat window, confirmation dialog
+     └─ investigate               scan and investigate findings; verdict cache; the chat's workspace and commands
+         └─ fix                   fixes: diff checks, delivery, pull request texts, verification, session state
+             └─ actions           reruns, dispatches, cancels: targets, budget, audit, watched runs
+                 ├─ agent         investigator, fixer, reviewer, chat orchestrator, working copy, tools, gate, budgets, masking
+                 ├─ setup         setup and health checks (wizard, headless, doctor)
+                 └─ scan          scan an owner: fetch, cache, detect, rank
+                     ├─ llm       Anthropic Messages API client
+                     ├─ github    gh CLI wrapper; Actions, runs, commits, files, branches, pull requests; downloads gh
+                     └─ store     SQLite cache, chat sessions and the action audit log
+                         ├─ flaky   pure detection, scoring, findings, log excerpts
+                         └─ config  settings and secret storage
 ```
 
 ## Packages
@@ -41,7 +42,10 @@ cli                           Typer entry point, composition root (cli/wiring.py
   validates the answers with pydantic models (`payloads.py`) and turns `gh`
   errors into typed exceptions (rate limit, authentication, others).
   `runs.py` (`RunControl`) reruns, dispatches and cancels runs and reads
-  their state.
+  their state. `pulls.py` (`PullRequests`) reads push permission, the file
+  tree and exact file bytes, creates a branch only where none exists,
+  commits through GraphQL `createCommitOnBranch` (signed by GitHub, with the
+  expected head commit), opens pull requests always as drafts, and comments.
 - **`llm`** wraps the official `anthropic` SDK with a configurable base URL,
   so the same code talks to api.anthropic.com and Azure AI Foundry (chosen by
   the host name). Connection problems are categorised
@@ -72,13 +76,24 @@ cli                           Typer entry point, composition root (cli/wiring.py
   sent to the model is masked first. It knows nothing of the scan service:
   it gets a `Finding` and the scan's `Evidence` as values. The chat
   orchestrator (`orchestrator.py`) is a tool loop too; its tools call a
-  `Workspace` protocol that `investigate` implements.
+  `Workspace` protocol that `investigate` implements. For fixes it has the
+  fixer (`fixer.py`) with edit tools (`fix_tools.py`) on an in-memory
+  working copy of one commit (`workcopy.py`), and `fix_pipeline.py` runs
+  fixer and reviewer with at most one revision ([fixes](fix.md)).
 - **`actions`** prepares the chat's reruns, dispatches and cancels for the
   policy gate: it checks the targets against the current scan's findings,
   reads the workflow file to check `workflow_dispatch`, enforces the session
   budget, records every request in the audit log, and watches started runs
   (polling, finish notes, session state). Its GitHub collaborators are
   protocols that `github` implements ([actions](actions.md)).
+- **`fix`** turns a reviewed verdict into a draft pull request for the
+  chat: it refuses findings that cannot be fixed, checks push access and
+  open flakipype pull requests, runs the fixer through a function it is
+  given, checks the diff in code (`checks.py`), prepares the one
+  confirmation with the diff, delivers branch, commit and draft pull request
+  (`delivery.py`), verifies the fix branch and comments the result
+  (`verify.py`), and keeps proposals, opened pull requests and the pull
+  request budget as session state ([fixes](fix.md)).
 - **`investigate`** runs a scan, numbers the findings, picks the requested
   ones, runs investigations in parallel under one run budget and stores
   completed verdicts in the cache until a finding has a newer failure. For
@@ -87,8 +102,9 @@ cli                           Typer entry point, composition root (cli/wiring.py
 - **`tui`** renders the setup wizard and the chat with Textual. It talks to
   `setup` and `investigate` and never runs `gh` or the model itself; slow
   work runs in worker threads so the UI stays responsive. The chat window
-  answers the gate's confirmation requests with a dialog and polls started
-  runs in the background.
+  answers the gate's confirmation requests with a dialog (with the model's
+  text and the diff for a fix), shows the mode in its status line, and polls
+  started runs and fix verifications in the background.
 - **`cli`** wires everything together: `cli/wiring.py` is the only place that
   reads the environment and builds real collaborators. Headless commands
   bypass `tui` but not `setup` or `agent`.
@@ -104,7 +120,7 @@ cli                           Typer entry point, composition root (cli/wiring.py
 3. **Judgement**: the agent investigates findings with tools (prepared log
    excerpts, run history, commit diffs, files), marked as data, and returns
    verdicts with cited evidence that a reviewer pass checks (M3).
-4. **Fix** (M5, [design](fix.md)): the agent edits an in-memory copy of the
+4. **Fix** (M5, [fixes](fix.md)): the agent edits an in-memory copy of the
    repository, code checks the diff, a new branch with one signed commit and
    a draft PR are created through GitHub's API, and reruns of the fix branch
    are compared with the default branch's flake rate.

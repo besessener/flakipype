@@ -1,6 +1,6 @@
 import pytest
 
-from flakipype.actions.dispatchable import dispatch_problem
+from flakipype.actions.dispatchable import dispatch_problem, triggers
 
 NOT_DISPATCHABLE = "the workflow does not declare workflow_dispatch"
 
@@ -40,3 +40,19 @@ def test_dispatchable_workflows(workflow: str) -> None:
 )
 def test_workflows_that_cannot_be_dispatched_without_inputs(workflow: str, problem: str) -> None:
     assert dispatch_problem(workflow) == problem
+
+
+@pytest.mark.parametrize(
+    ("workflow", "events"),
+    [
+        ("on: push\n", {"push"}),
+        ("on: [push, pull_request]\n", {"push", "pull_request"}),
+        ("'on':\n  pull_request:\n    branches: [main]\n  workflow_dispatch:\n",
+         {"pull_request", "workflow_dispatch"}),
+        ("on: 3\n", set()),
+        ("- just a list\n", set()),
+        ("on: [unclosed\n", set()),
+    ],
+)  # fmt: skip
+def test_triggers(workflow: str, events: set[str]) -> None:
+    assert triggers(workflow) == events

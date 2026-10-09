@@ -47,6 +47,22 @@ def test_scan_settings_have_safe_defaults_and_limits(tmp_path: Path) -> None:
             load_settings(path)
 
 
+def test_fix_limits_have_safe_defaults_and_are_never_unlimited(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[fix]\nmax_prs_per_session = 0\n", encoding="utf-8")
+
+    fix = Settings().fix
+    assert (fix.max_prs_per_session, fix.max_files, fix.max_changed_lines) == (3, 10, 400)
+    assert (fix.verify_runs, fix.max_rounds, fix.max_tokens, fix.max_seconds) == (
+        3,
+        20,
+        300_000,
+        600,
+    )
+    with pytest.raises(SettingsError):
+        load_settings(path)
+
+
 def test_invalid_toml_is_a_settings_error(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text("this is = = not toml", encoding="utf-8")

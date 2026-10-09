@@ -86,6 +86,26 @@ def test_dispatched_runs_are_found_by_the_logged_in_user(fake_gh: FakeGh) -> Non
     assert found == [8, 9]
 
 
+def test_runs_of_a_commit_oldest_first(fake_gh: FakeGh) -> None:
+    runs = {
+        "total_count": 2,
+        "workflow_runs": [
+            {"id": 9, "path": "p", "head_sha": "c", "event": "push",
+             "created_at": "2026-10-09T08:01:00Z", "html_url": "h"},
+            {"id": 8, "path": "p", "head_sha": "c", "event": "pull_request",
+             "created_at": "2026-10-09T08:00:30Z", "html_url": "h"},
+        ],
+    }  # fmt: skip
+    fake_gh.record(
+        ["api", f"repos/{REPO}/actions/workflows/e2e.yml/runs?head_sha=c0ffee&per_page=20"],
+        stdout=json.dumps(runs),
+    )
+
+    found = RunControl(fake_gh.cli()).commit_runs(REPO, ".github/workflows/e2e.yml", "c0ffee")
+
+    assert [(run.run_id, run.event) for run in found] == [(8, "pull_request"), (9, "push")]
+
+
 def test_run_and_job_states(fake_gh: FakeGh) -> None:
     run = {
         "id": 7, "name": "E2E", "path": ".github/workflows/e2e.yml", "status": "in_progress",

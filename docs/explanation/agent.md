@@ -15,10 +15,11 @@ and history the way an engineer would. That is the agent's job.
 
 - **In**: investigating findings and explaining them with cited evidence; a
   chat to ask about them; a headless `flakipype investigate` for scripts.
-- **Out**: changing code or opening pull requests (M5, see
-  [fixes](fix.md)). Investigators only
-  read. The chat model can also rerun and dispatch workflows, each confirmed
-  by you (M4, see [actions](actions.md)).
+- **Out**: changing code or opening pull requests; since M5 a separate
+  fixer does that, see [fixes](fix.md). Investigators only read. The chat
+  model can also rerun and dispatch workflows (M4, see
+  [actions](actions.md)) and ask for fixes (M5), each confirmed by you in
+  `ask` mode.
 
 ## Roles
 
@@ -67,7 +68,9 @@ reading tools — `scan`, `list_findings`, `investigate` (findings by number)
 and `show_verdict` — that answers your questions and starts investigators
 through them. Its action tools (`rerun_failed`, `rerun_run`, `dispatch`,
 `cancel`, and `watched_runs` to read their state) are described in
-[actions](actions.md). Slash commands do the same without the model. Headless,
+[actions](actions.md), its `fix` tool (risk `critical`, with optional
+`instructions` for changes to a fix it showed) in [fixes](fix.md). Slash
+commands do the same without the model. Headless,
 `flakipype investigate` has no orchestrator model: it investigates the
 selected findings and prints the verdicts.
 
@@ -238,16 +241,19 @@ runs cheap and stable.
 /investigate 1 3         investigate findings 1 and 3 (all: flaky and recurring; --fresh)
 /why 1                   show the verdict with its evidence
 /rerun 2, /dispatch 2    rerun or dispatch after you confirm (see actions)
+/fix 2 [--fresh]         a fix as a draft pull request after you confirm (see fixes)
+/mode ask|auto           confirm every action, or run them within the budgets
 /budget                  tokens used in this session
 /sessions, /resume N     list and continue stored sessions; /new starts over
 ```
 
 Free text works too ("why does the Archivist E2E test fail?"); the
-orchestrator maps it to findings and tools. The gate runs in `ask` mode:
-anything above `read` waits for your confirmation in a dialog. Sessions
-(conversation, the model's history, scan options, the sidebar and started
-runs) are stored in the cache database; a resumed session rescans on its
-next action. See [use the chat](../how-to/chat.md).
+orchestrator maps it to findings and tools. The gate starts in `ask` mode:
+anything above `read` waits for your confirmation in a dialog; `/mode auto`
+lets actions run within the budgets. Sessions (conversation, the model's
+history, scan options, the sidebar, started runs and fixes) are stored in
+the cache database; a resumed session rescans on its next action. See
+[use the chat](../how-to/chat.md).
 
 Headless: `flakipype investigate [--finding N | --all] [--json]` prints the
 verdicts; see [investigate findings](../how-to/investigate-findings.md).

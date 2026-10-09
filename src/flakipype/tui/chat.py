@@ -18,8 +18,9 @@ from flakipype.tui.confirm import ConfirmScreen
 
 WELCOME = (
     "Welcome to **flakipype**. Start with `/scan`, ask a question, or type `/help`.\n\n"
-    "Scans and investigations only read. Reruns and dispatches start only when you confirm "
-    "them, and no code, branch or pull request changes."
+    "Scans and investigations only read. Reruns, dispatches and fixes run only when you confirm "
+    "them; a fix becomes a new branch and a draft pull request, never a change to your default "
+    "branch. `/mode auto` lets them run within the budgets."
 )
 _QUIT = frozenset({"/quit", "/exit"})
 POLL_SECONDS = 10.0
@@ -97,11 +98,12 @@ class ChatApp(App[None]):
         self._refresh_sidebar()
         self.query_one("#prompt", Input).focus()
         self._service.confirmer.ask = self._confirm_from_worker
+        self._show_status()
         self.set_interval(POLL_SECONDS, self.action_poll_runs)
 
     def action_poll_runs(self) -> None:
-        """Polls the started runs in the background unless a poll is still going."""
-        if self._polling or all(run.done for run in self._service.watched_runs()):
+        """Polls runs and verifications in the background unless a poll is still going."""
+        if self._polling or not self._service.unfinished:
             return
         self._polling = True
         self._poll_runs()
@@ -170,6 +172,9 @@ class ChatApp(App[None]):
     def _show_activity(self, text: str) -> None:
         self.query_one("#activity", Static).update(text)
 
+    def _show_status(self) -> None:
+        self._show_activity(f"{self._service.tokens:,} tokens used · {self._service.mode} mode")
+
     def _show_entries(self, entries: list[ChatEntry]) -> None:
         conversation = self.query_one("#conversation", VerticalScroll)
         if entries and entries[0].kind is not EntryKind.USER:
@@ -178,7 +183,7 @@ class ChatApp(App[None]):
             conversation.mount_all([entry_widget(entry) for entry in self._service.entries])
         conversation.mount_all([entry_widget(entry) for entry in entries])
         conversation.anchor()
-        self._show_activity(f"{self._service.tokens:,} tokens used")
+        self._show_status()
         self._refresh_sidebar()
         prompt = self.query_one("#prompt", Input)
         prompt.disabled = False

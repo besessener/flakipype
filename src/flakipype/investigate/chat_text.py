@@ -13,6 +13,25 @@ _KIND_LABEL = {
 }
 _QUOTE_LENGTH = 300
 
+HELP = """\
+**Commands**
+
+- `/scan [days]` – scan the workflow runs and number the findings
+- `/findings` – list the findings of the current scan
+- `/investigate N [N …] | all [--fresh]` – let the agent investigate findings
+- `/why N` – show the verdict for finding N with its evidence
+- `/fix N [--fresh]` – write a fix for finding N and push it as a draft pull request
+- `/rerun N [--all]` – rerun the failed jobs (or all jobs) of finding N's newest run
+- `/dispatch N [ref] [xK]` – start finding N's workflow on the default branch or `ref`, K times
+- `/runs` – runs started in this session · `/cancel R` – cancel run R
+- `/actions` – the actions requested in this session
+- `/mode ask|auto` – confirm every action, or let them run within the budgets
+- `/budget` – tokens used in this session
+- `/sessions` – recent sessions · `/resume N` – continue one · `/new` – start over
+- `/help` – this list · `/quit` – leave (also Ctrl+Q)
+
+Or just ask, e.g. *why does the E2E test of Archivist fail?*"""
+
 
 def finding_title(finding: Finding) -> str:
     key = finding.key

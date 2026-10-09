@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Limits, RunBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import cached_system, cached_tools, content_blocks
 from flakipype.agent.prompts import CHAT_SYSTEM, data_block
 from flakipype.agent.tools import (
     PolicyGate,
@@ -50,6 +51,8 @@ class Workspace(Protocol):
 
     def watched_runs(self) -> str: ...
 
+    def fix(self, finding: int, instructions: str) -> PreparedAction: ...
+
 
 class ScanInput(BaseModel):
     days: int | None = Field(default=None, ge=1, le=400, description="default: configuration")
@@ -84,8 +87,17 @@ class CancelInput(BaseModel):
     run: int = Field(ge=1, description="the R number of a started run")
 
 
+class FixInput(BaseModel):
+    finding: int = Field(ge=1)
+    instructions: str = Field(
+        default="",
+        max_length=2_000,
+        description="the user's wishes for changes to the fix shown before; empty for a new fix",
+    )
+
+
 def workspace_tools(workspace: Workspace) -> list[Tool]:
-    read, write = RiskLevel.READ, RiskLevel.WRITE
+    read, write, critical = RiskLevel.READ, RiskLevel.WRITE, RiskLevel.CRITICAL
     return [
         Tool("scan", "Scan the workflow runs and number the findings.", read, ScanInput,
              lambda given: workspace.scan(given.days, tuple(given.repositories))),
@@ -106,6 +118,8 @@ def workspace_tools(workspace: Workspace) -> list[Tool]:
              lambda given: workspace.cancel(given.run)),
         Tool("watched_runs", "Runs started in this session and their state.", read, NoInput,
              lambda _: workspace.watched_runs()),
+        Tool("fix", "Write a fix for a finding and push it as a draft pull request.", critical,
+             FixInput, lambda given: workspace.fix(given.finding, given.instructions)),
     ]  # fmt: skip
 
 
@@ -174,7 +188,7 @@ class ChatAgent:
             except APIError as error:
                 return self._abandon(start, f"The model could not answer: {error}", budget.tokens)
             budget.record(response.usage)
-            self._messages.append({"role": "assistant", "content": _content(response)})
+            self._messages.append({"role": "assistant", "content": content_blocks(response)})
             uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not uses:
                 return Reply(_text(response), budget.tokens, completed=True)
@@ -196,14 +210,11 @@ class ChatAgent:
 
     def _call(self) -> Message:
         definitions = [tool.definition() for tool in self._tools.values()]
-        definitions[-1] = {**definitions[-1], "cache_control": {"type": "ephemeral"}}
         request: dict[str, Any] = {
             "model": self._settings.model.model,
             "max_tokens": self._settings.model.max_tokens,
-            "system": [
-                {"type": "text", "text": CHAT_SYSTEM, "cache_control": {"type": "ephemeral"}}
-            ],
-            "tools": definitions,
+            "system": cached_system(CHAT_SYSTEM),
+            "tools": cached_tools(definitions),
             "messages": self._messages,
             **self._settings.model.thinking_parameter(),
         }
@@ -233,10 +244,6 @@ class ChatAgent:
             **result,
             "content": self._masker.mask(data_block("tool-result", text, tool=use.name)),
         }
-
-
-def _content(response: Message) -> list[dict[str, Any]]:
-    return [block.model_dump(exclude_none=True) for block in response.content]
 
 
 def _text(response: Message) -> str:

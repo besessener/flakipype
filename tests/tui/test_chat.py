@@ -9,14 +9,9 @@ from flakipype.tui.chat import ChatApp, FindingItem
 
 from support.fake_anthropic import ScriptedModel, call, message, text
 from support.fake_chat import chat_service
+from support.pilot import settle
 
 SIZE = (120, 40)
-
-
-async def settle(pilot: Pilot[None]) -> None:
-    await pilot.pause()
-    await pilot.app.workers.wait_for_complete()
-    await pilot.pause()
 
 
 async def send(pilot: Pilot[None], line: str) -> None:
@@ -61,7 +56,7 @@ async def test_scan_fills_the_sidebar_and_a_click_proposes_a_command(cache: Scan
         assert "› /scan" in conversation(app)
         assert conversation(app)[-1].startswith("Scanned 1 repositories")
         assert [item.item.number for item in sidebar(app)] == [1, 2, 3]
-        assert activity(app) == "0 tokens used"
+        assert activity(app) == "0 tokens used · ask mode"
         app.query_one("#findings", ListView).focus()
         await pilot.press("down", "down", "enter")
         await pilot.pause()
@@ -85,7 +80,7 @@ async def test_questions_show_tool_activity_and_answers(cache: ScanCache) -> Non
         await pilot.pause()
 
         assert conversation(app)[-1] == "**#1** is a flaky test."
-        assert activity(app) == "3,400 tokens used"
+        assert activity(app) == "3,400 tokens used · ask mode"
         assert sidebar(app)[0].item.verdict == "flaky test (high)"
         assert app.query_one("#prompt", Input).value == "/why 1"
 
@@ -101,6 +96,19 @@ async def test_new_and_resume_replace_the_conversation(cache: ScanCache) -> None
 
         assert conversation(app)[0] == "› /help"
         assert conversation(app)[-1] == "Resumed session 1. The next action rescans."
+
+
+async def test_the_status_line_shows_the_mode(cache: ScanCache) -> None:
+    app, _ = app_for(cache)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(pilot)
+        assert activity(app) == "0 tokens used · ask mode"
+        await send(pilot, "/mode auto")
+        assert activity(app) == "0 tokens used · auto mode"
+        await send(pilot, "/new")
+
+        assert activity(app) == "0 tokens used · ask mode"
 
 
 async def test_blank_lines_are_ignored_and_quit_leaves(cache: ScanCache) -> None:

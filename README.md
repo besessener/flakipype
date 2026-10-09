@@ -14,11 +14,12 @@ review it.
 
 - **Chat** in a rich terminal UI with slash commands (`/scan`, `/flaky`, `/fix`, …).
 - **Headless** commands and a systemd timer for unattended scans.
-- **Safe by design**: never touches the default branch; unattended runs open draft PRs only.
+- **Safe by design**: never touches the default branch; every fix is a draft PR.
 
-> **Status:** pre-alpha. Setup, scanning, agent investigations, the chat and
-> confirmed reruns and dispatches work; fixes land milestone by milestone, see
-> the [roadmap](docs/explanation/roadmap.md).
+> **Status:** pre-alpha. Setup, scanning, agent investigations, the chat,
+> confirmed reruns and dispatches, and fixes as draft pull requests from the
+> chat work; unattended runs come next, see the
+> [roadmap](docs/explanation/roadmap.md).
 
 ## Installation
 
@@ -30,7 +31,7 @@ flakipype setup     # model endpoint, gh (downloaded and verified if missing), G
 flakipype doctor    # check everything
 flakipype scan          # find and rank flaky jobs (--json for scripts)
 flakipype investigate   # let the agent explain them, with evidence
-flakipype               # the chat: ask, scan, investigate and rerun interactively
+flakipype               # the chat: ask, scan, investigate, rerun and fix interactively
 ```
 
 Step by step: [getting started](docs/tutorials/getting-started.md).
