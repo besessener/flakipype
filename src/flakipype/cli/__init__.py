@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 
 from flakipype import __version__
+from flakipype.cli.setup_commands import doctor, setup
 
 app = typer.Typer(
     name="flakipype",
@@ -12,6 +13,8 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+app.command()(setup)
+app.command()(doctor)
 
 
 def _print_version(requested: bool) -> None:  # noqa: FBT001 - signature dictated by Typer callbacks

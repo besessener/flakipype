@@ -1,0 +1,54 @@
+# Configuration
+
+## Files
+
+| Path | Content |
+| --- | --- |
+| `$XDG_CONFIG_HOME/flakipype/config.toml` (default `~/.config/flakipype/config.toml`) | Settings below; never contains secrets |
+| `$XDG_CONFIG_HOME/flakipype/secrets.json` | Only on machines without a system keyring; mode `0600` |
+| `$XDG_DATA_HOME/flakipype/bin/gh` (default `~/.local/share/flakipype/bin/gh`) | `gh` downloaded by flakipype |
+
+Relative `XDG_*` values are ignored, as the XDG specification requires.
+
+## `config.toml`
+
+```toml
+[llm]
+base_url = "https://api.anthropic.com"
+model = "claude-sonnet-4-5"
+
+[github]
+host = "github.com"
+owner = "octo-org"
+```
+
+| Key | Default | Rules |
+| --- | --- | --- |
+| `llm.base_url` | `https://api.anthropic.com` | `https://`; `http://` only for `localhost`, `127.0.0.1`, `::1`. A host ending in `.services.ai.azure.com` uses the Azure AI Foundry client. A trailing slash is removed. |
+| `llm.model` | — (required) | Model name; on Foundry the deployment name |
+| `github.host` | `github.com` | Host name without scheme, e.g. `github.example.com` for GitHub Enterprise Server |
+| `github.owner` | — (required) | GitHub user or organisation name |
+
+Unknown keys are an error, so a typo never goes unnoticed.
+
+## Secrets
+
+| Name | Where |
+| --- | --- |
+| LLM API key (`llm-api-key`, service `flakipype`) | System keyring via `keyring` (Secret Service, KWallet, …); without one, `secrets.json` |
+| GitHub token | Not stored by flakipype: it is `gh`'s own login (`gh auth login`) |
+
+## gh
+
+flakipype uses, in order:
+
+1. `gh` on `PATH`, if it is version 2.40.0 or newer;
+2. its own copy in `$XDG_DATA_HOME/flakipype/bin/gh`.
+
+If neither exists, `flakipype setup` downloads the latest `cli/cli` release
+for the machine (`amd64`, `arm64`, `armv6`, `386`), verifies the tarball
+against the release's `gh_<version>_checksums.txt` and installs it
+atomically. A mismatch aborts and installs nothing.
+
+Required token scopes for classic and OAuth tokens: `repo`, `workflow`,
+`read:org` (`write:org` or `admin:org` also satisfy `read:org`).

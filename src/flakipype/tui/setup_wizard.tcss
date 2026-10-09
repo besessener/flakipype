@@ -1,0 +1,73 @@
+Screen {
+    background: $background;
+}
+
+#form {
+    padding: 1 2;
+}
+
+.intro {
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+.section {
+    border: round $primary;
+    border-title-color: $accent;
+    border-title-style: bold;
+    padding: 0 1;
+    margin-bottom: 1;
+    height: auto;
+}
+
+.section Label {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+.row {
+    height: auto;
+    margin-top: 1;
+}
+
+.row Button {
+    margin-right: 1;
+}
+
+.row Input {
+    width: 1fr;
+}
+
+.status {
+    width: 1fr;
+    height: auto;
+    padding: 1 1 0 1;
+}
+
+.status.ok {
+    color: $success;
+}
+
+.status.warning {
+    color: $warning;
+}
+
+.status.failed {
+    color: $error;
+}
+
+.status.busy {
+    color: $text-muted;
+    text-style: italic;
+}
+
+#save-row {
+    height: auto;
+    align-horizontal: right;
+}
+
+#save-status {
+    width: 1fr;
+    color: $error;
+    padding: 1 1 0 0;
+}

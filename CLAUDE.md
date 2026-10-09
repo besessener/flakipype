@@ -28,6 +28,7 @@ slash commands and headless commands for cron and a systemd timer. Full docs:
 | --- | --- |
 | Packages, layers, data flow | [architecture.md](docs/explanation/architecture.md) |
 | Modes, confirmations, PRs, budgets | [safety-model.md](docs/explanation/safety-model.md) |
+| Settings, secrets, gh download | [configuration.md](docs/reference/configuration.md) |
 | Scope and milestones | [roadmap.md](docs/explanation/roadmap.md) |
 | Tests, CI, quality gates | [quality.md](docs/reference/quality.md), [commands.md](docs/reference/commands.md) |
 | Running CI locally | [run-ci-locally.md](docs/how-to/run-ci-locally.md) |

@@ -15,6 +15,13 @@ classifiers = [
   "Topic :: Software Development :: Testing",
 ]
 dependencies = [
+    "anthropic>=1.12.1",
+    "httpx2>=2.13.1",
+    "keyring>=25.7.0",
+    "pydantic>=2.14.0",
+    "rich>=15.0.0",
+    "textual>=8.2.8",
+    "tomli-w>=1.2.0",
     "typer>=0.27.3",
 ]
 
@@ -35,7 +42,9 @@ dev = [
     "mypy>=2.4.0",
     "poethepoet>=0.48.0",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "pytest-textual-snapshot>=1.0.0",
     "ruff>=0.16.10",
     "vulture>=2.16",
 ]
@@ -65,7 +74,12 @@ ignore = [
   "S101",    # assert is how pytest works
   "PLR2004", # literal values are the point of a test
   "INP001",  # tests are not a package
+  "EM101",   # test doubles raise exceptions with inline messages
+  "TRY003",  # same
 ]
+
+[tool.ruff.lint.isort]
+known-local-folder = ["support"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -80,6 +94,8 @@ max-positional-args = 3
 strict = true
 python_version = "3.12"
 files = ["src", "tests"]
+mypy_path = ["src", "tests"]
+explicit_package_bases = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 
@@ -87,9 +103,16 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+  "error",
+  # pytest-textual-snapshot 1.0 still calls datetime.utcnow() when writing its diff report.
+  "ignore:datetime.datetime.utcnow:DeprecationWarning:pytest_textual_snapshot",
+]
 
 [tool.coverage.run]
 branch = true
@@ -113,7 +136,7 @@ type = "layers"
 layers = [
   "flakipype.cli",
   "flakipype.tui",
-  "flakipype.agent",
+  "flakipype.agent | flakipype.setup",
   "flakipype.llm | flakipype.github | flakipype.store",
   "flakipype.flaky | flakipype.config",
 ]
