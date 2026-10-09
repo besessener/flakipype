@@ -10,6 +10,7 @@ from flakipype.agent.orchestrator import ChatAgent, ChatSettings, ignore_steps, 
 from flakipype.agent.prompts import CHAT_SYSTEM
 from flakipype.agent.tools import (
     ActionRequest,
+    Answer,
     Mode,
     PolicyGate,
     PreparedAction,
@@ -59,14 +60,15 @@ class FakeWorkspace:
         return "R1 running"
 
     def _action(self, *call: object) -> PreparedAction:
-        def run() -> str:
+        def run(answer: Answer) -> str:
+            del answer
             self.calls.append(call)
             return f"{call[0]} started"
 
         return PreparedAction(
             ActionRequest(f"{call[0]}?", ()),
             run=run,
-            declined=lambda: self.calls.append(("declined", *call)),
+            declined=lambda _: self.calls.append(("declined", *call)),
         )
 
 

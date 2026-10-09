@@ -7,6 +7,7 @@ from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Lim
 from flakipype.agent.prompts import data_block
 from flakipype.agent.tools import (
     ActionRequest,
+    Answer,
     Confirmer,
     Mode,
     PolicyGate,
@@ -48,12 +49,16 @@ class Shout:
 
     events: list[str]
 
+    request: ActionRequest = REQUEST
+
     def __call__(self, given: Echo) -> PreparedAction:
-        def run() -> str:
-            self.events.append("ran")
+        def run(answer: Answer) -> str:
+            self.events.append(f"ran {answer}")
             return given.word.upper()
 
-        return PreparedAction(REQUEST, run=run, declined=lambda: self.events.append("declined"))
+        return PreparedAction(
+            self.request, run=run, declined=lambda answer: self.events.append(answer.value)
+        )
 
 
 @dataclass
@@ -82,15 +87,15 @@ def test_tool_definition_and_validated_invocation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("risk", "mode", "confirmed", "permitted"),
+    ("risk", "mode", "confirmed", "answer"),
     [
-        (RiskLevel.READ, Mode.ASK, False, True),
-        (RiskLevel.WRITE, Mode.ASK, False, False),
-        (RiskLevel.WRITE, Mode.ASK, True, True),
-        (RiskLevel.CRITICAL, Mode.AUTO, False, True),
+        (RiskLevel.READ, Mode.ASK, False, Answer.AUTO),
+        (RiskLevel.WRITE, Mode.ASK, False, Answer.DECLINED),
+        (RiskLevel.WRITE, Mode.ASK, True, Answer.CONFIRMED),
+        (RiskLevel.CRITICAL, Mode.AUTO, False, Answer.AUTO),
     ],
 )
-def test_policy_gate(risk: RiskLevel, mode: Mode, confirmed: bool, permitted: bool) -> None:  # noqa: FBT001 - parametrised test data
+def test_policy_gate(risk: RiskLevel, mode: Mode, confirmed: bool, answer: Answer) -> None:  # noqa: FBT001 - parametrised test data
     asked: list[ActionRequest] = []
 
     def confirm(request: ActionRequest) -> bool:
@@ -99,12 +104,12 @@ def test_policy_gate(risk: RiskLevel, mode: Mode, confirmed: bool, permitted: bo
 
     gate = PolicyGate(mode, confirm)
 
-    assert gate.permits(risk, REQUEST) is permitted
+    assert gate.answer(risk, REQUEST) is answer
     assert asked == ([REQUEST] if risk is RiskLevel.WRITE else [])
 
 
 def test_headless_runs_confirm_nothing() -> None:
-    assert not ASK_NOBODY.permits(RiskLevel.WRITE, REQUEST)
+    assert ASK_NOBODY.answer(RiskLevel.WRITE, REQUEST) is Answer.DECLINED
 
 
 def test_a_confirmed_action_runs() -> None:
@@ -112,7 +117,7 @@ def test_a_confirmed_action_runs() -> None:
     shout = Tool("shout", "Shout a word.", RiskLevel.WRITE, Echo, Shout(events))
 
     assert shout.invoke({"word": "hi"}, PolicyGate(Mode.ASK, lambda _: True)) == "HI"
-    assert events == ["ran"]
+    assert events == ["ran confirmed"]
 
 
 def test_a_declined_action_does_not_run_and_tells_the_model_to_stop() -> None:
@@ -122,6 +127,20 @@ def test_a_declined_action_does_not_run_and_tells_the_model_to_stop() -> None:
     with pytest.raises(ToolDeclinedError, match=r"declined\. Do not ask for it again"):
         shout.invoke({"word": "hi"}, ASK_NOBODY)
     assert events == ["declined"]
+
+
+def test_auto_mode_runs_actions_but_never_one_that_needs_a_person() -> None:
+    events: list[str] = []
+    gate = PolicyGate(Mode.ASK, deny_all)
+    gate.mode = Mode.AUTO
+    plain = Tool("shout", "Shout.", RiskLevel.CRITICAL, Echo, Shout(events))
+    risky = ActionRequest("Push?", ("x",), needs_person="the diff changes .github/")
+    guarded = Tool("push", "Push.", RiskLevel.CRITICAL, Echo, Shout(events, risky))
+
+    assert plain.invoke({"word": "hi"}, gate) == "HI"
+    with pytest.raises(ToolDeclinedError, match=r"not run in auto mode because the diff changes"):
+        guarded.invoke({"word": "hi"}, gate)
+    assert events == ["ran auto", "not run in auto mode"]
 
 
 def test_a_writing_tool_must_prepare_a_request() -> None:

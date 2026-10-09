@@ -155,7 +155,9 @@ def test_model_errors_are_reported() -> None:
 def test_unknown_tools_failing_tools_and_the_gate_answer_with_errors() -> None:
     declined: list[str] = []
     action = PreparedAction(
-        ActionRequest("Rerun?", ()), run=lambda: "done", declined=lambda: declined.append("rerun")
+        ActionRequest("Rerun?", ()),
+        run=lambda _: "done",
+        declined=lambda _: declined.append("rerun"),
     )
     write_tool = Tool("rerun", "Rerun a job.", RiskLevel.WRITE, Nothing, lambda _: action)
     model = ScriptedModel(

@@ -99,6 +99,20 @@ class ActionSettings(BaseModel):
     watch_hours: int = Field(default=6, ge=1, le=24)
 
 
+class FixSettings(BaseModel):
+    """Hard limits for fixes: pull requests, diff size, verification and the fixer agent."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_prs_per_session: int = Field(default=3, ge=1, le=20)
+    max_files: int = Field(default=10, ge=1, le=50)
+    max_changed_lines: int = Field(default=400, ge=10, le=2_000)
+    verify_runs: int = Field(default=3, ge=1, le=10)
+    max_rounds: int = Field(default=20, ge=5, le=60)
+    max_tokens: int = Field(default=300_000, ge=10_000, le=2_000_000)
+    max_seconds: int = Field(default=600, ge=60, le=3_600)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -107,6 +121,7 @@ class Settings(BaseModel):
     scan: ScanSettings = ScanSettings()
     agent: AgentSettings = AgentSettings()
     actions: ActionSettings = ActionSettings()
+    fix: FixSettings = FixSettings()
 
 
 def load_settings(path: Path) -> Settings:

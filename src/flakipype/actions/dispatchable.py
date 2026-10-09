@@ -1,4 +1,4 @@
-"""Whether flakipype may dispatch a workflow: it must allow it and need no input."""
+"""What starts a workflow, and whether flakipype may dispatch it: allowed and without input."""
 
 from typing import Any
 
@@ -6,6 +6,23 @@ import yaml
 
 _NOT_DISPATCHABLE = "the workflow does not declare workflow_dispatch"
 _DISPATCH = "workflow_dispatch"
+
+
+def triggers(workflow_text: str) -> set[str]:
+    """The events that start the workflow; empty if the file is not a valid workflow."""
+    try:
+        document: Any = yaml.safe_load(workflow_text)
+    except yaml.YAMLError:
+        return set()
+    if not isinstance(document, dict):
+        return set()
+    # YAML 1.1 reads the unquoted key `on` as the boolean true.
+    events = document.get("on", document.get(True))
+    if isinstance(events, str):
+        return {events}
+    if isinstance(events, list | dict):
+        return {str(event) for event in events}
+    return set()
 
 
 def dispatch_problem(workflow_text: str) -> str | None:
@@ -16,13 +33,12 @@ def dispatch_problem(workflow_text: str) -> str | None:
         return "the workflow file is not valid YAML"
     if not isinstance(document, dict):
         return _NOT_DISPATCHABLE
-    # YAML 1.1 reads the unquoted key `on` as the boolean true.
-    triggers = document.get("on", document.get(True))
-    if triggers == _DISPATCH or (isinstance(triggers, list) and _DISPATCH in triggers):
+    events = document.get("on", document.get(True))
+    if events == _DISPATCH or (isinstance(events, list) and _DISPATCH in events):
         return None
-    if not isinstance(triggers, dict) or _DISPATCH not in triggers:
+    if not isinstance(events, dict) or _DISPATCH not in events:
         return _NOT_DISPATCHABLE
-    return _missing_inputs(triggers[_DISPATCH])
+    return _missing_inputs(events[_DISPATCH])
 
 
 def _missing_inputs(dispatch: object) -> str | None:

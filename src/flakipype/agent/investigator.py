@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import cached_system, cached_tools, content_blocks, tool_result
 from flakipype.agent.prompts import INVESTIGATOR_SYSTEM
 from flakipype.agent.tools import PolicyGate, Tool, ToolError
 from flakipype.agent.verdict import FINDING_REFERENCE, Verdict, citation_problems
@@ -128,7 +129,7 @@ class Investigator:
             except APIError as error:
                 return Outcome(Status.MODEL_ERROR, detail=str(error))
             self._budget.record(response.usage)
-            self._messages.append({"role": "assistant", "content": _content(response)})
+            self._messages.append({"role": "assistant", "content": content_blocks(response)})
             uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not uses:
                 if nudges == 0:
@@ -148,18 +149,11 @@ class Investigator:
 
     def _call(self) -> Message:
         definitions = [tool.definition() for tool in self._tools.values()] + [_submit_tool()]
-        definitions[-1] = {**definitions[-1], "cache_control": {"type": "ephemeral"}}
         request: dict[str, Any] = {
             "model": self._settings.model,
             "max_tokens": self._settings.max_tokens,
-            "system": [
-                {
-                    "type": "text",
-                    "text": INVESTIGATOR_SYSTEM,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            "tools": definitions,
+            "system": cached_system(INVESTIGATOR_SYSTEM),
+            "tools": cached_tools(definitions),
             "messages": self._messages,
             **self._settings.thinking_parameter(),
         }
@@ -174,7 +168,7 @@ class Investigator:
             return Outcome(Status.LOOP, detail=f"Repeated the same call: {use.name}.")
         self._last_call = call
         text, failed = self._run_tool(use)
-        turn.results.append(_tool_result(use.id, text, failed=failed))
+        turn.results.append(tool_result(use.id, text, failed=failed))
         return None
 
     def _run_tool(self, use: ToolUseBlock) -> tuple[str, bool]:
@@ -205,16 +199,5 @@ class Investigator:
             return Outcome(Status.NO_VERDICT, detail="Verdict rejected: " + "; ".join(problems))
         self._corrections -= 1
         text = "Rejected. Fix these and submit again:\n" + "\n".join(f"- {p}" for p in problems)
-        turn.results.append(_tool_result(use.id, text, failed=True))
+        turn.results.append(tool_result(use.id, text, failed=True))
         return None
-
-
-def _content(response: Message) -> list[dict[str, Any]]:
-    return [block.model_dump(exclude_none=True) for block in response.content]
-
-
-def _tool_result(tool_use_id: str, text: str, *, failed: bool) -> dict[str, Any]:
-    result: dict[str, Any] = {"type": "tool_result", "tool_use_id": tool_use_id, "content": text}
-    if failed:
-        result["is_error"] = True
-    return result

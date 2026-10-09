@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Limits, RunBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import cached_system, cached_tools, content_blocks
 from flakipype.agent.prompts import CHAT_SYSTEM, data_block
 from flakipype.agent.tools import (
     PolicyGate,
@@ -174,7 +175,7 @@ class ChatAgent:
             except APIError as error:
                 return self._abandon(start, f"The model could not answer: {error}", budget.tokens)
             budget.record(response.usage)
-            self._messages.append({"role": "assistant", "content": _content(response)})
+            self._messages.append({"role": "assistant", "content": content_blocks(response)})
             uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not uses:
                 return Reply(_text(response), budget.tokens, completed=True)
@@ -196,14 +197,11 @@ class ChatAgent:
 
     def _call(self) -> Message:
         definitions = [tool.definition() for tool in self._tools.values()]
-        definitions[-1] = {**definitions[-1], "cache_control": {"type": "ephemeral"}}
         request: dict[str, Any] = {
             "model": self._settings.model.model,
             "max_tokens": self._settings.model.max_tokens,
-            "system": [
-                {"type": "text", "text": CHAT_SYSTEM, "cache_control": {"type": "ephemeral"}}
-            ],
-            "tools": definitions,
+            "system": cached_system(CHAT_SYSTEM),
+            "tools": cached_tools(definitions),
             "messages": self._messages,
             **self._settings.model.thinking_parameter(),
         }
@@ -233,10 +231,6 @@ class ChatAgent:
             **result,
             "content": self._masker.mask(data_block("tool-result", text, tool=use.name)),
         }
-
-
-def _content(response: Message) -> list[dict[str, Any]]:
-    return [block.model_dump(exclude_none=True) for block in response.content]
 
 
 def _text(response: Message) -> str:
