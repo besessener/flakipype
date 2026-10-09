@@ -15,8 +15,8 @@ shows them live while they run.
   tag, and cancelling runs flakipype started. A live list shows them, an
   audit log records them, and a budget limits them.
 - **Out**: headless actions (`flakipype run --auto`, M6); changing code,
-  branches or pull requests (M5); `/mode auto` in the chat (with M5, when
-  draft pull requests exist).
+  branches or pull requests, and `/mode auto` in the chat (M5, see
+  [fixes](fix.md)).
 
 None of these actions writes to a branch: reruns and dispatches run the code
 that is already there. They cost CI minutes, not model tokens. In

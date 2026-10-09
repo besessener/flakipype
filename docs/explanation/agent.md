@@ -15,7 +15,8 @@ and history the way an engineer would. That is the agent's job.
 
 - **In**: investigating findings and explaining them with cited evidence; a
   chat to ask about them; a headless `flakipype investigate` for scripts.
-- **Out**: changing code or opening pull requests (M5). Investigators only
+- **Out**: changing code or opening pull requests (M5, see
+  [fixes](fix.md)). Investigators only
   read. The chat model can also rerun and dispatch workflows, each confirmed
   by you (M4, see [actions](actions.md)).
 
@@ -88,7 +89,7 @@ run concurrently.
 | `workflow_file(ref)` | The workflow YAML of the finding at a commit | `gh api …/contents` |
 | `submit_verdict(...)` | Ends the investigation | — |
 
-No local clone in M3; everything comes from GitHub's API. Job logs are cached
+No local clone; everything comes from GitHub's API. Job logs are cached
 per investigation. An investigation only sees its finding's repository and
 the jobs of that workflow the scan read; other job ids are refused. Calling
 the same tool with the same input twice in a row ends the investigation.
