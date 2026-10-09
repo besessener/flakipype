@@ -3,6 +3,7 @@
 import os
 import re
 import subprocess
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -33,12 +34,18 @@ class GhCli:
     def __init__(self, command: Sequence[str], host: str) -> None:
         self._command = list(command)
         self._host = host
+        # One gh call at a time, even from parallel investigations (GitHub's secondary limits).
+        self._lock = threading.Lock()
 
     @property
     def host(self) -> str:
         return self._host
 
     def run(self, arguments: Sequence[str], stdin_text: str = "") -> GhResult:
+        with self._lock:
+            return self._run(arguments, stdin_text)
+
+    def _run(self, arguments: Sequence[str], stdin_text: str) -> GhResult:
         completed = subprocess.run(  # noqa: S603 - argument list, never a shell
             [*self._command, *arguments],
             input=stdin_text,

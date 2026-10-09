@@ -10,6 +10,7 @@ Organised by [Diátaxis](https://diataxis.fr/).
 ## How-to guides
 
 - [Find flaky pipelines](how-to/find-flaky-pipelines.md) – `flakipype scan`, options, scripts.
+- [Investigate findings](how-to/investigate-findings.md) – let the agent explain them with evidence.
 - [Connect a model](how-to/connect-a-model.md) – Anthropic API, Azure AI Foundry or a proxy.
 - [Set up a headless machine](how-to/set-up-headless.md) – servers, containers, SSH.
 - [Run CI locally with act](how-to/run-ci-locally.md) – the Linux gate on Windows.

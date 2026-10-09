@@ -42,10 +42,13 @@ as instructions. Actions come only from your request or the configured mode.
 
 ## Secrets stay local
 
-Everything sent to the model passes secret masking first (tokens, keys,
-connection strings, values GitHub masks in logs). The API key and GitHub
-token are stored in the system keyring, or a `0600` file where no keyring
-exists.
+Everything sent to the model passes secret masking first
+(`agent/masking.py`): the configured API key itself, GitHub, Anthropic, AWS
+and Slack tokens, JWTs, private key blocks, credentials in URLs, bearer
+tokens and `password=`/`token:`-style assignments become `[masked: …]`.
+GitHub's own `***` stays as it is. The API key is stored in the system
+keyring, or a `0600` file where no keyring exists; the GitHub token stays in
+`gh`'s own login.
 
 ## Budgets
 

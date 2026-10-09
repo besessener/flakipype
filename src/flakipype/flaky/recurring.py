@@ -32,6 +32,7 @@ class RecurringError:
     first_seen: datetime
     last_seen: datetime
     examples: tuple[str, ...]
+    job_ids: tuple[int, ...] = ()
 
 
 def latest_failed_attempts(runs: Iterable[WorkflowRun]) -> list[AttemptRef]:
@@ -98,4 +99,5 @@ def _summarise(
         first_seen=newest_first[-1].seen_at,
         last_seen=newest_first[0].seen_at,
         examples=tuple(failure.job.url for failure in newest_first[:_EXAMPLES]),
+        job_ids=tuple(failure.job.job_id for failure in newest_first),
     )

@@ -45,6 +45,10 @@ Below the ranking, up to three more sections:
 
 Why these are kept apart: [how flakiness is detected](../explanation/flake-detection.md).
 
+Every entry has a number (**#**), counted across all sections. Use it to let
+the agent explain a finding: `flakipype investigate --finding 3`; see
+[investigate findings](investigate-findings.md).
+
 ## Narrow or widen it
 
 ```bash

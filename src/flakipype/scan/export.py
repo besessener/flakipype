@@ -43,6 +43,12 @@ def _flaky_job(flaky: FlakyJob, status: Verdict) -> dict[str, Any]:
 
 
 def report_as_json(report: ScanReport) -> dict[str, Any]:
+    """Finding numbers match lakipype investigate --finding N."""
+    jobs = [
+        *(_flaky_job(job, Verdict.FLAKY) for job in report.ranking.flaky),
+        *(_flaky_job(job, Verdict.SEEN_ONCE) for job in report.ranking.seen_once),
+        *(_flaky_job(job, Verdict.FIXED) for job in report.ranking.fixed),
+    ]
     return {
         "schema_version": SCHEMA_VERSION,
         "owner": report.owner,
@@ -54,10 +60,11 @@ def report_as_json(report: ScanReport) -> dict[str, Any]:
         "logs_not_read": report.logs_not_read,
         "problems": list(report.problems),
         "min_flaky_runs": report.ranking.min_runs,
-        "jobs": [_flaky_job(job, Verdict.FLAKY) for job in report.ranking.flaky]
-        + [_flaky_job(job, Verdict.SEEN_ONCE) for job in report.ranking.seen_once]
-        + [_flaky_job(job, Verdict.FIXED) for job in report.ranking.fixed],
-        "recurring_errors": [_recurring_error(error) for error in report.recurring],
+        "jobs": [{"finding": number, **entry} for number, entry in enumerate(jobs, start=1)],
+        "recurring_errors": [
+            {"finding": number, **_recurring_error(error)}
+            for number, error in enumerate(report.recurring, start=len(jobs) + 1)
+        ],
     }
 
 

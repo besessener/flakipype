@@ -1,6 +1,8 @@
 # The agent
 
-> Status: design for milestone M3, for review before implementation.
+> Status: headless investigations (lakipype investigate) are implemented (M3a);
+> the chat follows in M3b. Where the implementation differs from the first design,
+> this page describes the implementation.
 
 The scan (M2) delivers facts: proven flaky events, one-offs, fixes and
 recurring errors, with error signatures. It deliberately stops where
@@ -39,22 +41,24 @@ and history the way an engineer would. That is the agent's job.
 ```
 
 **Investigator.** One per finding, with a fresh, small context: the finding
-from the scan, the tools, and nothing about other findings, so one case
-cannot bias the next. It decides itself which tools to call and in which
+from the scan (citable as `finding`), the tools, and nothing about other
+findings, so one case cannot bias the next. It decides itself which tools to call and in which
 order, and finishes by calling `submit_verdict`. Several investigators run in
 parallel (default 3).
 
 **Citation check.** Deterministic code, not a model: each evidence item must
 point to a tool result of this investigation, and its quote must appear in
-that result. A verdict with invented evidence goes back to the investigator
-once with the list of failed citations; the second failure ends as
-`unclear`.
+that result (whitespace is normalised). A verdict with invented evidence or an
+invalid shape goes back to the investigator with the list of problems, at
+most twice; then the investigation ends without a verdict.
 
 **Reviewer.** A second model call with only the finding, the verdict and the
 cited evidence (not the whole investigation). It checks the reasoning against
 the rules below and answers `accept`, `revise` (with concrete questions; the
 investigator continues once with them) or `downgrade` (lower confidence or
-`unclear`, with a reason). The reviewer never upgrades a verdict.
+`unclear`, with a reason). The reviewer never upgrades a verdict; code
+enforces that. A second `revise` after the one round trip counts as low
+confidence. If no review comes back, the verdict is shown as not reviewed.
 
 **Orchestrator.** In the chat: the conversation with you, slash commands,
 choosing findings, showing progress and results. In `--auto`: investigates
@@ -69,7 +73,6 @@ run concurrently.
 
 | Tool | Returns | Source |
 | --- | --- | --- |
-| `finding()` | The finding from the scan: verdict, runs, signals, signatures, links | scan result |
 | `failure_excerpt(job_id)` | Prepared excerpt of the failed step (below) | job log, cached |
 | `log_range(job_id, from_line, to_line)` | More raw lines, max 200 per call, cleaned and masked | job log, cached |
 | `run_history(limit)` | Timeline of this workflow: run, commit, branch, event, result, signature per failed job | scan cache + run list |
@@ -79,8 +82,10 @@ run concurrently.
 | `workflow_file(ref)` | The workflow YAML of the finding at a commit | `gh api …/contents` |
 | `submit_verdict(...)` | Ends the investigation | — |
 
-No local clone in M3; everything comes from GitHub's API. Tool results are
-cached per investigation, so revisiting costs nothing.
+No local clone in M3; everything comes from GitHub's API. Job logs are cached
+per investigation. An investigation only sees its finding's repository and
+the jobs of that workflow the scan read; other job ids are refused. Calling
+the same tool with the same input twice in a row ends the investigation.
 
 ## Logs, prepared for reading
 
@@ -151,6 +156,9 @@ Rules the prompts state and the reviewer checks:
 - **Unclear is a valid answer** and better than a guess.
 - Counter-evidence is mandatory to consider; an empty list must be a
   conscious claim.
+- At least one evidence item must quote a log, history, commit or file
+  result; quotes from the finding (kind `scan`) alone are rejected, because
+  they only repeat the scan. Enforced by the citation check.
 
 Verdicts are shown as the **model's assessment, with its evidence**, always
 next to — never instead of — the scan's facts.
@@ -182,7 +190,7 @@ with a summary of what was done and what is missing:
 | Tokens per `investigate` run / chat turn | 1,000,000 |
 
 Loop detection: the same tool with the same arguments twice in a row ends the
-investigation as `unclear`. Token usage and an estimated cost are shown live
+investigation as `unclear`. Token usage is shown per investigation and in total
 and in the summary.
 
 ## Model use
@@ -190,9 +198,12 @@ and in the summary.
 - Anthropic Messages API (api.anthropic.com or Azure AI Foundry), the
   configured model for all roles; a cheaper model for the reviewer can be
   configured later if evaluations show it is good enough.
-- Tool use with `tool_choice: any` until the investigator submits; parallel
-  tool calls allowed.
-- Extended thinking for investigator and reviewer (budget configurable).
+- Tool use with `tool_choice: auto` everywhere; parallel tool calls allowed.
+  Newer models refuse `any` and forced tools, so a model that stops without
+  calling `submit_verdict` or `submit_review` is nudged once.
+- Thinking for investigator and reviewer: `adaptive` by default. `enabled`
+  (with a token budget) and `off` exist for older models; newer ones, like
+  the one flakipype was first run against, only accept `adaptive`.
 - Prompt caching for the system prompt and tool definitions, which are the
   same for every investigation.
 
@@ -218,7 +229,7 @@ orchestrator maps it to findings and tools. Sessions are stored and can be
 resumed.
 
 Headless: `flakipype investigate [--finding N | --all] [--json]` prints the
-verdicts; exit code 1 if a budget ended the run early.
+verdicts; see [investigate findings](../how-to/investigate-findings.md).
 
 ## Testing
 

@@ -10,6 +10,7 @@ from flakipype.cli import wiring
 from flakipype.cli.scan_report import render_report
 from flakipype.config.settings import Settings
 from flakipype.github.actions import GitHubApiError
+from flakipype.investigate.service import EventKind, InvestigationEvent
 from flakipype.scan import progress
 from flakipype.scan.export import report_as_json
 from flakipype.scan.service import ScanRequest
@@ -73,6 +74,15 @@ class ProgressView:
 
     def __exit__(self, *_: object) -> None:
         self._progress.stop()
+
+    def investigation(self, event: InvestigationEvent) -> None:
+        detail = f"#{event.finding.number} {event.finding.key.repository} › {event.finding.key.job}"
+        if event.kind is EventKind.STARTED:
+            self._progress.update(
+                self._task, description="Investigating", total=event.total, detail=detail
+            )
+            return
+        self._progress.update(self._task, completed=event.done, total=event.total)
 
     def update(self, event: progress.Progress) -> None:
         self._progress.update(

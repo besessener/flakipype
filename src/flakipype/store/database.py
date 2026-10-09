@@ -32,6 +32,12 @@ MIGRATIONS = (
     );
     """,
     "ALTER TABLE job_logs ADD COLUMN signature_version INTEGER NOT NULL DEFAULT 1;",
+    """
+    CREATE TABLE verdicts (
+        host TEXT NOT NULL, identity TEXT NOT NULL, last_seen TEXT NOT NULL,
+        result TEXT NOT NULL, PRIMARY KEY (host, identity)
+    );
+    """,
 )
 
 
@@ -147,6 +153,21 @@ class ScanCache:
                     signature.excerpt if signature else None,
                     SIGNATURE_VERSION,
                 ),
+            )
+
+    def cached_verdict(self, host: str, identity: str, last_seen: str) -> str | None:
+        """The stored result, if it was made after the finding's newest failure."""
+        row = self._db.execute(
+            "SELECT result FROM verdicts WHERE host = ? AND identity = ? AND last_seen = ?",
+            (host, identity, last_seen),
+        ).fetchone()
+        return str(row[0]) if row else None
+
+    def save_verdict(self, host: str, identity: str, *, last_seen: str, result: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO verdicts VALUES (?, ?, ?, ?)",
+                (host, identity, last_seen, result),
             )
 
 

@@ -55,6 +55,7 @@ def test_json_report_has_a_stable_documented_shape(cache: ScanCache) -> None:
         "min_flaky_runs": 2,
         "jobs": [
             {
+                "finding": 1,
                 "status": "seen_once",
                 "repository": "octo-org/app",
                 "workflow": {"name": "CI", "path": ".github/workflows/ci.yml"},
@@ -81,6 +82,7 @@ def test_json_report_has_a_stable_documented_shape(cache: ScanCache) -> None:
         ],
         "recurring_errors": [
             {
+                "finding": 2,
                 "repository": "octo-org/app",
                 "workflow": {"name": "CI", "path": ".github/workflows/ci.yml"},
                 "job": "lint",

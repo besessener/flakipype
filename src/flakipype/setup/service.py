@@ -117,8 +117,9 @@ class SetupService:
             errors["github.owner"] = "is required"
         if llm is None or github is None or errors:
             raise InvalidSetupError(errors)
-        # The wizard does not edit [scan]; keep whatever the file already has.
-        return Settings(llm=llm, github=github, scan=self.load().settings.scan)
+        # The wizard does not edit [scan] and [agent]; keep whatever the file already has.
+        current = self.load().settings
+        return Settings(llm=llm, github=github, scan=current.scan, agent=current.agent)
 
     def _validated_llm(self, draft: SetupDraft) -> tuple[LlmSettings | None, dict[str, str]]:
         model = draft.model.strip()

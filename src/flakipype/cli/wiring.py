@@ -3,20 +3,29 @@
 import os
 import platform
 import shutil
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import httpx2
 import keyring
 
+from flakipype.agent.budget import Limits
+from flakipype.agent.investigator import ModelSettings
+from flakipype.agent.masking import Masker
+from flakipype.agent.pipeline import AgentConfig, investigate_finding
 from flakipype.config.paths import AppPaths, app_paths
-from flakipype.config.secrets import default_secret_store
+from flakipype.config.secrets import LLM_API_KEY, default_secret_store
 from flakipype.config.settings import Settings, SettingsError, load_settings
 from flakipype.github.actions import ActionsClient
 from flakipype.github.binary import GhInstaller
+from flakipype.github.contents import ContentsClient
+from flakipype.github.gh import GhCli
 from flakipype.github.provider import ManagedGh
+from flakipype.investigate.service import InvestigationService
 from flakipype.llm.client import LlmEndpoint, create_client
 from flakipype.llm.connection import ConnectionResult, check_connection
 from flakipype.scan.service import ScanService
@@ -59,19 +68,82 @@ def build_setup_service() -> SetupService:
     )
 
 
-@contextmanager
-def open_scan() -> Iterator[tuple[ScanService, Settings]]:
-    paths = _paths()
+def _ready_settings(paths: AppPaths) -> Settings:
     try:
-        settings = load_settings(paths.config_file)
+        return load_settings(paths.config_file)
     except SettingsError as error:
         message = f"{error}. {RUN_SETUP}"
         raise NotReadyError(message) from error
+
+
+def _gh_cli(paths: AppPaths, host: str) -> GhCli:
     gh = _managed_gh(paths)
     binary = gh.find()
     if binary is None:
         message = f"No usable gh found. {RUN_SETUP}"
         raise NotReadyError(message)
-    actions = ActionsClient(gh.cli(binary, settings.github.host))
+    return gh.cli(binary, host)
+
+
+def _scan_service(actions: ActionsClient, cache: ScanCache) -> ScanService:
+    return ScanService(actions=actions, cache=cache, now=lambda: datetime.now(UTC))
+
+
+@contextmanager
+def open_scan() -> Iterator[tuple[ScanService, Settings]]:
+    paths = _paths()
+    settings = _ready_settings(paths)
+    actions = ActionsClient(_gh_cli(paths, settings.github.host))
     with ScanCache.open(paths.cache_file) as cache:
-        yield ScanService(actions=actions, cache=cache, now=lambda: datetime.now(UTC)), settings
+        yield _scan_service(actions, cache), settings
+
+
+def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
+    agent = settings.agent
+    endpoint = LlmEndpoint(settings.llm.base_url, api_key, settings.llm.model)
+    return AgentConfig(
+        client=create_client(endpoint),
+        settings=ModelSettings(
+            model=settings.llm.model,
+            max_tokens=agent.max_output_tokens,
+            thinking=agent.thinking,
+            thinking_budget=agent.thinking_budget,
+        ),
+        limits=Limits(
+            rounds=agent.max_rounds,
+            tokens=agent.max_tokens_per_investigation,
+            seconds=agent.max_seconds_per_investigation,
+        ),
+        masker=Masker.with_secrets([api_key]),
+        logs=ActionsClient(gh),
+        contents=ContentsClient(gh),
+        clock=time.monotonic,
+        excerpt_lines=agent.excerpt_lines,
+    )
+
+
+@contextmanager
+def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
+    paths = _paths()
+    settings = _ready_settings(paths)
+    if not settings.llm.model:
+        message = f"No model configured. {RUN_SETUP}"
+        raise NotReadyError(message)
+    secrets = default_secret_store(keyring.get_keyring(), paths.secrets_file)
+    api_key = secrets.get(LLM_API_KEY)
+    if not api_key:
+        message = f"No API key stored. {RUN_SETUP}"
+        raise NotReadyError(message)
+    gh = _gh_cli(paths, settings.github.host)
+    config = _agent_config(settings, api_key, gh)
+    with ScanCache.open(paths.cache_file) as cache:
+        yield (
+            InvestigationService(
+                scan=_scan_service(ActionsClient(gh), cache),
+                cache=cache,
+                investigate=partial(investigate_finding, config),
+                run_tokens=settings.agent.max_tokens_per_run,
+                parallel=settings.agent.parallel,
+            ),
+            settings,
+        )

@@ -1,0 +1,32 @@
+{
+  "status": "ahead",
+  "total_commits": 1,
+  "commits": [
+    {
+      "sha": "4c10fffd501975266cbf8d4f5b9cbdcf8bd53051",
+      "commit": {
+        "message": "Set up project foundation (M0)\n\nuv project with src layout and Typer CLI (--version), package skeleton for tui, agent, llm, github, store, flaky and config. Quality gates via poe: ruff, mypy --strict, import-linter layers, deptry, vulture, pytest with branch coverage. prek hooks (gitleaks, zizmor, hygiene), hardened CI and CodeQL workflows, Dependabot, act config for the Linux gate on Windows. CLAUDE.md and Diataxis docs with architecture, safety model and roadmap.",
+        "author": {
+          "name": "Matthias Eggert",
+          "date": "2026-10-09T08:44:23Z"
+        }
+      }
+    }
+  ],
+  "files": [
+    {
+      "filename": ".actrc",
+      "status": "added",
+      "additions": 2,
+      "deletions": 0,
+      "patch": "@@ -0,0 +1,2 @@\n+-P ubuntu-latest=catthehacker/ubuntu:act-latest\n+--container-architecture linux/amd64"
+    },
+    {
+      "filename": ".python-version",
+      "status": "added",
+      "additions": 1,
+      "deletions": 0,
+      "patch": "@@ -0,0 +1 @@\n+3.12"
+    }
+  ]
+}
