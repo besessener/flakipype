@@ -22,7 +22,7 @@ Each milestone is one branch and one pull request.
 | M0 | Foundation | Project skeleton, quality gates, CI, act, CLAUDE.md, docs |
 | M1 | Setup | First-run wizard: LLM URL, key and model with a connection test; `gh` download with checksum check; GitHub login and scope check; secret storage |
 | M2 | Scan | GitHub read layer with fake `gh`, flake engine in `flaky`, SQLite cache, dashboard; `flakipype scan --json` |
-| M3 | Agent | Anthropic client with streaming and tool use, agent loop, policy gate, budgets, masking, chat with slash commands, resumable sessions |
+| M3 | Agent | Investigators per finding with read-only tools (prepared log excerpts, run history, commit diffs, files), citation check and reviewer, verdicts with evidence, policy gate, budgets, masking; chat with slash commands, resumable sessions; `flakipype investigate`. Design: [the agent](agent.md) |
 | M4 | Actions | Rerun and dispatch with confirmation, live run view |
 | M5 | Fix | Local clone, edit tools, diff review, branch plus PR, verification by rerunning the fix branch |
 | M6 | Unattended and release | `flakipype run --auto`, `flakipype daemon install` (systemd user timer), install script, multi-distro smoke tests |
