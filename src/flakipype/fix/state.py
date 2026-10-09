@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from flakipype.agent.workcopy import FileChange
-from flakipype.fix.verify import Verification
+from flakipype.fix.verify import Stage, Verification
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,10 @@ class OpenedPull:
     url: str
     branch: str
     verification: Verification
+
+    @property
+    def verified(self) -> bool:
+        return self.verification.stage is Stage.DONE
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "verification": self.verification.to_dict()}

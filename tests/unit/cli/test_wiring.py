@@ -5,7 +5,7 @@ import keyring
 import pytest
 from keyring.backends import fail
 
-from flakipype.agent.tools import ActionRequest
+from flakipype.agent.tools import ActionRequest, Mode, ToolError
 from flakipype.cli.wiring import (
     NotReadyError,
     build_setup_service,
@@ -15,10 +15,14 @@ from flakipype.cli.wiring import (
     open_scan,
 )
 from flakipype.config.secrets import LLM_API_KEY, FileSecretStore
+from flakipype.fix.service import FixTarget
 from flakipype.github.binary import GhBinary
 from flakipype.github.provider import ManagedGh
 from flakipype.llm.client import LlmEndpoint
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
+
+from support.fake_fix import verdict
+from support.fake_runs import e2e_evidence, e2e_finding
 
 
 @pytest.fixture
@@ -126,7 +130,7 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
 ) -> None:
     config = (
         '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n\n[scan]\nwindow_days = 9\n\n'
-        "[actions]\nmax_per_session = 3\n"
+        "[actions]\nmax_per_session = 3\n\n[fix]\nmax_prs_per_session = 2\n"
     )
     write_config(isolated_home, config)
     store_api_key(isolated_home)
@@ -140,3 +144,10 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
         assert chat.handle("/sessions")[1].text == "No saved sessions yet."
         assert chat.handle("/actions")[1].text == "No actions requested in this session."
         assert not chat.confirmer(ActionRequest("Rerun?", ()))
+        assert chat.mode is Mode.ASK
+        assert chat.handle("/mode auto")[1].text.startswith("Mode: auto.")
+        fixes = chat.workspace.fixes
+        fixes.opened = 2
+        target = FixTarget(e2e_finding(), e2e_evidence(), verdict(), "accepted: ok")
+        with pytest.raises(ToolError, match="Pull request budget used up: 2 of 2"):
+            fixes.prepare(target)

@@ -17,8 +17,9 @@ configured away.
 | `ask` | the chat | Every `write` and `critical` action waits for your confirmation. |
 | `auto` | headless commands and the systemd timer | Actions run without confirmation inside the budgets; pull requests are opened **as drafts only**. |
 
-Switch in the chat with `/mode ask|auto` (planned with M5; the chat always
-starts in `ask`), or on the command line with `--mode` (M6; until then only
+Switch in the chat with `/mode ask|auto` (the chat always starts in `ask`,
+and `/new` and `/resume` switch back to it), or on the command line with
+`--mode` (M6; until then only
 `investigate`, which only reads, runs headless). Every flakipype pull
 request is a draft, in both modes.
 
@@ -49,8 +50,10 @@ UI bug cannot skip it.
 
 A confirmation shows an action request that code builds from the validated
 arguments and GitHub's data: repository, workflow, run, ref, commit, and how
-much of the budget is used. It never shows text the model wrote, so a
-manipulated model cannot dress up an action. Write tools only accept targets
+much of the budget is used. Text the model wrote appears only in a fix's
+confirmation, below the facts under "written by the model", next to the
+full diff, and always as plain text, so a manipulated model cannot dress up
+an action as something else. Write tools only accept targets
 the scan found or flakipype started itself. Every request is written to an
 append-only audit log, together with your answer. Details for reruns and
 dispatches: [actions](actions.md).
@@ -75,7 +78,7 @@ keyring, or a `0600` file where no keyring exists; the GitHub token stays in
 
 Each run has hard, configurable limits with safe defaults: reruns and
 dispatches (10 per chat session, `actions.max_per_session`), runs watched at
-once, pull requests (3 per chat session, `fix.max_prs_per_session`, M5),
+once, pull requests (3 per chat session, `fix.max_prs_per_session`),
 files and lines per fix, tokens and wall-clock time, plus loop detection. Reaching a limit
 ends the run with a summary of what was done and what is left — never a
 half-finished state without explanation. No limit is unlimited by default.

@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from flakipype.actions.api import RunApi, WorkflowFiles
 from flakipype.actions.dispatchable import dispatch_problem
+from flakipype.actions.refusal import from_github, refusal
 from flakipype.actions.targets import check_owner, newest_failed_run, newest_run
 from flakipype.actions.watch import RunKind, RunWatch, WatchedRun
 from flakipype.agent.tools import ActionRequest, Answer, PreparedAction, ToolError
@@ -21,7 +22,6 @@ from flakipype.github.actions import GitHubApiError
 from flakipype.github.runs import RunState
 from flakipype.store.audit import AuditEntry, AuditLog
 
-_HTTP_FORBIDDEN = 403
 _WATCHING = "It is watched; a note follows when it finishes."
 
 
@@ -42,24 +42,6 @@ class _Dispatch:
     ref: str
     commit: str
     repeats: int
-
-
-def refusal(error: GitHubApiError) -> str:
-    if error.status == _HTTP_FORBIDDEN:
-        return (
-            f"GitHub refused: {error}. flakipype needs write access to Actions: the repo scope "
-            "for a classic token or gh auth login, or 'Actions: read and write' for a "
-            "fine-grained token."
-        )
-    return f"GitHub: {error}"
-
-
-@contextmanager
-def _from_github() -> Iterator[None]:
-    try:
-        yield
-    except GitHubApiError as error:
-        raise ToolError(refusal(error)) from error
 
 
 class ActionService:
@@ -166,7 +148,7 @@ class ActionService:
         key = finding.key
         check_owner(key.repository, self._owner)
         self._check_room(repeats)
-        with _from_github():
+        with from_github():
             name = ref or self._runs.default_branch(key.repository)
             commit = self._runs.ref_commit(key.repository, name)
             if commit is None:
@@ -260,7 +242,7 @@ class ActionService:
     def _checked_run(self, run: WorkflowRun) -> RunState:
         check_owner(run.repository, self._owner)
         self._check_room(1)
-        with _from_github():
+        with from_github():
             state = self._runs.run_state(run.repository, run.run_id)
         if not state.completed:
             message = f"Run {run.run_id} is still running; it can be rerun when it has finished."
@@ -268,7 +250,7 @@ class ActionService:
         return state
 
     def _rerun_request(self, title: str, run: WorkflowRun, state: RunState) -> ActionRequest:
-        with _from_github():
+        with from_github():
             jobs = self._runs.job_states(run.repository, run.run_id, state.attempt)
         failed = ", ".join(
             sorted({job.name for job in jobs if job.conclusion in FAILED_CONCLUSIONS})

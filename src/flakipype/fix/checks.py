@@ -3,13 +3,15 @@
 import json
 import re
 import tomllib
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from flakipype.agent.workcopy import FileChange
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _WORKFLOWS = ".github/workflows/"
 _GITHUB = ".github/"

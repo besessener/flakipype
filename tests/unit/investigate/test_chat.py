@@ -2,7 +2,8 @@ from dataclasses import replace
 
 from flakipype.agent.investigator import Status
 from flakipype.github.actions import GitHubApiError
-from flakipype.investigate.chat import HELP, ChatEntry, EntryKind, SidebarItem
+from flakipype.investigate.chat import ChatEntry, EntryKind, SidebarItem
+from flakipype.investigate.chat_text import HELP
 from flakipype.store.database import ScanCache
 
 from support.fake_actions import FakeActions

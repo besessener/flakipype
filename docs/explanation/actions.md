@@ -14,9 +14,10 @@ shows them live while they run.
   run, dispatching a workflow (`workflow_dispatch`) on an existing branch or
   tag, and cancelling runs flakipype started. A live list shows them, an
   audit log records them, and a budget limits them.
-- **Out**: headless actions (`flakipype run --auto`, M6); changing code,
-  branches or pull requests, and `/mode auto` in the chat (M5, see
-  [fixes](fix.md)).
+- **Out**: headless actions (`flakipype run --auto`, M6). Changing code,
+  branches or pull requests and `/mode auto` in the chat came with M5, see
+  [fixes](fix.md); in `auto` mode these actions run without a dialog within
+  the budget.
 
 None of these actions writes to a branch: reruns and dispatches run the code
 that is already there. They cost CI minutes, not model tokens. In
@@ -83,7 +84,8 @@ arguments and GitHub's answers, never from text the model wrote:
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
-**Don't run** has the focus, and Escape also declines. The agent waits until
+**Don't run** has the focus, and Escape also declines. In `/mode auto` no
+dialog appears and the action runs within the budget. The agent waits until
 you answer. A declined request goes back to the model as declined by the
 user. For the rest of that turn the model gets an error for any other
 `write` tool, so it cannot ask again in the same question. A `/rerun` or

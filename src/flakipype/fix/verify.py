@@ -52,8 +52,9 @@ class Verification:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Verification":
         return cls(**{
-            **data, "started": datetime.fromisoformat(data["started"]), "rate": Rate(**data["rate"]),
-            "fingerprints": tuple(data["fingerprints"]), "stage": Stage(data["stage"]),
+            **data, "started": datetime.fromisoformat(data["started"]),
+            "rate": Rate(**data["rate"]), "fingerprints": tuple(data["fingerprints"]),
+            "stage": Stage(data["stage"]),
             "watched": tuple(data["watched"]), "results": tuple(data["results"]),
         })  # fmt: skip
 
@@ -135,24 +136,30 @@ class Verifier:
         )
         if len(updated.results) >= updated.wanted:
             return self._finish(updated)
+        return self._rerun(updated, run)
+
+    def _rerun(self, verification: Verification, run: WatchedRun) -> Verification:
         if run.conclusion not in {"success", *FAILED_CONCLUSIONS}:
-            return self._finish(updated, f"a run ended as {run.conclusion}")
-        label = f"verify {len(updated.results) + 1}/{updated.wanted}"
+            return self._finish(verification, f"a run ended as {run.conclusion}")
+        label = f"verify {len(verification.results) + 1}/{verification.wanted}"
         try:
             rerun = self._actions.rerun_authorised(run, label)
         except GitHubApiError as error:
-            return self._finish(updated, f"GitHub refused the rerun: {error}")
+            return self._finish(verification, f"GitHub refused the rerun: {error}")
         if rerun is None:
-            return self._finish(updated, "the action budget of this session is used up")
-        return replace(updated, watched=(*updated.watched, rerun.number))
+            return self._finish(verification, "the action budget of this session is used up")
+        return replace(verification, watched=(*verification.watched, rerun.number))
 
     def _result(self, verification: Verification, run: WatchedRun) -> str:
         if run.conclusion == "success":
             return "passed"
         if run.conclusion not in FAILED_CONCLUSIONS or run.run_id is None:
             return str(run.conclusion).replace("_", " ")
+        return self._classify_failure(verification, run, run.run_id)
+
+    def _classify_failure(self, verification: Verification, run: WatchedRun, run_id: int) -> str:
         try:
-            jobs = self._github.logs.attempt_jobs(run.repository, run.run_id, run.attempt)
+            jobs = self._github.logs.attempt_jobs(run.repository, run_id, run.attempt)
             failed = [job for job in jobs if job.failed and job.name == verification.job]
             if not failed:
                 others = (
@@ -162,12 +169,7 @@ class Verifier:
             log = self._github.logs.job_log(run.repository, failed[0].job_id)
         except GitHubApiError:
             return _UNREADABLE
-        signature = signature_from_log(log) if log else None
-        if signature is None:
-            return _UNREADABLE
-        if signature.fingerprint in verification.fingerprints:
-            return "failed with the same error as before: the fix did not hold"
-        return f"failed with another error: {signature.message}"
+        return _signature_result(verification.fingerprints, log)
 
     def _run(self, verification: Verification, *, run_id: int | None) -> WatchedRun:
         return WatchedRun(
@@ -192,3 +194,12 @@ class Verifier:
         except GitHubApiError as error:
             text += f"\n(The comment could not be posted on the pull request: {error})"
         return replace(verification, stage=Stage.DONE, outcome=text)
+
+
+def _signature_result(fingerprints: tuple[str, ...], log: str | None) -> str:
+    signature = signature_from_log(log) if log else None
+    if signature is None:
+        return _UNREADABLE
+    if signature.fingerprint in fingerprints:
+        return "failed with the same error as before: the fix did not hold"
+    return f"failed with another error: {signature.message}"

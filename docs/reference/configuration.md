@@ -42,6 +42,15 @@ excerpt_lines = 120
 max_per_session = 10
 max_watched = 10
 watch_hours = 6
+
+[fix]
+max_prs_per_session = 3
+max_files = 10
+max_changed_lines = 400
+verify_runs = 3
+max_rounds = 20
+max_tokens = 300000
+max_seconds = 600
 ```
 
 | Key | Default | Rules |
@@ -65,9 +74,17 @@ watch_hours = 6
 | `actions.max_per_session` | `10` | 1–100 reruns and dispatches per chat session (each repeat of a dispatch counts); `/new` starts a new count |
 | `actions.max_watched` | `10` | 1–50 started runs watched at the same time |
 | `actions.watch_hours` | `6` | 1–24 hours a started run is polled before the chat stops watching it |
+| `fix.max_prs_per_session` | `3` | 1–20 draft pull requests per chat session; `/new` starts a new count |
+| `fix.max_files` | `10` | 1–50 changed files per fix |
+| `fix.max_changed_lines` | `400` | 10–2,000 added plus removed lines per fix |
+| `fix.verify_runs` | `3` | 1–10 runs of the workflow on the fix branch; the reruns count against `actions.max_per_session` |
+| `fix.max_rounds` | `20` | 5–60 model calls of the fixer |
+| `fix.max_tokens` | `300000` | 10k–2M tokens for the fixer and its reviewer together |
+| `fix.max_seconds` | `600` | 60–3600 seconds for the fixer |
 
 Unknown keys are an error, so a typo never goes unnoticed. `flakipype setup`
-does not edit `[scan]`, `[agent]` and `[actions]` and keeps whatever the file has.
+does not edit `[scan]`, `[agent]`, `[actions]` and `[fix]` and keeps whatever
+the file has.
 
 ## Secrets
 

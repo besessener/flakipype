@@ -14,12 +14,12 @@ from flakipype.agent.verdict import Classification, Verdict
 from flakipype.agent.workcopy import unified_diff
 from flakipype.config.settings import FixSettings
 from flakipype.fix.checks import DiffLimits, change_errors, change_warnings
+from flakipype.fix.delivery import Delivery, DeliveryError, fix_refusal
 from flakipype.fix.state import OpenedPull, Proposal
 from flakipype.fix.texts import (
     BRANCH_PREFIX,
     PullRequestFacts,
     branch_name,
-    commit_body,
     failure_rate,
     finding_marker,
     pull_request_body,
@@ -27,15 +27,13 @@ from flakipype.fix.texts import (
 from flakipype.fix.verify import Stage, Verification, Verifier
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
-from flakipype.github.pulls import CommitRequest, PullRequest, PullRequestText, RepositoryAccess
+from flakipype.github.pulls import PullRequest, RepositoryAccess
 from flakipype.store.audit import AuditEntry, AuditLog
 
 FIXABLE = frozenset(
     {Classification.FLAKY_TEST, Classification.FLAKY_INFRASTRUCTURE, Classification.CONFIGURATION}
 )
 _UNREVIEWED = ("not reviewed", "revised, second review unavailable")
-_HTTP_FORBIDDEN = 403
-_BRANCH_ATTEMPTS = 5
 _PATHS_SHOWN = 3
 
 type ProposeFix = Callable[[FixRequest], FixResult]
@@ -46,15 +44,7 @@ class FixPulls(Protocol):
 
     def branch_head(self, repository: str, branch: str) -> str: ...
 
-    def file_bytes(self, repository: str, path: str, commit: str) -> bytes | None: ...
-
     def open_pulls(self, repository: str) -> list[PullRequest]: ...
-
-    def create_branch(self, repository: str, branch: str, commit: str) -> bool: ...
-
-    def commit_files(self, repository: str, commit: CommitRequest) -> str: ...
-
-    def open_draft(self, repository: str, pull: PullRequestText) -> PullRequest: ...
 
 
 @dataclass(frozen=True)
@@ -64,20 +54,6 @@ class FixTarget:
     verdict: Verdict
     # How the verdict's review went, as the investigation reports it.
     review: str
-
-
-class _DeliveryError(Exception):
-    """A step after the first failed; the message says what exists on GitHub already."""
-
-
-def fix_refusal(error: GitHubApiError) -> str:
-    if error.status == _HTTP_FORBIDDEN:
-        return (
-            f"GitHub refused: {error}. A fix needs the repo and workflow scopes for a classic "
-            "token or gh auth login, or 'Contents', 'Pull requests' and 'Workflows: read and "
-            "write' for a fine-grained token."
-        )
-    return f"GitHub: {error}"
 
 
 @contextmanager
@@ -93,6 +69,7 @@ class FixService:
         self,
         *,
         pulls: FixPulls,
+        delivery: Delivery,
         verifier: Verifier,
         actions: ActionService,
         audit: AuditLog,
@@ -101,6 +78,7 @@ class FixService:
         now: Callable[[], datetime],
     ) -> None:
         self._pulls = pulls
+        self._delivery = delivery
         self._verifier = verifier
         self._actions = actions
         self._audit = audit
@@ -234,49 +212,31 @@ class FixService:
         return proposal
 
     def _prepared(self, proposal: Proposal) -> PreparedAction:
-        changes = list(proposal.changes)
-        added = sum(len(change.added) for change in changes)
-        removed = sum(len(change.removed) for change in changes)
-        paths = [change.path for change in changes]
-        shown = ", ".join(paths[:_PATHS_SHOWN]) + (" …" if len(paths) > _PATHS_SHOWN else "")
-        verification = proposal.verification
-        actions = self._actions
-        details = (
-            f"{proposal.repository} · base {proposal.base} @ {proposal.commit[:7]}",
-            f"new branch {verification.branch}",
-            f"{len(changes)} files · +{added} −{removed} · {shown}",
-            f"then reruns {verification.workflow_name} on the fix branch {verification.wanted} times",
-            f"Pull requests this session: {self.opened + 1} of "
-            f"{self._settings.max_prs_per_session} · Actions: {actions.used} of "
-            f"{actions.max_per_session}",
-            "Opens a draft pull request; merging stays with you.",
-            *(["Warnings: none"] if not proposal.warnings else
-              ["Warnings:", *(f"⚠ {warning}" for warning in proposal.warnings)]),
-        )  # fmt: skip
+        details = self._details(proposal)
         request = ActionRequest(
             "Push fix and open a draft pull request?",
             details,
             model_text=f"{proposal.title}\n\n{proposal.explanation}",
-            diff=unified_diff(changes),
+            diff=unified_diff(list(proposal.changes)),
             needs_person="the diff has warnings" if proposal.warnings else "",
             confirm_label="Push",
             decline_label="Don't push",
         )
-        origin = actions.origin
+        session, origin = self._actions.session, self._actions.origin
 
         def record(answer: Answer, outcome: str) -> None:
             self._audit.record(
                 AuditEntry(
-                    time=self._now().isoformat(), session=actions.session, action="fix",
-                    origin=origin, request="\n".join([request.title, *details]),
-                    answer=answer.value, outcome=outcome,
+                    time=self._now().isoformat(), session=session, action="fix", origin=origin,
+                    request="\n".join([request.title, *details]), answer=answer.value,
+                    outcome=outcome,
                 )
             )  # fmt: skip
 
         def run(answer: Answer) -> str:
             try:
                 outcome = self._deliver(proposal)
-            except _DeliveryError as error:
+            except DeliveryError as error:
                 record(answer, f"failed: {error}")
                 raise ToolError(str(error)) from error
             record(answer, outcome)
@@ -284,74 +244,53 @@ class FixService:
 
         return PreparedAction(request, run, lambda answer: record(answer, "not pushed"))
 
+    def _details(self, proposal: Proposal) -> tuple[str, ...]:
+        changes = proposal.changes
+        added = sum(len(change.added) for change in changes)
+        removed = sum(len(change.removed) for change in changes)
+        paths = [change.path for change in changes]
+        shown = ", ".join(paths[:_PATHS_SHOWN]) + (" …" if len(paths) > _PATHS_SHOWN else "")
+        verification, actions = proposal.verification, self._actions
+        warnings = (
+            ["Warnings:", *(f"⚠ {item}" for item in proposal.warnings)]
+            if proposal.warnings
+            else ["Warnings: none"]
+        )
+        return (
+            f"{proposal.repository} · base {proposal.base} @ {proposal.commit[:7]}",
+            f"new branch {verification.branch}",
+            f"{len(changes)} files · +{added} −{removed} · {shown}",
+            (
+                f"then reruns {verification.workflow_name} on the fix branch "
+                f"{verification.wanted} times"
+            ),
+            (
+                f"Pull requests this session: {self.opened + 1} of "
+                f"{self._settings.max_prs_per_session} · Actions: {actions.used} of "
+                f"{actions.max_per_session}"
+            ),
+            "Opens a draft pull request; merging stays with you.",
+            *warnings,
+        )
+
     def _deliver(self, proposal: Proposal) -> str:
-        repository = proposal.repository
-        try:
-            branch = self._create_branch(proposal)
-        except GitHubApiError as error:
-            raise _DeliveryError(fix_refusal(error)) from error
-        files = {change.path: change.after.encode("utf-8") for change in proposal.changes}
-        headline, body = proposal.title, commit_body(proposal.explanation)
-        try:
-            sha = self._pulls.commit_files(
-                repository, CommitRequest(branch, proposal.commit, headline, body, files)
-            )
-        except GitHubApiError as error:
-            message = f"Branch {branch} created; the commit failed: {fix_refusal(error)} {_LEFT}"
-            raise _DeliveryError(message) from error
-        text = PullRequestText(proposal.title, proposal.body, head=branch, base=proposal.base)
-        try:
-            pull = self._pulls.open_draft(repository, text)
-        except GitHubApiError as error:
-            message = (
-                f"Branch {branch} with commit {sha[:7]} created; opening the pull request failed: "
-                f"{fix_refusal(error)} {_LEFT}"
-            )
-            raise _DeliveryError(message) from error
+        opened = self._delivery.deliver(proposal)
         self.opened += 1
         self._proposals.pop(proposal.identity, None)
-        verification = self._start_verification(proposal, pull.number, branch, sha)
-        self.pulls.append(
-            OpenedPull(proposal.finding, proposal.title, pull.url, branch, verification)
-        )
+        self.pulls.append(opened)
+        verification = opened.verification
         status = (
             verification.outcome
             if verification.stage is Stage.DONE
-            else f"Verification: {verification.wanted} runs of {verification.workflow_name} on "
-            "the branch; the result follows here and on the pull request."
-        )
-        return f"Opened draft pull request #{pull.number}: {pull.url} (branch {branch}).\n{status}"
-
-    def _create_branch(self, proposal: Proposal) -> str:
-        name = proposal.verification.branch
-        for attempt in range(1, _BRANCH_ATTEMPTS + 1):
-            branch = name if attempt == 1 else f"{name}-{attempt}"
-            if self._pulls.create_branch(proposal.repository, branch, proposal.commit):
-                return branch
-        message = f"branches {name} to {name}-{_BRANCH_ATTEMPTS} exist already"
-        raise GitHubApiError(message)
-
-    def _start_verification(
-        self, proposal: Proposal, number: int, branch: str, commit: str
-    ) -> Verification:
-        seed = proposal.verification
-        verification = replace(
-            seed, pull_number=number, branch=branch, commit=commit, started=self._now()
-        )
-        changed = {change.path: change.after for change in proposal.changes}
-        try:
-            text = changed.get(seed.workflow_path)
-            if text is None:
-                raw = self._pulls.file_bytes(seed.repository, seed.workflow_path, commit)
-                text = raw.decode("utf-8", errors="replace") if raw else ""
-            return self._verifier.begin(verification, text)
-        except GitHubApiError as error:
-            return replace(
-                verification, stage=Stage.DONE, outcome=f"Verification could not start: {error}"
+            else (
+                f"Verification: {verification.wanted} runs of {verification.workflow_name} on "
+                "the branch; the result follows here and on the pull request."
             )
-
-
-_LEFT = "The branch was left as it is; flakipype never deletes branches."
+        )
+        return (
+            f"Opened draft pull request #{verification.pull_number}: {opened.url} "
+            f"(branch {opened.branch}).\n{status}"
+        )
 
 
 def reviewed(review: str) -> bool:

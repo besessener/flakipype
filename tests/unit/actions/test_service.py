@@ -1,8 +1,10 @@
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
 
 from flakipype.actions.service import ActionService
+from flakipype.actions.watch import RunKind, WatchedRun
 from flakipype.agent.tools import Answer, PreparedAction, ToolError
 from flakipype.config.settings import ActionSettings
 from flakipype.github.actions import GitHubApiError
@@ -253,6 +255,45 @@ def test_the_session_state_survives_a_resume(cache: ScanCache) -> None:
         actions.session, 1, actions.watched,
     )  # fmt: skip
     assert resumed.audit_text().startswith("Actions in this session:\n- 08:00 `rerun_failed`")
+
+
+def test_authorised_reruns_and_dispatches_use_the_budget(cache: ScanCache) -> None:
+    runs = failed_run()
+    runs.dispatch_ids = [70]
+    actions = service(cache, runs, ActionSettings(max_per_session=2))
+    template = WatchedRun(
+        number=0, kind=RunKind.DISPATCH, repository="octo-org/app", workflow_path=E2E,
+        workflow_name="E2E", label="verify 1/3", commit="c0ffee1", ref="flakipype/fix-e2e-1",
+        started=START, run_id=None, attempt=1,
+    )  # fmt: skip
+
+    dispatched = actions.dispatch_authorised(template)
+    assert dispatched is not None
+    finished = replace(dispatched, conclusion="failure", done=True)
+    rerun = actions.rerun_authorised(finished, "verify 2/3")
+
+    assert rerun is not None
+    assert (dispatched.number, dispatched.run_id) == (1, 70)
+    assert (rerun.number, rerun.label, rerun.attempt, rerun.before, rerun.done) == (
+        2, "verify 2/3", 2, "failure", False,
+    )  # fmt: skip
+    assert "rerun octo-org/app 70" in runs.calls
+    assert actions.used == 2
+    assert actions.rerun_authorised(finished, "verify 3/3") is None
+    assert actions.dispatch_authorised(template) is None
+    assert cache.audit.entries(actions.session) == []
+
+
+def test_an_authorised_rerun_needs_a_run_id(cache: ScanCache) -> None:
+    actions = service(cache, failed_run())
+    unlocated = WatchedRun(
+        number=1, kind=RunKind.DISPATCH, repository="octo-org/app", workflow_path=E2E,
+        workflow_name="E2E", label="dispatch", commit="c0ffee1", ref="main", started=START,
+        run_id=None, attempt=1,
+    )  # fmt: skip
+
+    assert actions.rerun_authorised(unlocated, "verify 2/3") is None
+    assert actions.used == 0
 
 
 def test_no_actions_yet(cache: ScanCache) -> None:

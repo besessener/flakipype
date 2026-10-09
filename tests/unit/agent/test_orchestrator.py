@@ -59,6 +59,9 @@ class FakeWorkspace:
         self.calls.append(("watched_runs",))
         return "R1 running"
 
+    def fix(self, finding: int, instructions: str) -> PreparedAction:
+        return self._action("fix", finding, instructions)
+
     def _action(self, *call: object) -> PreparedAction:
         def run(answer: Answer) -> str:
             del answer
@@ -241,6 +244,7 @@ def test_confirmed_actions_run_with_the_requests_the_gate_saw() -> None:
                 call("t3", "dispatch", {"finding": 2, "ref": "v1", "repeats": 3}),
                 call("t4", "cancel", {"run": 1}),
                 call("t5", "watched_runs", {}),
+                call("t6", "fix", {"finding": 2, "instructions": "Keep the assertion."}),
             ),
             message(text("Started.")),
         ]
@@ -254,13 +258,14 @@ def test_confirmed_actions_run_with_the_requests_the_gate_saw() -> None:
 
     chat_agent(model, workspace, confirm=confirm).ask("Rerun it")
 
-    assert asked == ["rerun_failed?", "rerun_run?", "dispatch?", "cancel?"]
+    assert asked == ["rerun_failed?", "rerun_run?", "dispatch?", "cancel?", "fix?"]
     assert workspace.calls == [
         ("rerun_failed", 1, None),
         ("rerun_run", 1, 7),
         ("dispatch", 2, "v1", 3),
         ("cancel", 1),
         ("watched_runs",),
+        ("fix", 2, "Keep the assertion."),
     ]
     assert "dispatch started" in model.tool_results(1)["t3"]["content"]
 

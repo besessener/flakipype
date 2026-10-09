@@ -129,8 +129,10 @@ class VerificationFacts:
 def verification_text(facts: VerificationFacts) -> str:
     passed = sum(result == "passed" for result in facts.results)
     lines = [
-        f"flakipype verification: {facts.workflow} passed {passed} of {len(facts.results)} runs "
-        "on this branch."
+        (
+            f"flakipype verification: {facts.workflow} passed {passed} of "
+            f"{len(facts.results)} runs on this branch."
+        )
     ]
     lines.extend(
         f"Run {index} {result}."

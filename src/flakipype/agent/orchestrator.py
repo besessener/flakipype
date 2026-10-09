@@ -51,6 +51,8 @@ class Workspace(Protocol):
 
     def watched_runs(self) -> str: ...
 
+    def fix(self, finding: int, instructions: str) -> PreparedAction: ...
+
 
 class ScanInput(BaseModel):
     days: int | None = Field(default=None, ge=1, le=400, description="default: configuration")
@@ -85,8 +87,17 @@ class CancelInput(BaseModel):
     run: int = Field(ge=1, description="the R number of a started run")
 
 
+class FixInput(BaseModel):
+    finding: int = Field(ge=1)
+    instructions: str = Field(
+        default="",
+        max_length=2_000,
+        description="the user's wishes for changes to the fix shown before; empty for a new fix",
+    )
+
+
 def workspace_tools(workspace: Workspace) -> list[Tool]:
-    read, write = RiskLevel.READ, RiskLevel.WRITE
+    read, write, critical = RiskLevel.READ, RiskLevel.WRITE, RiskLevel.CRITICAL
     return [
         Tool("scan", "Scan the workflow runs and number the findings.", read, ScanInput,
              lambda given: workspace.scan(given.days, tuple(given.repositories))),
@@ -107,6 +118,8 @@ def workspace_tools(workspace: Workspace) -> list[Tool]:
              lambda given: workspace.cancel(given.run)),
         Tool("watched_runs", "Runs started in this session and their state.", read, NoInput,
              lambda _: workspace.watched_runs()),
+        Tool("fix", "Write a fix for a finding and push it as a draft pull request.", critical,
+             FixInput, lambda given: workspace.fix(given.finding, given.instructions)),
     ]  # fmt: skip
 
 

@@ -30,6 +30,24 @@ act -l                         # list all jobs
 Uncommitted changes are included: act copies the working tree. New files must
 at least be staged (`git add`) to be picked up reliably.
 
+## Update TUI snapshots on Linux
+
+Snapshots of the Textual screens must be generated on Linux, where CI
+compares them. In WSL, copy the working tree to `/tmp`, update the
+snapshots there and copy only the `__snapshots__` folder back:
+
+```bash
+rm -rf /tmp/fpcopy && mkdir /tmp/fpcopy
+tar --exclude=.venv --exclude=.git -C /mnt/c/path/to/flakipype -cf - . | tar -xf - -C /tmp/fpcopy
+cd /tmp/fpcopy
+UV_PROJECT_ENVIRONMENT=/tmp/fp-venv uv run --python 3.12 pytest tests/tui -p no:cacheprovider --snapshot-update
+cp -r /tmp/fpcopy/tests/tui/__snapshots__/. /mnt/c/path/to/flakipype/tests/tui/__snapshots__/
+```
+
+Run these lines inside a WSL shell, not through PowerShell: PowerShell
+expands `$…` itself, and an empty variable in a `cp -r` source path copies
+the wrong directory.
+
 ## Limits
 
 - act is an emulation. GitHub-hosted CI on the pull request stays the

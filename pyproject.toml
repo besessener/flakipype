@@ -87,6 +87,8 @@ ignore = [
 "src/flakipype/cli/*.py" = ["RUF001"]
 "src/flakipype/tui/*.py" = ["RUF001"]
 "src/flakipype/investigate/chat*.py" = ["RUF001"]
+"src/flakipype/fix/service.py" = ["RUF001"]
+"tests/unit/fix/*.py" = ["RUF001"]
 "tests/unit/cli/*.py" = ["RUF001"]
 "tests/unit/investigate/*.py" = ["RUF001"]
 "tests/tui/test_chat*.py" = ["RUF001"]
@@ -150,6 +152,7 @@ layers = [
   "flakipype.cli",
   "flakipype.tui",
   "flakipype.investigate",
+  "flakipype.fix",
   "flakipype.actions",
   "flakipype.agent | flakipype.setup | flakipype.scan",
   "flakipype.llm | flakipype.github | flakipype.store",

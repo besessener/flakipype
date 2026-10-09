@@ -1,6 +1,6 @@
 # Fixes: from verdict to draft pull request
 
-> Status: design for M5, not implemented yet.
+> Status: implemented in M5.
 
 An investigation explains a flaky finding and suggests a fix. M5 lets the
 agent write that fix, shows you the diff, pushes it as a new branch, opens a
@@ -43,7 +43,9 @@ Merging stays your decision.
    `flaky_test`, `flaky_infrastructure` or `configuration`. Without a verdict
    it investigates first. `real_bug`, `fixed`, `unclear` and unreviewed
    verdicts are refused with the reason. If an open flakipype pull request
-   for the finding exists, `/fix` links it instead of opening a second one.
+   for the finding exists, `/fix` links it instead of opening a second one;
+   it is found by a hidden marker (a hash of the finding) in the pull
+   request body, on a branch under `flakipype/`.
 2. **Push access.** flakipype reads the repository's `permissions.push`
    before the fixer starts. Without it, `/fix` stops and says so. No forks.
 3. **Fixer.** A fresh agent per fix, like an investigator: the finding, the
@@ -88,8 +90,8 @@ Deterministic, before the reviewer and before any dialog:
 | Not empty | At least one changed line |
 | Size | At most 10 files and 400 changed lines (`fix.max_files`, `fix.max_changed_lines`) |
 | Still parses | Changed `.yml`, `.yaml`, `.json`, `.toml` files parse; workflow files still have `on` and `jobs` |
-| Hides failures | Adds `continue-on-error: true`, `if: always()` on a test step, a test skip marker (`skip`, `xfail`, `.skip(`, `@Disabled`, `t.Skip`) or deletes a test |
-| Reaches out | Adds a `secrets.` reference, `${{ github.token }}`, an environment dump (`env`, `printenv`), `curl`, `wget`, `nc`, or an `http(s)://` URL other than localhost |
+| Hides failures | Adds `continue-on-error: true`, `if: always()`, a test skip or focus marker (`pytest.skip(`, `@pytest.mark.skip`/`xfail`, `@unittest.skip`, `.skip(`, `xit(`, `.only(`, `@Disabled`, `@Ignore`, `t.Skip`) or removes more test declarations than it adds |
+| Reaches out | Adds a `secrets.` reference, `github.token`, an environment dump (`env`, `printenv`), `curl`, `wget`, `nc`, `ncat`, or an `http(s)://` URL other than localhost |
 | Touches `.github/` | Changes workflows or composite actions under `.github/` |
 
 The first three are errors: the fix goes back to the fixer. The last three
@@ -127,6 +129,7 @@ pane:
 │ 2 files · +14 −3 · tests/e2e/scan.spec.ts, playwright.config.ts          │
 │ then reruns E2E on the fix branch 3 times                                │
 │ Pull requests this session: 1 of 3 · Actions: 4 of 10                    │
+│ Opens a draft pull request; merging stays with you.                      │
 │ Warnings: none                                                           │
 │ ── written by the model ─────────────────────────────────────────────    │
 │ Wait for the document rows instead of a fixed delay                      │
@@ -139,8 +142,12 @@ pane:
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
-**Don't push** has the focus. A declined fix stays in the session: `/fix N`
-shows it again, and you can ask the model for changes. Everything else
+**Don't push** has the focus. The model's text and the diff are shown as
+plain text, never as markup. A declined fix stays in the session (also
+across `/resume`): `/fix N` shows it again without running the fixer,
+`/fix N --fresh` starts over, and you can ask the model for changes, which it
+passes to the `fix` tool as `instructions`; the fixer then starts from the
+earlier diff at the same pinned commit. Everything else
 follows the gate of [actions](actions.md): no second write request after a
 decline in the same turn, and an audit log entry for every request.
 
@@ -149,10 +156,11 @@ decline in the same turn, and an audit log entry for every request.
 All through `gh api`, against the configured owner and host only:
 
 1. **Branch.** `POST /repos/{o}/{r}/git/refs` creates
-   `refs/heads/flakipype/fix-<workflow>-<hash>` at the pinned commit. The
-   name always starts with `flakipype/` and never equals the default branch;
-   code checks both. If the name exists, a suffix is added; flakipype never
-   writes to a branch it did not create in this fix.
+   `refs/heads/flakipype/fix-<workflow>-<hash>` at the pinned commit (the
+   hash is of the diff). The name always starts with `flakipype/`. Creating
+   a ref that exists fails, so flakipype tries the suffixes `-2` to `-5` and
+   then stops; it only ever commits to a branch it has just created, so no
+   existing branch, the default branch included, is written.
 2. **Commit.** GraphQL `createCommitOnBranch` adds the changed files as one
    commit, with `expectedHeadOid` set to the pinned commit, so it can only
    append to the new branch and never overwrite anything. GitHub signs the
@@ -164,17 +172,21 @@ All through `gh api`, against the configured owner and host only:
 4. **Verification** starts (below).
 
 If a step fails, the following steps do not run and the message says what
-exists: for example "Branch flakipype/fix-e2e-7c41d0 created, commit failed:
-… The branch was left as it is." flakipype never deletes branches.
+exists: for example "Branch flakipype/fix-e2e-7c41d0 created; the commit
+failed: … The branch was left as it is; flakipype never deletes branches."
+If verification cannot start (for example the workflow file cannot be
+read), the pull request stays open and the outcome says why.
 
 The pull request body:
 
 ```markdown
-<!-- flakipype:finding=octo-org/app/E2E/… -->
-## Flaky: E2E in octo-org/app
+<!-- flakipype:finding=3f9c2a71b0d4 -->
+## Flaky: e2e in octo-org/app
 
-**Scan facts:** failed 4 of 31 runs on main in 30 days; 3 passed when the
-same commit was rerun.
+**Scan facts:** On main, E2E failed 4 of 31 runs (13%) in the scanned window.
+
+- the finding's facts from the scan, one per line
+
 **Verdict** (model's assessment, reviewed): flaky_test, high confidence. …
 
 ### The change (written by the model)
@@ -194,33 +206,45 @@ Opened by flakipype as a draft. Merging is up to you.
 
 The fix branch has to show it passes where the default branch flakes:
 
-1. flakipype waits for the run of the finding's workflow on the fix commit
-   (event `pull_request` or `push`). If the workflow is not triggered by
-   either but allows `workflow_dispatch`, flakipype dispatches it on the fix
-   branch. Otherwise the result is "cannot verify automatically" and the
-   comment says so.
+1. If the workflow (as on the fix commit) runs on `push` or
+   `pull_request`, opening the pull request starts its own run: flakipype
+   waits for a run of the finding's workflow on the fix commit. If no run
+   shows up within 10 minutes, the result is "cannot verify automatically".
+   If the workflow runs on neither but allows `workflow_dispatch`, flakipype
+   dispatches it on the fix branch instead. Otherwise the result is "cannot
+   verify automatically" right away.
 2. When the run finishes, it reruns the whole run until the workflow has
    run `fix.verify_runs` times (default 3) on the fix commit. The runs show
    in the Runs list as in [actions](actions.md) and count against the same
-   action budget; the push confirmation already covers them.
-3. The result is posted as a comment on the pull request, written by code:
+   action budget; the push confirmation already covers them. Watching a run
+   flakipype did not start (the pull request's own) costs no budget.
+3. Verification stops early when a run ends neither passed nor failed (for
+   example cancelled), does not finish within `actions.watch_hours`, GitHub
+   refuses a rerun, or the action budget is used up; the comment says after
+   how many runs and why.
+4. The result is posted as a comment on the pull request, written by code:
 
 ```text
 flakipype verification: E2E passed 3 of 3 runs on this branch.
-On main, E2E failed 4 of 31 runs (13%) in the last 30 days. Three passes in
-a row would also happen by chance 66% of the time without a fix, so this is
-a first signal, not proof.
+On main, E2E failed 4 of 31 runs (13%) in the scanned window.
+Three passes in a row would also happen by chance 66% of the time without a fix, so this is a first signal, not proof.
 ```
 
-A failure with the finding's error signature says the fix did not hold; a
-failure with another signature is reported as such. The chance shown is
-`(1 − rate)^runs`, computed from the scan's numbers. Verification is watched
-while the chat is open; a resumed session continues it.
+Each failed run gets a line: a failure of the finding's job with the
+finding's error signature says the fix did not hold, one with another
+signature is reported with its message, a failure in another job names that
+job, and an unreadable log says so. The rate is the finding's job failing
+at least once per run on the default branch in the scan, or on all branches
+when the scan has no runs on the default branch. The chance shown is
+`(1 − rate)^runs`, only when every run passed. Verification is polled while
+the chat is open, and its note appears in the chat; a resumed session
+continues it.
 
 ## Modes
 
-`/mode ask|auto` switches the chat's mode. The chat always starts in `ask`;
-the mode is not stored in the session, and the status line shows it.
+`/mode ask|auto` switches the chat's mode; `/mode` alone shows it. The chat
+always starts in `ask`, `/new` and `/resume` switch back to `ask`, the mode
+is not stored in the session, and the status line shows it.
 
 | | `ask` | `auto` |
 | --- | --- | --- |
@@ -235,7 +259,8 @@ workflow files from that branch, before anyone reviews the pull request.
 Job logs and repository files can contain text that tries to steer the
 model; in `ask` mode you see every line of the diff first, in `auto` mode
 code refuses the changes that could leak secrets or hide failures. Audit
-entries record `auto` as the answer.
+entries record `auto` as the answer, or `not run in auto mode` for a fix
+with warnings; that fix stays in the session for `/mode ask` and `/fix N`.
 
 ## Budget
 
@@ -261,17 +286,21 @@ permission is missing, and nothing is retried.
 
 ## Where it lives
 
-- **`agent`**: the fixer and its reviewer (`fixer.py`), the edit tools, and
-  the working copy (`workcopy.py`: an overlay of edited files over the
-  pinned commit, with the unified diff from `difflib`).
-- **`fix`** (new, between `investigate` and `actions`): the checks, the
-  delivery steps, the pull request body, verification and its comment, the
-  pull request budget and the session state of fixes.
+- **`agent`**: the fixer (`fixer.py`), the generic reviewer (`reviewer.py`),
+  fixer then reviewer with at most one revision (`fix_pipeline.py`), the
+  edit tools (`fix_tools.py`), and the working copy (`workcopy.py`: an
+  overlay of edited files over the pinned commit, with the unified diff from
+  `difflib`).
+- **`fix`** (between `investigate` and `actions`): the checks
+  (`checks.py`), branch name, pull request body and comment texts
+  (`texts.py`), verification (`verify.py`), delivery (`delivery.py`), the
+  session state of fixes (`state.py`) and the service with the pull request
+  budget and the confirmation (`service.py`).
 - **`github`**: `pulls.py` for refs, `createCommitOnBranch`, pull requests,
   comments, push permission and the tree listing.
 - **`investigate`**: `/fix`, `/mode`, the `fix` tool's workspace side.
-- **`tui`**: the diff in the confirmation dialog, the mode in the status
-  line.
+- **`tui`**: the model's text and the diff in the confirmation dialog, the
+  mode in the status line.
 
 ## Testing
 

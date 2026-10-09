@@ -5,6 +5,7 @@ from dataclasses import replace
 
 from flakipype.actions.service import ActionService
 from flakipype.agent.tools import PreparedAction, ToolError
+from flakipype.fix.service import FixService, FixTarget
 from flakipype.flaky.findings import Finding
 from flakipype.investigate.chat_text import findings_text, result_text, scan_summary
 from flakipype.investigate.service import (
@@ -29,11 +30,17 @@ class ChatWorkspace:
     """Implements the chat agent's Workspace; scans on demand with the last scan's options."""
 
     def __init__(
-        self, service: InvestigationService, request: ScanRequest, *, actions: ActionService
+        self,
+        service: InvestigationService,
+        request: ScanRequest,
+        *,
+        actions: ActionService,
+        fixes: FixService,
     ) -> None:
         self._service = service
         self.request = request
         self.actions = actions
+        self.fixes = fixes
         self.report: ScanReport | None = None
         self.results: dict[int, InvestigationResult] = {}
         self.tokens = 0
@@ -86,6 +93,32 @@ class ChatWorkspace:
 
     def watched_runs(self) -> str:
         return self.actions.watched_runs()
+
+    def fix(self, finding: int, instructions: str) -> PreparedAction:
+        """The fix for a finding with a reviewed verdict; investigates first if there is none."""
+        report = self._report()
+        target = _finding(report, finding)
+        if finding not in self.results:
+            self.investigate((finding,), fresh=False)
+        result = self.results.get(finding)
+        if result is None or result.verdict is None:
+            reason = result.detail if result and result.detail else "the investigation ended"
+            message = f"#{finding} has no verdict ({reason}); a fix needs one."
+            raise ToolError(message)
+        before = self.fixes.tokens
+        self.on_activity(f"Fixing #{finding} {target.key.job}")
+        try:
+            return self.fixes.prepare(
+                FixTarget(target, report.evidence, result.verdict, result.review), instructions
+            )
+        finally:
+            self.tokens += self.fixes.tokens - before
+            self.on_activity("")
+
+    def discard_fix(self, finding: int) -> None:
+        for item in self._report().findings:
+            if item.number == finding:
+                self.fixes.discard(item)
 
     def _report(self) -> ScanReport:
         return self.report or self._run_scan()
