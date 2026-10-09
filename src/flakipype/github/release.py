@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 type GhVersion = tuple[int, int, int]
 
-MINIMUM_GH_VERSION: GhVersion = (2, 40, 0)
+# 2.97 neutralises escape sequences in `gh api` output and added --allow-escape-sequences.
+MINIMUM_GH_VERSION: GhVersion = (2, 97, 0)
 RELEASE_DOWNLOAD_BASE = "https://github.com/cli/cli/releases/download"
 # A web URL, not api.github.com: it redirects to the newest tag and has no API rate limit.
 LATEST_RELEASE_URL = "https://github.com/cli/cli/releases/latest"

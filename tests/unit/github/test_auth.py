@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from flakipype.github.auth import (
@@ -10,7 +12,7 @@ from flakipype.github.auth import (
     parse_user_response,
     refresh_scopes_command,
 )
-from flakipype.github.gh import GhCommandError
+from flakipype.github.gh import GhCommandError, without_windows_drives
 
 from support.fake_gh import FakeGh, gh_fixture
 
@@ -129,6 +131,24 @@ def test_refresh_hint() -> None:
     hint = refresh_scopes_command("github.com", frozenset({"workflow", "read:org"}))
 
     assert hint == "gh auth refresh --hostname github.com --scopes read:org,workflow"
+
+
+@pytest.mark.skipif(os.pathsep != ":", reason="POSIX PATH separator")
+def test_windows_drives_are_removed_from_path() -> None:
+    path = "/usr/local/bin:/mnt/c/Windows/system32:/usr/bin:/mnt/d:/mnt/data/tools:/bin"
+
+    assert without_windows_drives(path) == "/usr/local/bin:/usr/bin:/mnt/data/tools:/bin"
+
+
+def test_gh_runs_without_windows_drives_on_path(
+    fake_gh: FakeGh, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PATH", os.pathsep.join(["/mnt/c/Windows", "/usr/bin"]))
+    fake_gh.record(["auth", "status"])
+
+    fake_gh.cli().run(["auth", "status"])
+
+    assert fake_gh.invocations()[0]["path"] == "/usr/bin"
 
 
 def test_interactive_run_returns_the_exit_code(fake_gh: FakeGh) -> None:

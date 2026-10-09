@@ -34,6 +34,19 @@ def test_saved_settings_load_back_unchanged(tmp_path: Path) -> None:
     assert load_settings(path) == settings
 
 
+def test_scan_settings_have_safe_defaults_and_limits(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[scan]\nmax_log_downloads = 0\n", encoding="utf-8")
+
+    assert Settings().scan.window_days == 30
+    assert Settings().scan.max_log_downloads == 50
+    assert load_settings(path).scan.max_log_downloads == 0
+    for content in ("[scan]\nwindow_days = 0\n", "[scan]\nmax_log_downloads = 5000\n"):
+        path.write_text(content, encoding="utf-8")
+        with pytest.raises(SettingsError):
+            load_settings(path)
+
+
 def test_invalid_toml_is_a_settings_error(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text("this is = = not toml", encoding="utf-8")

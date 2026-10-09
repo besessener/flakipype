@@ -16,7 +16,12 @@ def main() -> int:
     arguments = sys.argv[1:]
     stdin_text = sys.stdin.read()
     with Path(os.environ["FAKE_GH_LOG"]).open("a", encoding="utf-8") as log:
-        record = {"args": arguments, "stdin": stdin_text, "gh_host": os.environ.get("GH_HOST")}
+        record = {
+            "args": arguments,
+            "stdin": stdin_text,
+            "gh_host": os.environ.get("GH_HOST"),
+            "path": os.environ.get("PATH"),
+        }
         log.write(json.dumps(record) + "\n")
     scenario = json.loads(Path(os.environ["FAKE_GH_SCENARIO"]).read_text(encoding="utf-8"))
     for call in scenario["calls"]:

@@ -23,6 +23,13 @@ Tests never reach real GitHub or a real model.
   `tests/support/fake_gh.py`); the fake replays recorded output from
   `tests/fixtures/gh/` and logs every call (arguments, stdin, `GH_HOST`) for
   assertions. It runs as `python tests/fakes/gh.py`, so it works on Windows too.
+- **Actions API**: `tests/fixtures/gh/` holds trimmed real responses
+  (repository list, a run page, the jobs of a failed attempt);
+  `tests/fixtures/logs/` holds trimmed real job logs (Playwright timeout, npm
+  build error and Stryker error behind a generic exit code). The scan service
+  is tested against an in-memory fake (`tests/support/fake_actions.py`) that
+  can raise any GitHub error on demand; `tests/support/builders.py` builds
+  runs and jobs for the pure detection tests.
 - **Downloads**: the `gh` installer is tested against an `httpx2.MockTransport`
   serving a release, checksum file and tarball built in the test.
 - **LLM**: in M1 the connection test runs against `httpx2.MockTransport`
@@ -34,8 +41,12 @@ Tests never reach real GitHub or a real model.
   SVG snapshot in `tests/tui/__snapshots__/`. After an intended UI change,
   update it with `uv run pytest tests/tui --snapshot-update` and review the SVG
   diff.
-- **Platform-specific tests**: two tests check POSIX file modes (`0600`
-  secrets, executable `gh`); they are skipped on Windows and run in CI.
+- **Platform-specific tests**: three tests need POSIX (`0600` secrets,
+  executable `gh`, `:`-separated `PATH`); they are skipped on Windows and run
+  in CI.
+- **Real data**: before a scan change is merged, `flakipype scan` runs once
+  against a real account in WSL or Linux. It only reads; never print or pass
+  tokens on a command line while doing so.
 
 Evaluations against a real model live in `tests/eval`, are not part of
 `poe check` or CI, and run only when asked.
