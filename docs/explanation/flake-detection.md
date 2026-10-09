@@ -38,6 +38,12 @@ that can be flaky by the rules above. On a repository with 1,400 runs a
 month that is a few dozen extra calls. Finished attempts never change, so
 their jobs are cached for good.
 
+Requests are made one after another, as GitHub recommends to avoid its
+secondary rate limits. On a real account (18 repositories, 1,392 runs in 30
+days) a repeat scan takes about 50 seconds, almost all of it GitHub answering
+pages of 100 runs (about 3 seconds each). Run lists cannot be cached: a rerun
+of an old run keeps its creation date, so only listing again sees it.
+
 ## Error signatures
 
 For each flaky failure flakipype reads the job log (limited per scan, newest
