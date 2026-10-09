@@ -29,5 +29,6 @@ Organised by [Diátaxis](https://diataxis.fr/).
 - [How flakiness is detected](explanation/flake-detection.md) – signals, rates and error signatures.
 - [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts, budgets and the chat.
 - [Actions](explanation/actions.md) – reruns, dispatches, confirmation and the live run view.
+- [Fixes](explanation/fix.md) – fixer agent, diff checks, draft pull requests and verification (M5 design).
 - [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
 - [Roadmap](explanation/roadmap.md) – scope and milestones.

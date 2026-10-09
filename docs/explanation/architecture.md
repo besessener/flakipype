@@ -104,6 +104,7 @@ cli                           Typer entry point, composition root (cli/wiring.py
 3. **Judgement**: the agent investigates findings with tools (prepared log
    excerpts, run history, commit diffs, files), marked as data, and returns
    verdicts with cited evidence that a reviewer pass checks (M3).
-4. **Fix**: in a local clone, the agent edits workflow YAML or test code,
-   pushes a branch, opens a PR and reruns the fix branch to compare its flake
-   rate with the default branch.
+4. **Fix** (M5, [design](fix.md)): the agent edits an in-memory copy of the
+   repository, code checks the diff, a new branch with one signed commit and
+   a draft PR are created through GitHub's API, and reruns of the fix branch
+   are compared with the default branch's flake rate.
