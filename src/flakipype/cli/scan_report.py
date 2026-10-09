@@ -162,34 +162,43 @@ def _flaky_table(report: ScanReport, now: datetime) -> Table:
 def _seen_once_table(report: ScanReport, now: datetime) -> Table:
     label = seen_once_label(report.ranking.min_runs).capitalize()
     table = _table(f"{label} — could be a one-off outage or a fix, not counted", "yellow")
+    table.add_column("#", justify="right", width=3)
     table.add_column("Job", ratio=3, overflow="fold")
     table.add_column("Signal", no_wrap=True)
     table.add_column("Last seen", justify="right", no_wrap=True)
-    for flaky in report.ranking.seen_once:
-        table.add_row(_flaky_text(flaky), _signals(flaky), relative_time(flaky.last_seen, now))
+    first = len(report.ranking.flaky) + 1
+    for number, flaky in enumerate(report.ranking.seen_once, start=first):
+        last_seen = relative_time(flaky.last_seen, now)
+        table.add_row(str(number), _flaky_text(flaky), _signals(flaky), last_seen)
     return table
 
 
 def _fixed_table(report: ScanReport, now: datetime) -> Table:
     table = _table("Fixed — failed in several runs, then kept passing; not flaky", "green")
+    table.add_column("#", justify="right", width=3)
     table.add_column("Job", ratio=3, overflow="fold")
     table.add_column("Failed", justify="right", no_wrap=True)
     table.add_column("Passing since", justify="right", no_wrap=True)
-    for flaky in report.ranking.fixed:
+    first = len(report.ranking.flaky) + len(report.ranking.seen_once) + 1
+    for number, flaky in enumerate(report.ranking.fixed, start=first):
         since = relative_time(flaky.passing_since, now) if flaky.passing_since else "—"
-        table.add_row(_flaky_text(flaky), plural(flaky.affected_runs, "run"), since)
+        table.add_row(str(number), _flaky_text(flaky), plural(flaky.affected_runs, "run"), since)
     return table
 
 
 def _recurring_table(report: ScanReport, now: datetime) -> Table:
     title = "Recurring errors — same error in several runs, no proof: flaky or a real bug"
     table = _table(title, "magenta")
+    table.add_column("#", justify="right", width=3)
     table.add_column("Job", ratio=3, overflow="fold")
     table.add_column("Runs", justify="right", no_wrap=True)
     table.add_column("Branches", ratio=1, overflow="fold")
     table.add_column("Last seen", justify="right", no_wrap=True)
-    for error in report.recurring:
+    ranking = report.ranking
+    first = len(ranking.flaky) + len(ranking.seen_once) + len(ranking.fixed) + 1
+    for number, error in enumerate(report.recurring, start=first):
         table.add_row(
+            str(number),
             _recurring_text(error),
             str(error.runs),
             ", ".join(error.branches),

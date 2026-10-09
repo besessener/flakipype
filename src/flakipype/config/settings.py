@@ -1,7 +1,7 @@
 import re
 import tomllib
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import tomli_w
@@ -73,12 +73,29 @@ class ScanSettings(BaseModel):
     min_flaky_runs: int = Field(default=2, ge=1, le=100)
 
 
+class AgentSettings(BaseModel):
+    """Hard limits for investigations; reaching one ends the work with a summary."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_rounds: int = Field(default=12, ge=1, le=50)
+    max_tokens_per_investigation: int = Field(default=200_000, ge=10_000, le=2_000_000)
+    max_seconds_per_investigation: int = Field(default=300, ge=30, le=3_600)
+    max_tokens_per_run: int = Field(default=1_000_000, ge=10_000, le=20_000_000)
+    parallel: int = Field(default=3, ge=1, le=8)
+    max_output_tokens: int = Field(default=16_000, ge=1_000, le=64_000)
+    thinking: Literal["adaptive", "enabled", "off"] = "adaptive"
+    thinking_budget: int = Field(default=8_000, ge=1_024, le=60_000)
+    excerpt_lines: int = Field(default=120, ge=20, le=400)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     llm: LlmSettings = LlmSettings()
     github: GitHubSettings = GitHubSettings()
     scan: ScanSettings = ScanSettings()
+    agent: AgentSettings = AgentSettings()
 
 
 def load_settings(path: Path) -> Settings:

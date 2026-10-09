@@ -26,6 +26,17 @@ owner = "octo-org"
 window_days = 30
 max_log_downloads = 50
 min_flaky_runs = 2
+
+[agent]
+max_rounds = 12
+max_tokens_per_investigation = 200000
+max_seconds_per_investigation = 300
+max_tokens_per_run = 1000000
+parallel = 3
+max_output_tokens = 16000
+thinking = "adaptive"
+thinking_budget = 8000
+excerpt_lines = 120
 ```
 
 | Key | Default | Rules |
@@ -38,8 +49,18 @@ min_flaky_runs = 2
 | `scan.max_log_downloads` | `50` | 0–1000; hard limit of job logs read per scan. Read logs are cached, so later scans continue |
 | `scan.min_flaky_runs` | `2` | 1–100; runs with proven flaky events before a job counts as flaky (and before an error counts as recurring). With `1` every single event counts |
 
+| `agent.max_rounds` | `12` | 1–50 model calls per investigation |
+| `agent.max_tokens_per_investigation` | `200000` | 10k–2M tokens (input, output, cache, thinking) per investigation |
+| `agent.max_seconds_per_investigation` | `300` | 30–3600 |
+| `agent.max_tokens_per_run` | `1000000` | 10k–20M for all investigations of one `investigate` run; reaching it stops starting new ones |
+| `agent.parallel` | `3` | 1–8 investigations at once (GitHub calls still go one at a time) |
+| `agent.max_output_tokens` | `16000` | 1k–64k per model call |
+| `agent.thinking` | `adaptive` | `adaptive`, `enabled` (uses `thinking_budget`) or `off` for models without extended thinking |
+| `agent.thinking_budget` | `8000` | 1,024–60k; only with `thinking = "enabled"`, must be below `max_output_tokens` |
+| `agent.excerpt_lines` | `120` | 20–400 lines in a log excerpt |
+
 Unknown keys are an error, so a typo never goes unnoticed. `flakipype setup`
-does not edit `[scan]` and keeps whatever the file has.
+does not edit `[scan]` and `[agent]` and keeps whatever the file has.
 
 ## Secrets
 

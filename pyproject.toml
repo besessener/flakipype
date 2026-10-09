@@ -74,14 +74,16 @@ ignore = [
   "S101",    # assert is how pytest works
   "PLR2004", # literal values are the point of a test
   "INP001",  # tests are not a package
+  "PLR0913", # parametrised tests take one parameter per column
+  "PLR0917", # same
   "EM101",   # test doubles raise exceptions with inline messages
   "TRY003",  # same
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
 # Terminal output uses typographic characters on purpose: – › × ↻ ≡ █.
-"src/flakipype/cli/scan_report.py" = ["RUF001"]
-"tests/unit/cli/test_scan_report.py" = ["RUF001"]
+"src/flakipype/cli/*.py" = ["RUF001"]
+"tests/unit/cli/*.py" = ["RUF001"]
 
 [tool.ruff.lint.isort]
 known-local-folder = ["support"]
@@ -141,6 +143,7 @@ type = "layers"
 layers = [
   "flakipype.cli",
   "flakipype.tui",
+  "flakipype.investigate",
   "flakipype.agent | flakipype.setup | flakipype.scan",
   "flakipype.llm | flakipype.github | flakipype.store",
   "flakipype.flaky | flakipype.config",

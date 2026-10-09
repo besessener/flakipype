@@ -5,6 +5,7 @@ from functools import partial
 from typing import Protocol
 
 from flakipype.flaky.detection import FlakyFailure, attempts_to_inspect, find_flaky_failures
+from flakipype.flaky.findings import Evidence, Finding, number_findings
 from flakipype.flaky.model import AttemptRef, JobResult, WorkflowRun
 from flakipype.flaky.recurring import (
     FailedJob,
@@ -59,6 +60,11 @@ class ScanReport:
     problems: list[str]
     logs_not_read: int
     complete: bool
+    evidence: Evidence = field(default_factory=Evidence)
+
+    @property
+    def findings(self) -> list[Finding]:
+        return number_findings(self.ranking, self.recurring)
 
 
 class _RateLimitReachedError(Exception):
@@ -146,6 +152,7 @@ class ScanService:
             problems=scan.problems,
             logs_not_read=scan.logs_not_read,
             complete=complete,
+            evidence=Evidence(scan.runs, scan.jobs, scan.signatures),
         )
 
     def _read_runs(self, scan: _Scan, repositories: Sequence[Repository]) -> None:

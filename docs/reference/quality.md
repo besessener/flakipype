@@ -32,9 +32,14 @@ Tests never reach real GitHub or a real model.
   runs and jobs for the pure detection tests.
 - **Downloads**: the `gh` installer is tested against an `httpx2.MockTransport`
   serving a release, checksum file and tarball built in the test.
-- **LLM**: in M1 the connection test runs against `httpx2.MockTransport`
-  answering like the Messages API. From M3 a local fake server with streaming,
-  tool use and scripted turns per test.
+- **LLM**: `tests/support/fake_anthropic.py` answers like the Messages API
+  through `httpx2.MockTransport`: scripted turns (thinking, tool calls,
+  `submit_verdict`, `submit_review`, HTTP errors), and it records every request
+  so tests can assert masking, tool results and thinking settings. The real
+  `anthropic` client is used, only the transport is fake.
+- **Agent**: `tests/support/fake_sources.py` (logs, commits, files) and
+  `tests/support/fake_investigation.py` (a scan world with one finding of
+  each kind and an agent stand-in).
 - **Setup world**: `tests/support/fake_setup.py` builds a `SetupService` with a
   temporary config dir, file secret store, fake `gh` provider and fake model.
 - **TUI**: Textual Pilot tests drive the app (`tests/tui/`); each view has an

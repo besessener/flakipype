@@ -19,6 +19,7 @@ version; renaming or removing one raises the version.
   "min_flaky_runs": 2,
   "jobs": [
     {
+      "finding": 1,
       "status": "flaky",
       "repository": "octo-org/app",
       "workflow": {"name": "CI", "path": ".github/workflows/ci.yml"},
@@ -45,6 +46,7 @@ version; renaming or removing one raises the version.
   ],
   "recurring_errors": [
     {
+      "finding": 2,
       "repository": "octo-org/app",
       "workflow": {"name": "CI", "path": ".github/workflows/ci.yml"},
       "job": "test",
@@ -82,6 +84,7 @@ How the statuses are decided: [how flakiness is detected](../explanation/flake-d
 
 | Field | Meaning |
 | --- | --- |
+| `finding` | The finding number, as shown by `flakipype scan` and used by `flakipype investigate --finding N` |
 | `status` | `flaky`, `seen_once` (fewer runs than `min_flaky_runs`) or `fixed` (all events before the workflow passed for good) |
 | `repository`, `workflow.name`, `workflow.path`, `job`, `step` | Where the failures happen; `step` is the first failed step, empty if unknown |
 | `flaky_failures` | Failed jobs with proof (one run can contribute several attempts) |
@@ -99,6 +102,7 @@ How the statuses are decided: [how flakiness is detected](../explanation/flake-d
 
 | Field | Meaning |
 | --- | --- |
+| `finding` | The finding number; numbering continues after `jobs[]` |
 | `repository`, `workflow`, `job`, `step` | As in `jobs[]` |
 | `runs` | Runs that ended with this error |
 | `branches` | Branches those runs were on |

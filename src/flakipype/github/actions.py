@@ -72,7 +72,8 @@ def _iso(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _error_from(result: GhResult) -> GitHubApiError:
+def api_error(result: GhResult) -> GitHubApiError:
+    """The typed error for a failed gh call: rate limit, authentication or other."""
     detail = result.stderr.strip() or f"gh exited with code {result.exit_code}"
     match = _HTTP_STATUS.search(detail)
     status = int(match.group(1)) if match else None
@@ -90,7 +91,7 @@ class ActionsClient:
         fields = "nameWithOwner,defaultBranchRef"
         listing = ["repo", "list", owner, "--no-archived", "--source", "--limit", _REPOSITORY_LIMIT]
         output = self._run([*listing, "--json", fields])
-        payloads = _parse(_REPOSITORIES.validate_json, output)
+        payloads = parse_answer(_REPOSITORIES.validate_json, output)
         return [
             Repository(
                 item.name_with_owner, item.default_branch.name if item.default_branch else ""
@@ -124,7 +125,7 @@ class ActionsClient:
         output = self._run(
             ["api", f"repos/{repository}/actions/runs?{query}&exclude_pull_requests=true"]
         )
-        return _parse(RunsPage.model_validate_json, output)
+        return parse_answer(RunsPage.model_validate_json, output)
 
     def attempt_jobs(self, repository: str, run_id: int, attempt: int) -> list[JobResult]:
         jobs: list[JobResult] = []
@@ -133,7 +134,7 @@ class ActionsClient:
             query = urlencode({"per_page": PAGE_SIZE, "page": page})
             path = f"repos/{repository}/actions/runs/{run_id}/attempts/{attempt}/jobs?{query}"
             output = self._run(["api", path])
-            payload = _parse(JobsPage.model_validate_json, output)
+            payload = parse_answer(JobsPage.model_validate_json, output)
             jobs.extend(job.to_job() for job in payload.jobs)
             if len(jobs) >= payload.total_count or not payload.jobs:
                 return jobs
@@ -146,7 +147,7 @@ class ActionsClient:
         result = self._gh.run(["api", path, "--allow-escape-sequences"])
         if result.succeeded:
             return result.stdout
-        error = _error_from(result)
+        error = api_error(result)
         if error.status in {_HTTP_NOT_FOUND, _HTTP_GONE}:
             return None
         raise error
@@ -154,11 +155,11 @@ class ActionsClient:
     def _run(self, arguments: list[str]) -> str:
         result = self._gh.run(arguments)
         if not result.succeeded:
-            raise _error_from(result)
+            raise api_error(result)
         return result.stdout
 
 
-def _parse[Parsed](parse: Callable[[str], Parsed], text: str) -> Parsed:
+def parse_answer[Parsed](parse: Callable[[str], Parsed], text: str) -> Parsed:
     try:
         return parse(text)
     except (ValidationError, json.JSONDecodeError) as error:

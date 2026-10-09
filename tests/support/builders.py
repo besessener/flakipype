@@ -5,7 +5,7 @@ from flakipype.flaky.model import JobResult, WorkflowRun
 START = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
 
 
-def run(  # noqa: PLR0913 - test builder: every field has a sensible default
+def run(
     run_id: int,
     *,
     conclusion: str | None = "success",
@@ -30,7 +30,7 @@ def run(  # noqa: PLR0913 - test builder: every field has a sensible default
     )
 
 
-def job(  # noqa: PLR0913 - test builder: every field has a sensible default
+def job(
     job_id: int,
     *,
     run_id: int,

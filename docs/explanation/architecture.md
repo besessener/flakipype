@@ -8,14 +8,15 @@ on the same layer do not import each other.
 ```text
 cli                       Typer entry point, composition root (cli/wiring.py)
  └─ tui                   Textual: setup wizard, later the chat
-     ├─ agent             agent loop, tools, policy gate, budgets, sessions
-     ├─ setup             setup and health checks (wizard, headless, doctor)
-     └─ scan              scan an owner: fetch, cache, detect, rank
-         ├─ llm           Anthropic Messages API client
-         ├─ github        gh CLI wrapper; Actions API; downloads and verifies gh
-         └─ store         SQLite cache (later also sessions and audit log)
-             ├─ flaky     pure flakiness detection and scoring
-             └─ config    settings and secret storage
+     └─ investigate       scan, then investigate findings in parallel; verdict cache
+         ├─ agent         investigator, reviewer, tools, policy gate, budgets, masking
+         ├─ setup         setup and health checks (wizard, headless, doctor)
+         └─ scan          scan an owner: fetch, cache, detect, rank
+             ├─ llm       Anthropic Messages API client
+             ├─ github    gh CLI wrapper; Actions, commits, files; downloads gh
+             └─ store     SQLite cache (later also sessions and audit log)
+                 ├─ flaky pure detection, scoring, findings, log excerpts
+                 └─ config settings and secret storage
 ```
 
 ## Packages
@@ -59,9 +60,15 @@ cli                       Typer entry point, composition root (cli/wiring.py)
   are append-only (`PRAGMA user_version`); cached signatures carry the
   signature algorithm's version and are recomputed when it changes. Run lists
   are not cached: listing them is cheap and they change constantly.
-- **`agent`** runs the tool loop. Every tool declares a risk level and is
-  executed only through the policy gate; see the
-  [safety model](safety-model.md).
+- **`agent`** investigates one finding: an investigator tool loop over the
+  Messages API, a deterministic citation check, a reviewer pass and at most one
+  revision ([the agent](agent.md)). Every tool declares a risk level and runs
+  only through the policy gate ([safety model](safety-model.md)); everything
+  sent to the model is masked first. It knows nothing of the scan service:
+  it gets a `Finding` and the scan's `Evidence` as values.
+- **`investigate`** runs a scan, numbers the findings, picks the requested
+  ones, runs investigations in parallel under one run budget and stores
+  completed verdicts in the cache until a finding has a newer failure.
 - **`tui`** renders the setup wizard and later the chat with Textual. It
   talks to `setup` and `agent` and never runs `gh` or the model itself;
   slow work runs in worker threads so the UI stays responsive.

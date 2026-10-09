@@ -65,6 +65,15 @@ def test_job_without_completion_time(cache: ScanCache) -> None:
     assert cache.cached_jobs(HOST, [AttemptRef(1, 1)])[AttemptRef(1, 1)] == [undated]
 
 
+def test_verdicts_are_only_valid_for_the_same_newest_failure(cache: ScanCache) -> None:
+    cache.save_verdict(HOST, "flaky|a", last_seen="2026-10-01", result='{"v": 1}')
+    cache.save_verdict(HOST, "flaky|a", last_seen="2026-10-02", result='{"v": 2}')
+
+    assert cache.cached_verdict(HOST, "flaky|a", "2026-10-02") == '{"v": 2}'
+    assert cache.cached_verdict(HOST, "flaky|a", "2026-10-01") is None
+    assert cache.cached_verdict("ghes.example", "flaky|a", "2026-10-02") is None
+
+
 def test_schema_version_is_recorded_and_migrations_run_once(tmp_path: Path) -> None:
     path = tmp_path / "cache.sqlite3"
     ScanCache.open(path).close()

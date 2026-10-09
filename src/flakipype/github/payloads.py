@@ -94,6 +94,45 @@ class JobPayload(BaseModel):
         )
 
 
+class CommitAuthor(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    name: str = ""
+    date: datetime | None = None
+
+
+class CommitDetails(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    message: str
+    author: CommitAuthor = CommitAuthor()
+
+
+class CommitPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    sha: str
+    commit: CommitDetails
+
+
+class ChangedFilePayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    filename: str
+    status: str
+    additions: int = 0
+    deletions: int = 0
+    patch: str = ""
+
+
+class ComparisonPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    total_commits: int
+    commits: list[CommitPayload]
+    files: list[ChangedFilePayload] = []
+
+
 class JobsPage(BaseModel):
     model_config = _IGNORE_EXTRA
 

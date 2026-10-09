@@ -32,6 +32,7 @@ Outside poe:
 | `flakipype setup --non-interactive [options]` | Headless setup, see below |
 | `flakipype doctor` | Check configuration, model connection, `gh` and the GitHub login |
 | `flakipype scan [options]` | Find and rank flaky jobs, see below |
+| `flakipype investigate [options]` | Let the agent explain findings with evidence; see [investigate findings](../how-to/investigate-findings.md) |
 
 ### `flakipype scan`
 
