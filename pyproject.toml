@@ -83,7 +83,11 @@ ignore = [
 [tool.ruff.lint.extend-per-file-ignores]
 # Terminal output uses typographic characters on purpose: – › × ↻ ≡ █.
 "src/flakipype/cli/*.py" = ["RUF001"]
+"src/flakipype/tui/*.py" = ["RUF001"]
+"src/flakipype/investigate/chat*.py" = ["RUF001"]
 "tests/unit/cli/*.py" = ["RUF001"]
+"tests/unit/investigate/*.py" = ["RUF001"]
+"tests/tui/test_chat.py" = ["RUF001"]
 
 [tool.ruff.lint.isort]
 known-local-folder = ["support"]

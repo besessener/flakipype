@@ -7,7 +7,7 @@
 | `$XDG_CONFIG_HOME/flakipype/config.toml` (default `~/.config/flakipype/config.toml`) | Settings below; never contains secrets |
 | `$XDG_CONFIG_HOME/flakipype/secrets.json` | Only on machines without a system keyring; mode `0600` |
 | `$XDG_DATA_HOME/flakipype/bin/gh` (default `~/.local/share/flakipype/bin/gh`) | `gh` downloaded by flakipype |
-| `$XDG_DATA_HOME/flakipype/cache.sqlite3` | Scan cache: jobs of finished attempts and log signatures, per host; safe to delete |
+| `$XDG_DATA_HOME/flakipype/cache.sqlite3` | Scan cache (jobs of finished attempts, log signatures, verdicts) and chat sessions; deleting it also deletes the sessions |
 
 Relative `XDG_*` values are ignored, as the XDG specification requires.
 

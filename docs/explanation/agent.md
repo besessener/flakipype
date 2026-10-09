@@ -1,8 +1,8 @@
 # The agent
 
-> Status: headless investigations (lakipype investigate) are implemented (M3a);
-> the chat follows in M3b. Where the implementation differs from the first design,
-> this page describes the implementation.
+> Status: implemented. Headless investigations (`flakipype investigate`, M3a)
+> and the chat (`flakipype` without a command, M3b). Where the implementation
+> differs from the first design, this page describes the implementation.
 
 The scan (M2) delivers facts: proven flaky events, one-offs, fixes and
 recurring errors, with error signatures. It deliberately stops where
@@ -60,9 +60,12 @@ investigator continues once with them) or `downgrade` (lower confidence or
 enforces that. A second `revise` after the one round trip counts as low
 confidence. If no review comes back, the verdict is shown as not reviewed.
 
-**Orchestrator.** In the chat: the conversation with you, slash commands,
-choosing findings, showing progress and results. In `--auto`: investigates
-the top findings within the budget and prints a summary.
+**Orchestrator.** In the chat: a model with its own conversation and four
+tools — `scan`, `list_findings`, `investigate` (findings by number) and
+`show_verdict` — that answers your questions and starts investigators
+through them. Slash commands do the same without the model. Headless,
+`flakipype investigate` has no orchestrator model: it investigates the
+selected findings and prints the verdicts.
 
 ## What the investigator can use
 
@@ -187,11 +190,18 @@ with a summary of what was done and what is missing:
 | Wall-clock time per investigation | 5 minutes |
 | Reviewer round trips | 1 |
 | Parallel investigations | 3 |
-| Tokens per `investigate` run / chat turn | 1,000,000 |
+| Tokens per `investigate` run, and per investigation call in the chat | 1,000,000 |
+| Rounds, tokens and time of the chat model per question | as per investigation (12, 200,000, 5 minutes) |
 
 Loop detection: the same tool with the same arguments twice in a row ends the
 investigation as `unclear`. Token usage is shown per investigation and in total
 and in the summary.
+
+In the chat, time spent inside a tool (a scan, investigations) does not count
+against the question's time limit, because those have their own limits. When
+a limit or a model error ends a question, the chat says so and the unfinished
+question is dropped from the model's conversation; verdicts found on the way
+are kept.
 
 ## Model use
 
@@ -217,16 +227,19 @@ runs cheap and stable.
 ## In the chat
 
 ```text
-/scan                    run the scan (progress inline)
-/flaky                   the ranking, seen once, fixed and recurring errors
-/investigate 1           investigate finding 1 (or: all, recurring, flaky)
+/scan [days]             run the scan (progress in the activity line)
+/findings, /flaky        the numbered findings of the current scan
+/investigate 1 3         investigate findings 1 and 3 (all: flaky and recurring; --fresh)
 /why 1                   show the verdict with its evidence
-/budget                  tokens and cost so far
+/budget                  tokens used in this session
+/sessions, /resume N     list and continue stored sessions; /new starts over
 ```
 
 Free text works too ("why does the Archivist E2E test fail?"); the
-orchestrator maps it to findings and tools. Sessions are stored and can be
-resumed.
+orchestrator maps it to findings and tools. The gate runs in `ask` mode and
+denies anything above `read`. Sessions (conversation, the model's history,
+scan options and the sidebar) are stored in the cache database; a resumed
+session rescans on its next action. See [use the chat](../how-to/chat.md).
 
 Headless: `flakipype investigate [--finding N | --all] [--json]` prints the
 verdicts; see [investigate findings](../how-to/investigate-findings.md).
@@ -237,7 +250,8 @@ verdicts; see [investigate findings](../how-to/investigate-findings.md).
   schema, budgets, loop detection, gate.
 - **Agent loop**: a local fake Anthropic server answers with scripted turns
   (tool calls, then `submit_verdict`), including invalid citations and
-  reviewer `revise`, so the whole flow is tested without a real model.
+  reviewer `revise`, so the whole flow is tested without a real model. The
+  chat is tested the same way, its window with Textual Pilot and a snapshot.
 - **Evaluation** (real model, costs money, only when asked): recorded cases
   with a known answer — Archivist E2E timeout (flaky test), the Pages
   deployment (configuration, fixed), npm `ERESOLVE` on a Dependabot branch

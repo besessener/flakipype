@@ -134,7 +134,21 @@ class InvestigationService:
         on_progress: ProgressListener = ignore_progress,
         on_event: EventListener = ignore_events,
     ) -> InvestigationReport:
-        report = self._scan.scan(request.scan, on_progress)
+        report = self.scan(request.scan, on_progress)
+        return self.investigate(report, request, on_event)
+
+    def scan(
+        self, request: ScanRequest, on_progress: ProgressListener = ignore_progress
+    ) -> ScanReport:
+        return self._scan.scan(request, on_progress)
+
+    def investigate(
+        self,
+        report: ScanReport,
+        request: InvestigationRequest,
+        on_event: EventListener = ignore_events,
+    ) -> InvestigationReport:
+        """Investigate findings of an existing scan; `request.scan` names its host."""
         findings = report.findings
         chosen = request.selection.pick(findings)
         known = {finding.number for finding in findings}
