@@ -11,6 +11,7 @@ Organised by [Diátaxis](https://diataxis.fr/).
 
 - [Find flaky pipelines](how-to/find-flaky-pipelines.md) – `flakipype scan`, options, scripts.
 - [Investigate findings](how-to/investigate-findings.md) – let the agent explain them with evidence.
+- [Use the chat](how-to/chat.md) – ask questions, scan and investigate interactively, sessions.
 - [Connect a model](how-to/connect-a-model.md) – Anthropic API, Azure AI Foundry or a proxy.
 - [Set up a headless machine](how-to/set-up-headless.md) – servers, containers, SSH.
 - [Run CI locally with act](how-to/run-ci-locally.md) – the Linux gate on Windows.
@@ -26,6 +27,6 @@ Organised by [Diátaxis](https://diataxis.fr/).
 
 - [Architecture](explanation/architecture.md) – packages, layers and data flow.
 - [How flakiness is detected](explanation/flake-detection.md) – signals, rates and error signatures.
-- [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts and budgets (M3 design).
+- [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts, budgets and the chat.
 - [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
 - [Roadmap](explanation/roadmap.md) – scope and milestones.

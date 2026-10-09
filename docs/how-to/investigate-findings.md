@@ -60,6 +60,7 @@ reached, no verdict) are never stored.
 Exit codes: 0 all investigations completed, 1 one ended without a verdict or
 the scan stopped early, 2 not set up.
 
-Limits are in the `[agent]` section of the
+To ask follow-up questions instead, use [the chat](chat.md). Limits are in
+the `[agent]` section of the
 [configuration](../reference/configuration.md). How it works:
 [the agent](../explanation/agent.md).

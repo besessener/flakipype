@@ -6,6 +6,7 @@ import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -16,7 +17,9 @@ import keyring
 from flakipype.agent.budget import Limits
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.orchestrator import ChatAgent, ChatSettings, workspace_tools
 from flakipype.agent.pipeline import AgentConfig, investigate_finding
+from flakipype.agent.tools import Mode, PolicyGate, deny_all
 from flakipype.config.paths import AppPaths, app_paths
 from flakipype.config.secrets import LLM_API_KEY, default_secret_store
 from flakipype.config.settings import Settings, SettingsError, load_settings
@@ -25,10 +28,12 @@ from flakipype.github.binary import GhInstaller
 from flakipype.github.contents import ContentsClient
 from flakipype.github.gh import GhCli
 from flakipype.github.provider import ManagedGh
+from flakipype.investigate.chat import ChatService
 from flakipype.investigate.service import InvestigationService
+from flakipype.investigate.workspace import ChatWorkspace
 from flakipype.llm.client import LlmEndpoint, create_client
 from flakipype.llm.connection import ConnectionResult, check_connection
-from flakipype.scan.service import ScanService
+from flakipype.scan.service import ScanRequest, ScanService
 from flakipype.setup.doctor import RUN_SETUP
 from flakipype.setup.service import SetupService
 from flakipype.store.database import ScanCache
@@ -122,8 +127,16 @@ def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
     )
 
 
+@dataclass(frozen=True)
+class _Agentic:
+    settings: Settings
+    config: AgentConfig
+    service: InvestigationService
+    cache: ScanCache
+
+
 @contextmanager
-def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
+def _open_agentic() -> Iterator[_Agentic]:
     paths = _paths()
     settings = _ready_settings(paths)
     if not settings.llm.model:
@@ -137,13 +150,51 @@ def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
     gh = _gh_cli(paths, settings.github.host)
     config = _agent_config(settings, api_key, gh)
     with ScanCache.open(paths.cache_file) as cache:
-        yield (
-            InvestigationService(
-                scan=_scan_service(ActionsClient(gh), cache),
-                cache=cache,
-                investigate=partial(investigate_finding, config),
-                run_tokens=settings.agent.max_tokens_per_run,
-                parallel=settings.agent.parallel,
-            ),
-            settings,
+        service = InvestigationService(
+            scan=_scan_service(ActionsClient(gh), cache),
+            cache=cache,
+            investigate=partial(investigate_finding, config),
+            run_tokens=settings.agent.max_tokens_per_run,
+            parallel=settings.agent.parallel,
         )
+        yield _Agentic(settings, config, service, cache)
+
+
+@contextmanager
+def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
+    with _open_agentic() as agentic:
+        yield agentic.service, agentic.settings
+
+
+@contextmanager
+def open_chat() -> Iterator[tuple[ChatService, Settings]]:
+    with _open_agentic() as agentic:
+        settings = agentic.settings
+        request = ScanRequest(
+            owner=settings.github.owner,
+            host=settings.github.host,
+            window_days=settings.scan.window_days,
+            max_log_downloads=settings.scan.max_log_downloads,
+            min_flaky_runs=settings.scan.min_flaky_runs,
+        )
+        workspace = ChatWorkspace(agentic.service, request)
+        agent = ChatAgent(
+            client=agentic.config.client,
+            settings=ChatSettings(
+                model=agentic.config.settings,
+                limits=agentic.config.limits,
+                turn_tokens=settings.agent.max_tokens_per_investigation,
+            ),
+            tools=workspace_tools(workspace),
+            # The chat is "ask" mode; in M3 all its tools only read.
+            gate=PolicyGate(Mode.ASK, deny_all),
+            masker=agentic.config.masker,
+            clock=time.monotonic,
+        )
+        chat = ChatService(
+            workspace=workspace,
+            agent=agent,
+            sessions=agentic.cache.sessions,
+            now=lambda: datetime.now(UTC),
+        )
+        yield chat, settings

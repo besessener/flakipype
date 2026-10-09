@@ -9,6 +9,7 @@ from flakipype.cli.wiring import (
     NotReadyError,
     build_setup_service,
     check_llm_endpoint,
+    open_chat,
     open_investigation,
     open_scan,
 )
@@ -117,3 +118,18 @@ def test_investigation_is_wired_with_agent_settings(
     with open_investigation() as (service, settings):
         assert settings.agent.parallel == 2
         assert service is not None
+
+
+def test_chat_is_wired_with_scan_settings_and_sessions(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n\n[scan]\nwindow_days = 9\n'
+    write_config(isolated_home, config)
+    store_api_key(isolated_home)
+    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
+    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+
+    with open_chat() as (chat, _):
+        assert chat.workspace.request.owner == "octo-org"
+        assert chat.workspace.request.window_days == 9
+        assert chat.handle("/sessions")[1].text == "No saved sessions yet."

@@ -27,7 +27,7 @@ Outside poe:
 | Command | Purpose |
 | --- | --- |
 | `flakipype --version` | Print the installed version |
-| `flakipype` (no args) | Show help; becomes the chat in M3 |
+| `flakipype` (no args) | The chat in a terminal, see [use the chat](../how-to/chat.md); otherwise the help. Exit codes: 0 left, 1 GitHub unreadable, 2 not set up |
 | `flakipype setup` | Full-screen setup wizard (needs a terminal) |
 | `flakipype setup --non-interactive [options]` | Headless setup, see below |
 | `flakipype doctor` | Check configuration, model connection, `gh` and the GitHub login |

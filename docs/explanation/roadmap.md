@@ -27,7 +27,9 @@ Each milestone is one branch and one pull request.
 | M5 | Fix | Local clone, edit tools, diff review, branch plus PR, verification by rerunning the fix branch |
 | M6 | Unattended and release | `flakipype run --auto`, `flakipype daemon install` (systemd user timer), install script, multi-distro smoke tests |
 
-## Planned chat commands
+## Chat commands
 
-`/setup` `/connect` `/scan` `/flaky` `/inspect` `/rerun` `/watch` `/fix`
-`/mode` `/model` `/cost` `/sessions` `/clear` `/help` `/quit`
+Since M3: `/scan` `/findings` `/flaky` `/investigate` `/why` `/budget`
+`/sessions` `/resume` `/new` `/help` `/quit` (see [use the chat](../how-to/chat.md)).
+
+Planned: `/rerun` `/watch` (M4), `/fix` `/mode` (M5), `/setup` `/model`.

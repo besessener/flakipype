@@ -10,6 +10,7 @@ from typing import Self
 
 from flakipype.flaky.model import AttemptRef, JobResult
 from flakipype.flaky.signature import SIGNATURE_VERSION, Category, ErrorSignature
+from flakipype.store.sessions import SessionStore
 
 # Append only: each entry migrates from the previous schema version to the next.
 MIGRATIONS = (
@@ -36,6 +37,12 @@ MIGRATIONS = (
     CREATE TABLE verdicts (
         host TEXT NOT NULL, identity TEXT NOT NULL, last_seen TEXT NOT NULL,
         result TEXT NOT NULL, PRIMARY KEY (host, identity)
+    );
+    """,
+    """
+    CREATE TABLE sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+        created TEXT NOT NULL, updated TEXT NOT NULL, data TEXT NOT NULL
     );
     """,
 )
@@ -87,6 +94,10 @@ class ScanCache:
 
     def close(self) -> None:
         self._db.close()
+
+    @property
+    def sessions(self) -> SessionStore:
+        return SessionStore(self._db)
 
     def cached_jobs(
         self, host: str, refs: Iterable[AttemptRef]
