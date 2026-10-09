@@ -3,6 +3,7 @@ import io
 import sys
 import tarfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx2
 import pytest
@@ -96,7 +97,7 @@ def test_latest_release_is_resolved_without_the_rate_limited_api(tmp_path: Path)
     GhInstaller(client, tmp_path).install("amd64")
 
     assert requested[0] == LATEST_RELEASE_URL
-    assert not any("api.github.com" in url for url in requested)
+    assert {urlsplit(url).hostname for url in requested} == {"github.com"}
 
 
 def test_network_errors_become_install_errors(tmp_path: Path) -> None:
@@ -115,7 +116,7 @@ def test_rate_limit_explains_what_to_do(tmp_path: Path, status: int) -> None:
     with pytest.raises(RateLimitedError, match="rate limit") as error:
         installer(routes, tmp_path).install("amd64")
 
-    assert "https://cli.github.com" in str(error.value)
+    assert str(error.value).endswith("install gh yourself: https://cli.github.com")
     assert not (tmp_path / "gh").exists()
 
 
