@@ -20,7 +20,7 @@ from flakipype.github.auth import (
     browser_login_arguments,
     login_with_token,
 )
-from flakipype.github.binary import GhBinary
+from flakipype.github.binary import DownloadProgress, GhBinary, ignore_progress
 from flakipype.github.provider import GhProvider
 from flakipype.llm.client import LlmEndpoint
 from flakipype.llm.connection import ConnectionResult
@@ -141,12 +141,12 @@ class SetupService:
     def find_gh(self) -> GhBinary | None:
         return self._gh.find()
 
-    def install_gh(self) -> GhBinary:
+    def install_gh(self, *, on_progress: DownloadProgress = ignore_progress) -> GhBinary:
         """Raises GhInstallError; an existing gh is kept."""
         found = self._gh.find()
         if found is not None:
             return found
-        return self._gh.install()
+        return self._gh.install(on_progress=on_progress)
 
     def github_auth(self, host: str) -> AuthStatus:
         binary = self._gh.find()

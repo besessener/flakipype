@@ -1,7 +1,14 @@
 from pathlib import Path
 from typing import Protocol
 
-from flakipype.github.binary import GhBinary, GhInstaller, GhInstallError, locate_gh
+from flakipype.github.binary import (
+    DownloadProgress,
+    GhBinary,
+    GhInstaller,
+    GhInstallError,
+    ignore_progress,
+    locate_gh,
+)
 from flakipype.github.gh import GhCli
 from flakipype.github.release import UnsupportedPlatformError, linux_architecture
 
@@ -9,7 +16,7 @@ from flakipype.github.release import UnsupportedPlatformError, linux_architectur
 class GhProvider(Protocol):
     def find(self) -> GhBinary | None: ...
 
-    def install(self) -> GhBinary: ...
+    def install(self, *, on_progress: DownloadProgress = ignore_progress) -> GhBinary: ...
 
     def cli(self, binary: GhBinary, host: str) -> GhCli: ...
 
@@ -26,12 +33,12 @@ class ManagedGh:
         candidates = [self._on_path] if self._on_path else []
         return locate_gh([*candidates, self._installer.target])
 
-    def install(self) -> GhBinary:
+    def install(self, *, on_progress: DownloadProgress = ignore_progress) -> GhBinary:
         try:
             architecture = linux_architecture(self._machine)
         except UnsupportedPlatformError as error:
             raise GhInstallError(str(error)) from error
-        return self._installer.install(architecture)
+        return self._installer.install(architecture, on_progress=on_progress)
 
     def cli(self, binary: GhBinary, host: str) -> GhCli:
         return GhCli([str(binary.path)], host=host)

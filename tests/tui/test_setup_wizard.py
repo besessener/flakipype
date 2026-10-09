@@ -1,18 +1,20 @@
 import contextlib
+import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import pytest
 from textual.pilot import Pilot
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input, ProgressBar, Static
 
 from flakipype.config.secrets import LLM_API_KEY
 from flakipype.config.settings import load_settings
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
-from flakipype.tui.setup_wizard import SetupWizard, StatusLine
+from flakipype.tui.setup_wizard import LOGIN_BUTTONS, SetupWizard, StatusLine, download_status
 
 from support.fake_gh import FakeGh
 from support.fake_setup import (
+    DOWNLOAD_SIZE,
     USER_CALL,
     complete_draft,
     logged_in,
@@ -23,6 +25,8 @@ SIZE = (110, 60)
 
 
 async def settle(pilot: Pilot[bool]) -> None:
+    # Handlers start workers only once pending messages (like a click) are processed.
+    await pilot.pause()
     await pilot.app.workers.wait_for_complete()
     await pilot.pause()
 
@@ -41,6 +45,15 @@ async def click_button(pilot: Pilot[bool], widget_id: str) -> None:
     while button.has_class("-active"):
         await pilot.pause(0.05)
     await pilot.click(f"#{widget_id}")
+
+
+def progress_visible(app: SetupWizard) -> bool:
+    return app.query_one("#gh-progress", ProgressBar).display
+
+
+def locked_buttons(app: SetupWizard) -> set[str]:
+    github = app.query_one("#github-section")
+    return {str(button.id) for button in github.query(Button) if button.disabled}
 
 
 async def type_into(pilot: Pilot[bool], widget_id: str, text: str) -> None:
@@ -149,7 +162,35 @@ async def test_gh_download(tmp_path: Path, fake_gh: FakeGh) -> None:
         assert "octocat" in status_text(app, "auth-status")
 
 
-async def test_gh_download_failure(tmp_path: Path, fake_gh: FakeGh) -> None:
+async def test_download_shows_progress_and_locks_the_buttons(
+    tmp_path: Path, fake_gh: FakeGh
+) -> None:
+    logged_in(fake_gh)
+    world = setup_world(tmp_path, fake_gh)
+    world.gh.installed = None
+    world.gh.halfway_gate = threading.Event()
+    app = SetupWizard(world.service)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(pilot)
+        await click_button(pilot, "install-gh")
+        bar = app.query_one("#gh-progress", ProgressBar)
+        while bar.progress < DOWNLOAD_SIZE // 2:
+            await pilot.pause(0.05)
+
+        assert progress_visible(app)
+        assert bar.percentage == 0.5
+        assert "7.5 of 15.0 MB" in status_text(app, "gh-status")
+        assert locked_buttons(app) == {"install-gh", *LOGIN_BUTTONS}
+
+        world.gh.halfway_gate.set()
+        await settle(pilot)
+        assert not progress_visible(app)
+        assert "2.102.0" in status_text(app, "gh-status")
+        assert locked_buttons(app) == {"install-gh"}
+
+
+async def test_download_failure_unlocks_the_buttons(tmp_path: Path, fake_gh: FakeGh) -> None:
     world = setup_world(tmp_path, fake_gh)
     world.gh.installed = None
     world.gh.install_error = "Checksum mismatch for gh.tar.gz"
@@ -161,6 +202,38 @@ async def test_gh_download_failure(tmp_path: Path, fake_gh: FakeGh) -> None:
         await settle(pilot)
         assert "Checksum mismatch" in status_text(app, "gh-status")
         assert "failed" in status_classes(app, "gh-status")
+        assert locked_buttons(app) == set()
+        assert not progress_visible(app)
+
+
+async def test_check_login_leaves_the_gh_line_alone(tmp_path: Path, fake_gh: FakeGh) -> None:
+    logged_in(fake_gh)
+    world = setup_world(tmp_path, fake_gh)
+    app = SetupWizard(world.service)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(pilot)
+        gh_line = status_text(app, "gh-status")
+        world.gh.installed = None
+        await click_button(pilot, "check-login")
+        await settle(pilot)
+
+        assert status_text(app, "gh-status") == gh_line
+        assert "gh is not installed yet" in status_text(app, "auth-status")
+        assert locked_buttons(app) == {"install-gh"}
+
+
+@pytest.mark.parametrize(
+    ("received", "total", "text"),
+    [
+        (0, 15_300_000, "Downloading gh… 0.0 of 15.3 MB"),
+        (5_500_000, 15_300_000, "Downloading gh… 5.5 of 15.3 MB"),
+        (15_300_000, 15_300_000, "Verifying checksum and installing…"),
+        (2_000_000, None, "Downloading gh… 2.0 MB"),
+    ],
+)
+def test_download_status_text(received: int, total: int | None, text: str) -> None:
+    assert download_status(received, total) == text
 
 
 async def test_token_login(tmp_path: Path, fake_gh: FakeGh) -> None:

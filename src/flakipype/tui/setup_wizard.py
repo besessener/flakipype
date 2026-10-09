@@ -4,7 +4,7 @@ from textual import on, work
 from textual.app import App, ComposeResult, SuspendNotSupported
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, Footer, Header, Input, Label, Static
+from textual.widgets import Button, Footer, Header, Input, Label, ProgressBar, Static
 
 from flakipype.config.settings import DEFAULT_BASE_URL
 from flakipype.github.auth import browser_login_arguments
@@ -14,6 +14,18 @@ from flakipype.setup.doctor import RUN_SETUP, Check, CheckStatus, gh_check, gith
 from flakipype.setup.service import InvalidSetupError, SetupDraft, SetupService
 
 _STATUS_CLASSES = ("ok", "warning", "failed", "busy")
+GH_BUTTON = "install-gh"
+LOGIN_BUTTONS = ("login-browser", "check-login", "login-token")
+_BYTES_PER_MEGABYTE = 1_000_000
+
+
+def download_status(received: int, total: int | None) -> str:
+    done = f"{received / _BYTES_PER_MEGABYTE:.1f}"
+    if total is None:
+        return f"Downloading gh… {done} MB"
+    if received >= total:
+        return "Verifying checksum and installing…"
+    return f"Downloading gh… {done} of {total / _BYTES_PER_MEGABYTE:.1f} MB"
 
 
 class StatusLine(Static):
@@ -79,8 +91,9 @@ class SetupWizard(App[bool]):
             yield Label("User or organisation to scan")
             yield Input(id="owner", placeholder="e.g. octo-org")
             with Horizontal(classes="row"):
-                yield Button("Download gh", id="install-gh")
+                yield Button("Download gh", id=GH_BUTTON)
                 yield StatusLine("", id="gh-status", classes="status")
+            yield ProgressBar(id="gh-progress", show_eta=False)
             with Horizontal(classes="row"):
                 yield Button("Log in with browser", id="login-browser")
                 yield Button("Check login", id="check-login")
@@ -136,41 +149,78 @@ class SetupWizard(App[bool]):
         self.call_from_thread(self._status("llm-status").show_check, check)
 
     # --- GitHub --------------------------------------------------------------
+    # gh and login have separate status lines, workers and buttons, so one never resets the other.
 
-    @on(Button.Pressed, "#check-login")
+    def _lock(self, *button_ids: str) -> None:
+        for button_id in button_ids:
+            self.query_one(f"#{button_id}", Button).disabled = True
+
+    def _unlock(self, *button_ids: str) -> None:
+        for button_id in button_ids:
+            self.query_one(f"#{button_id}", Button).disabled = False
+
     def refresh_github(self) -> None:
+        self._lock(GH_BUTTON, *LOGIN_BUTTONS)
         self._status("gh-status").show("busy", "Looking for gh…")
         self._status("auth-status").show("busy", "Checking login…")
-        self._refresh_github(self._host())
+        self._check_gh_then_login(self._host())
 
-    @work(thread=True, exclusive=True, group="github")
-    def _refresh_github(self, host: str) -> None:
-        self._show_github_checks(host)
+    @work(thread=True, exclusive=True, group="gh")
+    def _check_gh_then_login(self, host: str) -> None:
+        self._run_gh_then_login_checks(host)
 
-    def _show_github_checks(self, host: str) -> None:
-        # Runs inside a worker thread; starting another "github" worker here would cancel this one.
+    def _run_gh_then_login_checks(self, host: str) -> None:
+        # Worker threads call this directly: starting another "gh" worker would cancel the caller.
         self.call_from_thread(self._show_gh_check, gh_check(self._service))
-        self.call_from_thread(
-            self._status("auth-status").show_check, github_check(self._service, host)
-        )
+        self.call_from_thread(self._show_login_check, github_check(self._service, host))
 
     def _show_gh_check(self, check: Check) -> None:
+        self.query_one("#gh-progress", ProgressBar).display = False
         self._status("gh-status").show_check(check)
-        self.query_one("#install-gh", Button).disabled = check.status is CheckStatus.OK
+        self.query_one(f"#{GH_BUTTON}", Button).disabled = check.status is CheckStatus.OK
 
-    @on(Button.Pressed, "#install-gh")
+    def _show_login_check(self, check: Check) -> None:
+        self._status("auth-status").show_check(check)
+        self._unlock(*LOGIN_BUTTONS)
+
+    @on(Button.Pressed, "#check-login")
+    def start_login_check(self) -> None:
+        self._lock(*LOGIN_BUTTONS)
+        self._status("auth-status").show("busy", "Checking login…")
+        self._check_login(self._host())
+
+    @work(thread=True, exclusive=True, group="login")
+    def _check_login(self, host: str) -> None:
+        self.call_from_thread(self._show_login_check, github_check(self._service, host))
+
+    @on(Button.Pressed, f"#{GH_BUTTON}")
     def start_gh_install(self) -> None:
-        self._status("gh-status").show("busy", "Downloading and verifying gh…")
+        self._lock(GH_BUTTON, *LOGIN_BUTTONS)
+        self._status("gh-status").show("busy", "Connecting to github.com…")
         self._install_gh(self._host())
 
-    @work(thread=True, exclusive=True, group="github")
+    @work(thread=True, exclusive=True, group="gh")
     def _install_gh(self, host: str) -> None:
+        def report(received: int, total: int | None) -> None:
+            self.call_from_thread(self._show_download_progress, received, total)
+
         try:
-            self._service.install_gh()
+            self._service.install_gh(on_progress=report)
         except GhInstallError as error:
-            self.call_from_thread(self._status("gh-status").show, "failed", str(error))
+            self.call_from_thread(self._show_install_failure, str(error))
             return
-        self._show_github_checks(host)
+        self._run_gh_then_login_checks(host)
+
+    def _show_download_progress(self, received: int, total: int | None) -> None:
+        bar = self.query_one("#gh-progress", ProgressBar)
+        bar.display = True
+        bar.update(total=total, progress=received)
+        self._status("gh-status").show("busy", download_status(received, total))
+
+    def _show_install_failure(self, message: str) -> None:
+        self.query_one("#gh-progress", ProgressBar).display = False
+        self._status("gh-status").show("failed", message)
+        self._unlock(GH_BUTTON, *LOGIN_BUTTONS)
 
     @on(Button.Pressed, "#login-token")
     def start_token_login(self) -> None:
@@ -178,18 +228,23 @@ class SetupWizard(App[bool]):
         if not token:
             self._status("auth-status").show("failed", "Paste a token first.")
             return
+        self._lock(*LOGIN_BUTTONS)
         self._status("auth-status").show("busy", "Logging in…")
         self._login_with_token(self._host(), token)
 
-    @work(thread=True, exclusive=True, group="github")
+    @work(thread=True, exclusive=True, group="login")
     def _login_with_token(self, host: str, token: str) -> None:
         try:
             self._service.login_with_token(host, token)
         except (GhCommandError, OSError) as error:
-            self.call_from_thread(self._status("auth-status").show, "failed", str(error))
+            self.call_from_thread(self._show_login_failure, str(error))
             return
         self.call_from_thread(self._clear_token)
-        self._show_github_checks(host)
+        self.call_from_thread(self._show_login_check, github_check(self._service, host))
+
+    def _show_login_failure(self, message: str) -> None:
+        self._status("auth-status").show("failed", message)
+        self._unlock(*LOGIN_BUTTONS)
 
     def _clear_token(self) -> None:
         self.query_one("#token", Input).value = ""
@@ -209,7 +264,7 @@ class SetupWizard(App[bool]):
                 "warning", f"Cannot hand over this terminal. Run in a shell:\n{command}"
             )
             return
-        self.refresh_github()
+        self.start_login_check()
 
     # --- Save / cancel -------------------------------------------------------
 
