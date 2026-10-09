@@ -8,6 +8,7 @@ from flakipype.github.release import (
     format_version,
     linux_architecture,
     parse_gh_version,
+    release_from_redirect,
     release_from_tag,
 )
 
@@ -51,6 +52,21 @@ def test_release_asset_names_and_urls() -> None:
 def test_unexpected_tags_are_rejected(tag: str) -> None:
     with pytest.raises(ValueError, match="unexpected gh release tag"):
         release_from_tag(tag)
+
+
+def test_release_from_the_latest_redirect() -> None:
+    location = "https://github.com/cli/cli/releases/tag/v2.103.1"
+
+    assert release_from_redirect(location) == GhRelease(version=(2, 103, 1))
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["", "https://github.com/login", "https://evil.example/cli/cli/releases/tag/v2.1.0"],
+)
+def test_unexpected_redirects_are_rejected(location: str) -> None:
+    with pytest.raises(ValueError, match="unexpected redirect"):
+        release_from_redirect(location)
 
 
 def test_expected_sha256_finds_the_asset_line() -> None:

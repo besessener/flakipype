@@ -3,19 +3,21 @@ import io
 import sys
 import tarfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx2
 import pytest
 
 from flakipype.github.binary import (
-    LATEST_RELEASE_API,
     ChecksumMismatchError,
     GhBinary,
     GhInstaller,
     GhInstallError,
+    RateLimitedError,
     locate_gh,
     read_gh_version,
 )
+from flakipype.github.release import LATEST_RELEASE_URL
 
 FAKE_BINARY = b"#!/bin/sh\necho 'gh version 2.102.0 (2026-09-30)'\n"
 DOWNLOADS = "https://github.com/cli/cli/releases/download/v2.102.0"
@@ -36,7 +38,9 @@ def release_server(archive: bytes, digest: str | None = None) -> dict[str, httpx
         f"{'0' * 64}  gh_2.102.0_linux_arm64.tar.gz\n{checksum}  gh_2.102.0_linux_amd64.tar.gz\n"
     )
     return {
-        LATEST_RELEASE_API: httpx2.Response(200, json={"tag_name": "v2.102.0"}),
+        LATEST_RELEASE_URL: httpx2.Response(
+            302, headers={"location": "https://github.com/cli/cli/releases/tag/v2.102.0"}
+        ),
         f"{DOWNLOADS}/gh_2.102.0_checksums.txt": httpx2.Response(200, text=checksums),
         f"{DOWNLOADS}/gh_2.102.0_linux_amd64.tar.gz": httpx2.Response(200, content=archive),
     }
@@ -81,19 +85,56 @@ def test_architecture_missing_from_checksums_installs_nothing(tmp_path: Path) ->
         installer(release_server(tarball()), tmp_path).install("armv6")
 
 
+def test_latest_release_is_resolved_without_the_rate_limited_api(tmp_path: Path) -> None:
+    requested: list[str] = []
+    routes = release_server(tarball())
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requested.append(str(request.url))
+        return routes.get(str(request.url), httpx2.Response(404))
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler), follow_redirects=True)
+    GhInstaller(client, tmp_path).install("amd64")
+
+    assert requested[0] == LATEST_RELEASE_URL
+    assert {urlsplit(url).hostname for url in requested} == {"github.com"}
+
+
 def test_network_errors_become_install_errors(tmp_path: Path) -> None:
     routes = release_server(tarball())
-    routes[LATEST_RELEASE_API] = httpx2.Response(503)
+    routes[LATEST_RELEASE_URL] = httpx2.Response(503)
 
     with pytest.raises(GhInstallError, match="Downloading gh failed"):
         installer(routes, tmp_path).install("amd64")
 
 
-def test_unexpected_release_payload_is_an_install_error(tmp_path: Path) -> None:
+@pytest.mark.parametrize("status", [403, 429])
+def test_rate_limit_explains_what_to_do(tmp_path: Path, status: int) -> None:
     routes = release_server(tarball())
-    routes[LATEST_RELEASE_API] = httpx2.Response(200, json={"name": "no tag"})
+    routes[f"{DOWNLOADS}/gh_2.102.0_checksums.txt"] = httpx2.Response(status)
 
-    with pytest.raises(GhInstallError, match="tag_name"):
+    with pytest.raises(RateLimitedError, match="rate limit") as error:
+        installer(routes, tmp_path).install("amd64")
+
+    assert str(error.value).endswith("install gh yourself: https://cli.github.com")
+    assert not (tmp_path / "gh").exists()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx2.Response(200, text="<html>release page</html>"),
+        httpx2.Response(302, headers={"location": "https://github.com/login"}),
+        httpx2.Response(302),
+    ],
+)
+def test_unexpected_latest_release_answer_is_an_install_error(
+    tmp_path: Path, response: httpx2.Response
+) -> None:
+    routes = release_server(tarball())
+    routes[LATEST_RELEASE_URL] = response
+
+    with pytest.raises(GhInstallError, match="Downloading gh failed"):
         installer(routes, tmp_path).install("amd64")
 
 
