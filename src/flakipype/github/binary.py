@@ -23,6 +23,15 @@ from flakipype.github.release import (
 )
 
 _VERSION_TIMEOUT_SECONDS = 10
+
+type DownloadProgress = Callable[[int, int | None], None]
+"""Called with bytes received so far and the total size, if the server announced it."""
+
+
+def ignore_progress(received: int, total: int | None) -> None:
+    del received, total
+
+
 _RATE_LIMITED = frozenset({HTTPStatus.FORBIDDEN, HTTPStatus.TOO_MANY_REQUESTS})
 
 
@@ -90,13 +99,15 @@ class GhInstaller:
     def target(self) -> Path:
         return self._bin_dir / "gh"
 
-    def install(self, architecture: str) -> GhBinary:
+    def install(
+        self, architecture: str, *, on_progress: DownloadProgress = ignore_progress
+    ) -> GhBinary:
         try:
             release = self._latest_release()
             tarball_name = release.tarball_name(architecture)
             checksums = self._get(release.download_url(release.checksums_name)).text
             expected = expected_sha256(checksums, tarball_name)
-            archive = self._get(release.download_url(tarball_name)).content
+            archive = self._download(release.download_url(tarball_name), on_progress)
         except (httpx2.HTTPError, ChecksumMissingError, ValueError) as error:
             message = f"Downloading gh failed: {error}"
             raise GhInstallError(message) from error
@@ -119,6 +130,20 @@ class GhInstaller:
         response = self._http.get(url)
         _raise_for_status(response)
         return response
+
+    def _download(self, url: str, on_progress: DownloadProgress) -> bytes:
+        chunks: list[bytes] = []
+        received = 0
+        with self._http.stream("GET", url) as response:
+            _raise_for_status(response)
+            length = response.headers.get("content-length", "")
+            total = int(length) if length.isdigit() else None
+            on_progress(received, total)
+            for chunk in response.iter_bytes():
+                chunks.append(chunk)
+                received += len(chunk)
+                on_progress(received, total)
+        return b"".join(chunks)
 
     def _write_binary(self, archive: bytes, member_name: str) -> None:
         try:

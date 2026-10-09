@@ -1,9 +1,10 @@
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from flakipype.config.paths import AppPaths
 from flakipype.config.secrets import FileSecretStore
-from flakipype.github.binary import GhBinary, GhInstallError
+from flakipype.github.binary import DownloadProgress, GhBinary, GhInstallError, ignore_progress
 from flakipype.github.gh import GhCli
 from flakipype.llm.client import LlmEndpoint
 from flakipype.llm.connection import ConnectionOk, ConnectionResult
@@ -15,20 +16,30 @@ INSTALLED_GH = GhBinary(path=Path("/opt/gh/bin/gh"), version=(2, 102, 0))
 USER_CALL = ["api", "user", "--include"]
 
 
+DOWNLOAD_SIZE = 15_000_000
+
+
 @dataclass
 class FakeGhProvider:
     fake_gh: FakeGh
     installed: GhBinary | None = INSTALLED_GH
     install_error: str = ""
     install_count: int = 0
+    # Set to hold the download halfway until the test sets the event.
+    halfway_gate: threading.Event | None = None
 
     def find(self) -> GhBinary | None:
         return self.installed
 
-    def install(self) -> GhBinary:
+    def install(self, *, on_progress: DownloadProgress = ignore_progress) -> GhBinary:
         self.install_count += 1
         if self.install_error:
             raise GhInstallError(self.install_error)
+        on_progress(0, DOWNLOAD_SIZE)
+        on_progress(DOWNLOAD_SIZE // 2, DOWNLOAD_SIZE)
+        if self.halfway_gate is not None:
+            self.halfway_gate.wait(timeout=10)
+        on_progress(DOWNLOAD_SIZE, DOWNLOAD_SIZE)
         self.installed = INSTALLED_GH
         return INSTALLED_GH
 

@@ -63,6 +63,35 @@ def test_install_verifies_and_writes_the_binary(tmp_path: Path) -> None:
     assert list(bin_dir.iterdir()) == [bin_dir / "gh"]
 
 
+def test_install_reports_download_progress(tmp_path: Path) -> None:
+    archive = tarball()
+    reports: list[tuple[int, int | None]] = []
+
+    installer(release_server(archive), tmp_path).install(
+        "amd64", on_progress=lambda received, total: reports.append((received, total))
+    )
+
+    assert reports[0] == (0, len(archive))
+    assert reports[-1] == (len(archive), len(archive))
+    assert [received for received, _ in reports] == sorted(received for received, _ in reports)
+
+
+def test_progress_without_announced_size(tmp_path: Path) -> None:
+    archive = tarball()
+    routes = release_server(archive)
+    routes[f"{DOWNLOADS}/gh_2.102.0_linux_amd64.tar.gz"] = httpx2.Response(
+        200, content=iter([archive[:10], archive[10:]])
+    )
+    reports: list[tuple[int, int | None]] = []
+
+    installed = installer(routes, tmp_path).install(
+        "amd64", on_progress=lambda received, total: reports.append((received, total))
+    )
+
+    assert installed.path.read_bytes() == FAKE_BINARY
+    assert reports == [(0, None), (10, None), (len(archive), None)]
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes do not exist on Windows")
 def test_installed_binary_is_executable(tmp_path: Path) -> None:
     installed = installer(release_server(tarball()), tmp_path).install("amd64")

@@ -38,6 +38,15 @@ Screen {
     width: 1fr;
 }
 
+#gh-progress {
+    display: none;
+    margin: 1 0 0 1;
+}
+
+#gh-progress Bar {
+    width: 1fr;
+}
+
 .status {
     width: 1fr;
     height: auto;

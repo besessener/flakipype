@@ -38,7 +38,8 @@ token) and shows the model that answered, or what went wrong and what to do.
 - **gh**: if no `gh` 2.40 or newer is on your `PATH`, press **Download gh**.
   flakipype fetches the latest release for your architecture, checks its
   SHA-256 against the release's checksum file and installs it to
-  `~/.local/share/flakipype/bin/gh`.
+  `~/.local/share/flakipype/bin/gh`. A progress bar shows the download
+  (about 15 MB); the GitHub buttons are locked until it is done.
 - **Login**: flakipype shares your normal `gh` login. If you are not logged
   in, press **Log in with browser** (the wizard hands the terminal to
   `gh auth login`) or paste a token and press **Use token**.
