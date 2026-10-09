@@ -78,6 +78,11 @@ ignore = [
   "TRY003",  # same
 ]
 
+[tool.ruff.lint.extend-per-file-ignores]
+# Terminal output uses typographic characters on purpose: – › × ↻ ≡ █.
+"src/flakipype/cli/scan_report.py" = ["RUF001"]
+"tests/unit/cli/test_scan_report.py" = ["RUF001"]
+
 [tool.ruff.lint.isort]
 known-local-folder = ["support"]
 
@@ -136,7 +141,7 @@ type = "layers"
 layers = [
   "flakipype.cli",
   "flakipype.tui",
-  "flakipype.agent | flakipype.setup",
+  "flakipype.agent | flakipype.setup | flakipype.scan",
   "flakipype.llm | flakipype.github | flakipype.store",
   "flakipype.flaky | flakipype.config",
 ]

@@ -31,6 +31,20 @@ Outside poe:
 | `flakipype setup` | Full-screen setup wizard (needs a terminal) |
 | `flakipype setup --non-interactive [options]` | Headless setup, see below |
 | `flakipype doctor` | Check configuration, model connection, `gh` and the GitHub login |
+| `flakipype scan [options]` | Find and rank flaky jobs, see below |
+
+### `flakipype scan`
+
+| Option | Meaning |
+| --- | --- |
+| `--days N` | Days to look back, 1–400 (default `scan.window_days`) |
+| `--repo NAME` | Only this repository (`repo` or `owner/repo`); repeat for more |
+| `--owner NAME` | Another user or organisation (default `github.owner`) |
+| `--max-logs N` | Most job logs to read this time, 0–1000 (default `scan.max_log_downloads`) |
+| `--json` | Print the [JSON result](scan-json.md) on stdout instead of the table |
+
+Exit codes: 0 finished, 1 stopped early or GitHub unreadable, 2 not set up.
+Guide: [find flaky pipelines](../how-to/find-flaky-pipelines.md).
 
 ### `flakipype setup --non-interactive`
 

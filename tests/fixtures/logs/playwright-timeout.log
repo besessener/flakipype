@@ -1,0 +1,27 @@
+2026-10-07T09:17:33.1022811Z ##[group]Run npm run build
+2026-10-07T09:17:33.1023301Z npm run build
+2026-10-07T09:17:33.1066524Z ##[endgroup]
+2026-10-07T09:27:10.0981283Z   ✓  138 tests/e2e/scan.spec.ts:37:7 > scanning allowed directories > shows the first 500 files and loads the rest on request (2.4s)
+2026-10-07T09:27:13.0025352Z   ✓  139 tests/e2e/scan.spec.ts:60:7 > analysing selected files in the privacy mode ,automatisch" > says that the selection goes to the AI in this mode (2.9s)
+2026-10-07T09:27:35.3570697Z
+2026-10-07T09:27:35.3592891Z ##[error]  1) tests/e2e/scan.spec.ts:77:7 > analysing selected files in the privacy mode ,automatisch" > archives a project group with each document keeping its own topic
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByTestId('document-row')
+    Expected: 2
+    Received: 1
+    Timeout:  20000ms
+
+    Call log:
+      - Expect "toHaveCount" getByTestId('document-row') with timeout 20000ms
+      - waiting for getByTestId('document-row')
+        - locator resolved to 0 elements
+        - unexpected value "0"
+        43 x locator resolved to 1 element
+           - unexpected value "1"
+
+2026-10-07T09:27:35.3600457Z   ✘  140 tests/e2e/scan.spec.ts:77:7 > analysing selected files in the privacy mode ,automatisch" > archives a project group with each document keeping its own topic (22.3s)
+2026-10-07T09:28:41.8303038Z ##[notice]  1 failed
+2026-10-07T09:28:41.8313436Z   1 failed
+2026-10-07T09:28:41.9946999Z ##[error]Process completed with exit code 1.
+2026-10-07T09:28:43.3427403Z Cleaning up orphan processes

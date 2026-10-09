@@ -1,0 +1,17 @@
+2026-10-02T08:01:52.1022811Z ##[group]Run npm ci
+2026-10-02T08:01:52.1023301Z npm ci
+2026-10-02T08:01:52.1066524Z ##[endgroup]
+2026-10-02T08:02:41.3313092Z npm warn cleanup Failed to remove some directories [
+2026-10-02T08:02:41.3313761Z npm warn cleanup   [Error: EPERM: operation not permitted, rmdir 'D:\a\Archivist\Archivist\node_modules\@babel\helper-module-transforms\node_modules'] {
+2026-10-02T08:02:41.3314263Z npm warn cleanup     errno: -4048,
+2026-10-02T08:03:05.7192039Z npm error gyp info find Python using Python version 3.14.7 found at "C:\hostedtoolcache\windows\Python\3.14.7\x64\python.exe"
+2026-10-02T08:03:05.7193068Z npm error gyp http GET https://nodejs.org/download/release/v22.23.3/node-v22.23.3-headers.tar.gz
+2026-10-02T08:03:05.7193993Z npm error gyp http 200 https://nodejs.org/download/release/v22.23.3/node-v22.23.3-headers.tar.gz
+2026-10-02T08:03:05.7194682Z npm error gyp ERR! Completion callback never invoked!
+2026-10-02T08:03:05.7195157Z npm error gyp ERR! System Windows_NT 10.0.26100
+2026-10-02T08:03:05.7199844Z npm error gyp ERR! cwd D:\a\Archivist\Archivist\node_modules\better-sqlite3
+2026-10-02T08:03:05.7200286Z npm error gyp ERR! node -v v22.23.3
+2026-10-02T08:03:05.7201813Z npm error gyp ERR! Node-gyp failed to build your package.
+2026-10-02T08:03:05.7205620Z npm error A complete log of this run can be found in: C:\npm\cache\_logs\2026-10-02T08_01_52_244Z-debug-0.log
+2026-10-02T08:03:07.2629701Z ##[error]Process completed with exit code 1.
+2026-10-02T08:03:07.2964989Z Post job cleanup.

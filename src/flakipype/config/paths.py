@@ -22,6 +22,10 @@ class AppPaths:
     def bin_dir(self) -> Path:
         return self.data_dir / "bin"
 
+    @property
+    def cache_file(self) -> Path:
+        return self.data_dir / "cache.sqlite3"
+
 
 def _xdg_base(environment: Mapping[str, str], variable: str, fallback: Path) -> Path:
     # The XDG spec says relative values are invalid and must be ignored.

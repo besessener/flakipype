@@ -46,6 +46,16 @@ def test_save_writes_settings_and_keeps_the_key_out_of_the_file(
     assert world.service.load().has_api_key
 
 
+def test_save_keeps_existing_scan_settings(tmp_path: Path, fake_gh: FakeGh) -> None:
+    world = setup_world(tmp_path, fake_gh)
+    world.paths.config_dir.mkdir(parents=True)
+    world.paths.config_file.write_text("[scan]\nwindow_days = 7\n", encoding="utf-8")
+
+    world.service.save(complete_draft())
+
+    assert load_settings(world.paths.config_file).scan.window_days == 7
+
+
 def test_empty_key_keeps_the_stored_key(tmp_path: Path, fake_gh: FakeGh) -> None:
     world = setup_world(tmp_path, fake_gh)
     world.secrets.put(LLM_API_KEY, "stored-key")

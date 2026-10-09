@@ -5,7 +5,7 @@ from typing import Annotated
 from urllib.parse import urlsplit
 
 import tomli_w
-from pydantic import AfterValidator, BaseModel, ConfigDict, ValidationError
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
 
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 DEFAULT_GITHUB_HOST = "github.com"
@@ -62,11 +62,21 @@ class GitHubSettings(BaseModel):
     owner: Annotated[str, AfterValidator(validate_owner)] = ""
 
 
+class ScanSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # GitHub keeps run history for 400 days; logs usually for 90.
+    window_days: int = Field(default=30, ge=1, le=400)
+    # Hard limit per scan; log downloads are the slow, heavy part.
+    max_log_downloads: int = Field(default=50, ge=0, le=1000)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     llm: LlmSettings = LlmSettings()
     github: GitHubSettings = GitHubSettings()
+    scan: ScanSettings = ScanSettings()
 
 
 def load_settings(path: Path) -> Settings:

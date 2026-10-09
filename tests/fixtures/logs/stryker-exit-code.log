@@ -1,0 +1,9 @@
+2026-10-03T18:49:30.1022811Z ##[group]Run npx stryker run
+2026-10-03T18:49:30.1066524Z ##[endgroup]
+2026-10-03T18:49:34.2927923Z Error: Something went wrong in the initial test run
+2026-10-03T18:49:34.2931616Z     at DryRunExecutor.validateResultCompleted (file:///home/runner/work/Archivist/Archivist/node_modules/@stryker-mutator/core/dist/src/process/3-dry-run-executor.js:240:15)
+2026-10-03T18:49:34.2934393Z     at DryRunExecutor.executeDryRun (file:///home/runner/work/Archivist/Archivist/node_modules/@stryker-mutator/core/dist/src/process/3-dry-run-executor.js:206:14)
+2026-10-03T18:49:34.2936142Z     at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-10-03T18:49:34.2941025Z
+2026-10-03T18:49:34.2941448Z Node.js v22.23.3
+2026-10-03T18:49:34.3203667Z ##[error]Process completed with exit code 1.
