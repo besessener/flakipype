@@ -15,8 +15,8 @@ and history the way an engineer would. That is the agent's job.
 
 - **In**: investigating findings and explaining them with cited evidence; a
   chat to ask about them; a headless `flakipype investigate` for scripts.
-- **Out**: rerunning or dispatching workflows (M4), changing code or opening
-  pull requests (M5). In M3 every tool only reads.
+- **Out**: rerunning or dispatching workflows (M4, see [actions](actions.md)),
+  changing code or opening pull requests (M5). In M3 every tool only reads.
 
 ## Roles
 
