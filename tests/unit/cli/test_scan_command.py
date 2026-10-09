@@ -55,7 +55,7 @@ def test_scan_prints_the_report(actions: FakeActions) -> None:
     assert result.exit_code == 0, result.output
     text = click.unstyle(result.stdout)
     assert "octo-org on github.com" in text
-    assert "1 flaky jobs" in text
+    assert "No flaky jobs found · 1 seen once" in text
     assert actions.windows[0].end - actions.windows[0].start == timedelta(days=14)
 
 
@@ -70,6 +70,15 @@ def test_scan_json_uses_options_over_config(actions: FakeActions) -> None:
     assert exported["logs_not_read"] == 1
     assert exported["window"]["start"] == "2026-10-06T12:00:00Z"
     assert "log octo-org/app 11" not in actions.calls
+
+
+def test_min_runs_option_overrides_the_config(actions: FakeActions) -> None:
+    result = runner.invoke(app, ["scan", "--json", "--min-runs", "1"])
+
+    exported = json.loads(result.stdout)
+    assert exported["min_flaky_runs"] == 1
+    assert [job["status"] for job in exported["jobs"]] == ["flaky"]
+    assert actions.calls
 
 
 def test_no_owner_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:

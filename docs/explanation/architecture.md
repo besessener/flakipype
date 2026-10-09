@@ -47,8 +47,10 @@ cli                       Typer entry point, composition root (cli/wiring.py)
   installs `gh` and checks the login. Its collaborators (secret store, `gh`
   provider, model check) are passed in, so tests swap them for fakes.
 - **`scan`** is the application service behind `flakipype scan` (and later
-  the agent's scan tools): it lists runs, fetches jobs only for attempts that
-  can be flaky, reads a limited number of logs, and ranks the result. A rate
+  the agent's scan tools): it lists runs, fetches jobs for attempts that can
+  be flaky and for the last attempt of failed runs, reads a limited number of
+  logs, and returns the verdicts (flaky, seen once, fixed) plus recurring
+  errors without proof. A rate
   limit stops it early with a report of what was found; other errors skip the
   item and are listed. Progress is reported as events, so the CLI and the TUI
   can show it their own way.
@@ -70,13 +72,14 @@ cli                       Typer entry point, composition root (cli/wiring.py)
 ## Data flow
 
 1. **Scan**: `github` lists repositories and workflow runs in the configured
-   window (default 30 days); `flaky` picks the attempts that can be flaky,
-   whose jobs and logs `github` then fetches and `store` caches.
-2. **Score**: `flaky` keeps failures that passed on rerun or whose commit
-   passed in another run, extracts error signatures from the logs and ranks
-   flake rates per repository, workflow, job and step.
-3. **Explain**: `agent` sends masked log excerpts, marked as data, to the
-   model and asks for a diagnosis.
+   window (default 30 days); `flaky` picks the attempts worth a look, whose
+   jobs and logs `github` then fetches and `store` caches.
+2. **Facts**: `flaky` keeps failures with proof (passed on rerun, same commit
+   passed), decides flaky / seen once / fixed, lists recurring errors without
+   proof, and extracts error signatures. Deterministic and free of model cost.
+3. **Judgement**: the agent investigates findings with tools (prepared log
+   excerpts, run history, commit diffs, files), marked as data, and returns
+   verdicts with cited evidence that a reviewer pass checks (M3).
 4. **Fix**: in a local clone, the agent edits workflow YAML or test code,
    pushes a branch, opens a PR and reruns the fix branch to compare its flake
    rate with the default branch.

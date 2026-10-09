@@ -18,7 +18,12 @@ LOG = "2026-10-07T09:27:35Z ##[error]Test timed out after 5000ms\n"
 
 
 BASE_REQUEST = ScanRequest(
-    owner="octo-org", host="github.com", window_days=30, max_log_downloads=50
+    owner="octo-org",
+    host="github.com",
+    window_days=30,
+    max_log_downloads=50,
+    # The mechanics tests use single runs; verdict thresholds have their own tests.
+    min_flaky_runs=1,
 )
 
 
@@ -47,7 +52,7 @@ def test_scan_finds_ranks_and_explains_a_flaky_job(cache: ScanCache) -> None:
 
     assert report.complete
     assert (report.repositories, report.runs, report.problems) == (2, 2, [])
-    (flaky,) = report.flaky
+    (flaky,) = report.ranking.flaky
     assert (flaky.key.repository, flaky.key.job, flaky.affected_runs, flaky.total_runs) == (
         APP,
         "test",
@@ -69,7 +74,66 @@ def test_second_scan_reuses_cached_jobs_and_logs(cache: ScanCache) -> None:
     report = scanner.scan(request())
 
     assert actions.calls == ["repositories octo-org", f"runs {APP}", "runs octo-org/docs"]
-    assert report.flaky[0].signatures
+    assert report.ranking.flaky[0].signatures
+
+
+def test_default_threshold_separates_flaky_from_one_offs(cache: ScanCache) -> None:
+    actions = flaky_world()
+    actions.runs_by_repository[APP] = [
+        run(1, attempt=2),
+        run(2),
+        run(3, attempt=2),
+        run(4, attempt=2, workflow=".github/workflows/pages.yml", name="Pages"),
+    ]
+    actions.jobs_by_attempt[3, 1] = [job(31, run_id=3)]
+    actions.jobs_by_attempt[4, 1] = [job(41, run_id=4, name="deploy")]
+
+    report = service(actions, cache).scan(request(min_flaky_runs=2))
+
+    assert [job.key.job for job in report.ranking.flaky] == ["test"]
+    assert [job.key.job for job in report.ranking.seen_once] == ["deploy"]
+    assert report.ranking.fixed == []
+
+
+def test_recurring_errors_without_proof_are_listed_apart(cache: ScanCache) -> None:
+    actions = FakeActions(
+        repositories_found=[Repository(APP, "main")],
+        runs_by_repository={
+            APP: [
+                run(1, conclusion="failure", sha="1" * 40),
+                run(2, sha="2" * 40),
+                run(3, conclusion="failure", sha="3" * 40),
+                run(4, conclusion="failure", sha="4" * 40),
+            ]
+        },
+        jobs_by_attempt={
+            (1, 1): [job(11, run_id=1)],
+            (3, 1): [job(31, run_id=3)],
+            (4, 1): [job(41, run_id=4, name="lint", step="Run ruff")],
+        },
+        logs={11: LOG, 31: LOG, 41: "2026-10-07T09:27:35Z ##[error]E501 line too long\n"},
+    )
+
+    report = service(actions, cache).scan(request(min_flaky_runs=2))
+
+    assert report.ranking.flaky == []
+    (recurring,) = report.recurring
+    assert (recurring.key.job, recurring.runs, recurring.branches) == ("test", 2, ("main",))
+    assert recurring.signature.category.value == "timeout"
+
+
+def test_proven_failures_get_their_logs_read_first(cache: ScanCache) -> None:
+    actions = flaky_world()
+    actions.runs_by_repository[APP] = [
+        run(1, attempt=2),
+        run(9, conclusion="failure", sha="9" * 40),
+    ]
+    actions.jobs_by_attempt[9, 1] = [job(91, run_id=9)]
+    actions.logs[91] = LOG
+
+    service(actions, cache).scan(request(max_log_downloads=1))
+
+    assert [call for call in actions.calls if call.startswith("log")] == [f"log {APP} 11"]
 
 
 def test_log_downloads_are_capped_newest_first(cache: ScanCache) -> None:
@@ -95,7 +159,7 @@ def test_expired_and_quiet_logs_are_cached_without_signature(cache: ScanCache) -
     actions.calls.clear()
     scanner.scan(request())
 
-    assert report.flaky[0].signatures == ()
+    assert report.ranking.flaky[0].signatures == ()
     assert not [call for call in actions.calls if call.startswith("log")]
 
 
@@ -107,7 +171,7 @@ def test_repository_errors_are_reported_and_skipped(cache: ScanCache) -> None:
     report = service(actions, cache).scan(request())
 
     assert report.complete
-    assert len(report.flaky) == 1
+    assert len(report.ranking.flaky) == 1
     assert report.problems == [
         f"{APP}: too many runs per minute; GitHub listed only some.",
         "octo-org/docs: could not list runs: gh: Not Found (HTTP 404)",
@@ -126,11 +190,11 @@ def test_failed_job_and_log_reads_are_retried_next_time(cache: ScanCache) -> Non
     actions.logs[11] = LOG
     third = scanner.scan(request())
 
-    assert first.flaky == []
+    assert first.ranking.flaky == []
     assert "could not read the jobs of run 1" in first.problems[0]
-    assert second.flaky[0].signatures == ()
+    assert second.ranking.flaky[0].signatures == ()
     assert "could not read the log of job 11" in second.problems[0]
-    assert third.flaky[0].signatures
+    assert third.ranking.flaky[0].signatures
 
 
 def test_rate_limit_stops_early_but_keeps_what_was_found(cache: ScanCache) -> None:
@@ -152,7 +216,7 @@ def test_rate_limit_while_reading_logs_counts_the_unread_ones(cache: ScanCache) 
 
     assert not report.complete
     assert report.logs_not_read == 1
-    assert len(report.flaky) == 1
+    assert len(report.ranking.flaky) == 1
 
 
 def test_progress_reports_every_stage(cache: ScanCache) -> None:

@@ -2,7 +2,8 @@
 
 `flakipype scan` reads the GitHub Actions runs of the configured user or
 organisation, finds jobs that failed and passed on the same code, and ranks
-them. It needs a finished `flakipype setup`; the model is not used.
+the ones where that keeps happening. It needs a finished `flakipype setup`;
+the model is not used.
 
 ## Scan
 
@@ -11,14 +12,14 @@ flakipype scan
 ```
 
 While it runs, a progress bar shows the stage: listing repositories, reading
-workflow runs, inspecting failed attempts and reading the logs of flaky jobs.
-Then it prints a ranking, most affected runs first:
+workflow runs, inspecting failed attempts and reading the logs of failed
+jobs. Then it prints a ranking, most affected runs first:
 
 ```text
-╭─ flakipype scan · octo-org on github.com ──────────────────────────────╮
-│ 18 repositories · 1,392 runs · last 30 days (09 Sep – 09 Oct 2026)       │
-│ 5 flaky jobs in 3 workflows                                              │
-╰──────────────────────────────────────────────────────────────────────────╯
+╭─ flakipype scan · octo-org on github.com ─────────────────────────────────────────╮
+│ 18 repositories · 1,396 runs · last 30 days (09 Sep – 09 Oct 2026)                  │
+│ 1 flaky job in 1 workflow · 4 seen once · 5 recurring errors                         │
+╰─────────────────────────────────────────────────────────────────────────────────────╯
   #  Flaky job                                     Runs   Flake rate   Signal
   1  octo-org/app                                  4/509  █░░░  0.8%   ↻ 4 passed on rerun
      CI › test › E2E (Electron under Xvfb)
@@ -33,6 +34,17 @@ Then it prints a ranking, most affected runs first:
   category such as timeout, network or dependencies.
 - **latest failure ↗** is a terminal hyperlink to the job on GitHub.
 
+Below the ranking, up to three more sections:
+
+- **Seen once**: proven events in a single run only. Could be an outage or a
+  fix outside the code followed by a rerun; not counted as flaky.
+- **Fixed**: failed in several runs, then the workflow kept passing. A real
+  error that was fixed; not flaky.
+- **Recurring errors**: the same error in several runs (any branch) without
+  proof. Could be a flaky test nobody reran, or a real bug caught again.
+
+Why these are kept apart: [how flakiness is detected](../explanation/flake-detection.md).
+
 ## Narrow or widen it
 
 ```bash
@@ -40,6 +52,7 @@ flakipype scan --days 7                 # look back 7 days instead of 30
 flakipype scan --repo app --repo docs   # only these repositories
 flakipype scan --owner other-org        # another user or organisation
 flakipype scan --max-logs 200           # read more logs this time
+flakipype scan --min-runs 3             # need 3 runs before calling a job flaky
 ```
 
 Defaults come from the `[scan]` section of the
@@ -49,7 +62,7 @@ Defaults come from the `[scan]` section of the
 
 ```bash
 flakipype scan --json > flaky.json
-jq '.flaky[] | select(.flake_rate > 0.05) | .repository + " " + .job' flaky.json
+jq '.jobs[] | select(.status == "flaky") | .repository + " " + .job' flaky.json
 ```
 
 The JSON goes to standard output, progress to standard error. The format is

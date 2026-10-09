@@ -6,8 +6,16 @@ from typing import Protocol
 
 from flakipype.flaky.detection import FlakyFailure, attempts_to_inspect, find_flaky_failures
 from flakipype.flaky.model import AttemptRef, JobResult, WorkflowRun
-from flakipype.flaky.scoring import FlakyJob, rank_flaky_jobs
+from flakipype.flaky.recurring import (
+    FailedJob,
+    RecurringError,
+    find_recurring_errors,
+    latest_failed_attempts,
+    unproven_failures,
+)
+from flakipype.flaky.scoring import rank_flaky_jobs
 from flakipype.flaky.signature import ErrorSignature, signature_from_log
+from flakipype.flaky.verdict import FlakyRanking, classify
 from flakipype.github.actions import (
     ApiRateLimitError,
     GitHubApiError,
@@ -35,6 +43,7 @@ class ScanRequest:
     host: str
     window_days: int
     max_log_downloads: int
+    min_flaky_runs: int = 2
     repositories: tuple[str, ...] = ()
 
 
@@ -45,7 +54,8 @@ class ScanReport:
     window: TimeWindow
     repositories: int
     runs: int
-    flaky: list[FlakyJob]
+    ranking: FlakyRanking
+    recurring: list[RecurringError]
     problems: list[str]
     logs_not_read: int
     complete: bool
@@ -121,14 +131,18 @@ class ScanService:
         except _RateLimitReachedError as error:
             complete = False
             scan.problems.append(f"Stopped early: {error}. Run the scan again later.")
-        failures = find_flaky_failures(scan.runs, scan.jobs)
+        proven = find_flaky_failures(scan.runs, scan.jobs)
+        unproven = unproven_failures(scan.runs, scan.jobs, proven)
         return ScanReport(
             owner=request.owner,
             host=request.host,
             window=window,
             repositories=len(repositories),
             runs=len(scan.runs),
-            flaky=rank_flaky_jobs(scan.runs, failures, scan.signatures),
+            ranking=classify(
+                rank_flaky_jobs(scan.runs, proven, scan.signatures), request.min_flaky_runs
+            ),
+            recurring=find_recurring_errors(unproven, scan.signatures, request.min_flaky_runs),
             problems=scan.problems,
             logs_not_read=scan.logs_not_read,
             complete=complete,
@@ -149,7 +163,9 @@ class ScanService:
         scan.on_progress(Progress(Stage.RUNS, total, total))
 
     def _read_jobs(self, scan: _Scan) -> None:
-        refs = list(attempts_to_inspect(scan.runs))
+        # Attempts that can be flaky, plus the last attempt of every failed run (recurring errors).
+        candidates = [*attempts_to_inspect(scan.runs), *latest_failed_attempts(scan.runs)]
+        refs = list(dict.fromkeys(candidates))
         scan.jobs = self._cache.cached_jobs(scan.host, refs)
         missing = [ref for ref in refs if ref not in scan.jobs]
         repository_of = {run.run_id: run.repository for run in scan.runs}
@@ -167,8 +183,14 @@ class ScanService:
         scan.on_progress(Progress(Stage.JOBS, len(missing), len(missing)))
 
     def _read_logs(self, scan: _Scan) -> None:
-        failures = sorted(find_flaky_failures(scan.runs, scan.jobs), key=_seen_at, reverse=True)
-        repository_of = {failure.job.job_id: failure.run.repository for failure in failures}
+        proven = find_flaky_failures(scan.runs, scan.jobs)
+        unproven = unproven_failures(scan.runs, scan.jobs, proven)
+        # Proven flaky failures first, then the other failed jobs; newest first within each.
+        ordered: list[FlakyFailure | FailedJob] = [
+            *sorted(proven, key=lambda f: _seen_at(f.run, f.job), reverse=True),
+            *sorted(unproven, key=lambda f: _seen_at(f.run, f.job), reverse=True),
+        ]
+        repository_of = {failure.job.job_id: failure.run.repository for failure in ordered}
         results = self._cache.log_results(scan.host, repository_of)
         scan.signatures = {job_id: r.signature for job_id, r in results.items() if r.signature}
         missing = [job_id for job_id in repository_of if job_id not in results]
@@ -191,8 +213,8 @@ class ScanService:
         return _log_result(self._actions.job_log(repository, job_id))
 
 
-def _seen_at(failure: FlakyFailure) -> datetime:
-    return failure.job.completed_at or failure.run.created_at
+def _seen_at(run: WorkflowRun, job: JobResult) -> datetime:
+    return job.completed_at or run.created_at
 
 
 def _guarded[Result](
