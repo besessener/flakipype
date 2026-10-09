@@ -26,6 +26,7 @@ class ScanOptions:
     owner: str | None
     days: int | None
     max_logs: int | None
+    min_runs: int | None
     repositories: tuple[str, ...]
 
     def request(self, settings: Settings) -> ScanRequest:
@@ -40,6 +41,7 @@ class ScanOptions:
             max_log_downloads=(
                 settings.scan.max_log_downloads if self.max_logs is None else self.max_logs
             ),
+            min_flaky_runs=self.min_runs or settings.scan.min_flaky_runs,
             repositories=self.repositories,
         )
 
@@ -96,12 +98,22 @@ def scan(  # noqa: PLR0913 - Typer maps every command line option to one paramet
     max_logs: Annotated[
         int | None, typer.Option(min=0, max=1000, help="Most logs to download (default: config).")
     ] = None,
+    min_runs: Annotated[
+        int | None,
+        typer.Option(min=1, max=100, help="Runs needed to call a job flaky (default: config)."),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the result as JSON.")] = False,
 ) -> None:
     """Find flaky workflows, jobs and steps in the owner's GitHub Actions runs."""
     output = Console(highlight=False)
     errors = Console(stderr=True, highlight=False)
-    options = ScanOptions(owner=owner, days=days, max_logs=max_logs, repositories=tuple(repo or ()))
+    options = ScanOptions(
+        owner=owner,
+        days=days,
+        max_logs=max_logs,
+        min_runs=min_runs,
+        repositories=tuple(repo or ()),
+    )
     try:
         with (
             wiring.open_scan() as (service, settings),

@@ -41,6 +41,7 @@ Outside poe:
 | `--repo NAME` | Only this repository (`repo` or `owner/repo`); repeat for more |
 | `--owner NAME` | Another user or organisation (default `github.owner`) |
 | `--max-logs N` | Most job logs to read this time, 0–1000 (default `scan.max_log_downloads`) |
+| `--min-runs N` | Runs needed to call a job flaky, 1–100 (default `scan.min_flaky_runs`) |
 | `--json` | Print the [JSON result](scan-json.md) on stdout instead of the table |
 
 Exit codes: 0 finished, 1 stopped early or GitHub unreadable, 2 not set up.

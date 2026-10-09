@@ -7,7 +7,7 @@ class Stage(StrEnum):
     REPOSITORIES = "Listing repositories"
     RUNS = "Reading workflow runs"
     JOBS = "Inspecting failed attempts"
-    LOGS = "Reading logs of flaky jobs"
+    LOGS = "Reading logs of failed jobs"
 
 
 @dataclass(frozen=True)

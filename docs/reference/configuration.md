@@ -25,6 +25,7 @@ owner = "octo-org"
 [scan]
 window_days = 30
 max_log_downloads = 50
+min_flaky_runs = 2
 ```
 
 | Key | Default | Rules |
@@ -35,6 +36,7 @@ max_log_downloads = 50
 | `github.owner` | — (required) | GitHub user or organisation name |
 | `scan.window_days` | `30` | 1–400 days to look back (GitHub keeps run history for 400 days, logs usually 90) |
 | `scan.max_log_downloads` | `50` | 0–1000; hard limit of job logs read per scan. Read logs are cached, so later scans continue |
+| `scan.min_flaky_runs` | `2` | 1–100; runs with proven flaky events before a job counts as flaky (and before an error counts as recurring). With `1` every single event counts |
 
 Unknown keys are an error, so a typo never goes unnoticed. `flakipype setup`
 does not edit `[scan]` and keeps whatever the file has.
