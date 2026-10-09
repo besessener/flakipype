@@ -1,0 +1,150 @@
+[project]
+name = "flakipype"
+version = "0.1.0.dev0"
+description = "Agentic CLI that finds, explains and fixes flaky GitHub Actions pipelines."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Matthias Eggert" }]
+requires-python = ">=3.12"
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "typer>=0.27.3",
+]
+
+[project.scripts]
+flakipype = "flakipype.cli:app"
+
+[project.urls]
+Repository = "https://github.com/besessener/flakipype"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "deptry>=0.25.1",
+    "import-linter>=2.15",
+    "mypy>=2.4.0",
+    "poethepoet>=0.48.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.10",
+    "vulture>=2.16",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+# --- Ruff -------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "D",      # docstrings: names carry intent; comments only for non-obvious constraints
+  "ANN",    # annotations are enforced by mypy --strict
+  "COM812", # conflicts with the formatter
+  "ISC001", # conflicts with the formatter
+  "CPY",    # no copyright header per file
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "S101",    # assert is how pytest works
+  "PLR2004", # literal values are the point of a test
+  "INP001",  # tests are not a package
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 4
+max-positional-args = 3
+
+# --- mypy -------------------------------------------------------------------
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src", "tests"]
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+# --- pytest / coverage ------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["flakipype"]
+
+[tool.coverage.report]
+# Only ever raised, never lowered (see CLAUDE.md).
+fail_under = 90
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:"]
+
+# --- Architecture boundaries (import-linter) --------------------------------
+
+[tool.importlinter]
+root_package = "flakipype"
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture"
+type = "layers"
+layers = [
+  "flakipype.cli",
+  "flakipype.tui",
+  "flakipype.agent",
+  "flakipype.llm | flakipype.github | flakipype.store",
+  "flakipype.flaky | flakipype.config",
+]
+
+# --- Dead code and dependency hygiene ---------------------------------------
+
+[tool.deptry]
+known_first_party = ["flakipype"]
+
+[tool.vulture]
+paths = ["src", "tests"]
+min_confidence = 80
+
+# --- Task runner (uv run poe <task>) ----------------------------------------
+
+[tool.poe.tasks]
+format = { cmd = "ruff format", help = "Format all files" }
+format-check = { cmd = "ruff format --check", help = "Check formatting" }
+lint = { cmd = "ruff check", help = "Lint (ruff, all rules)" }
+typecheck = { cmd = "mypy", help = "Type check (mypy --strict)" }
+arch = { cmd = "lint-imports", help = "Architecture boundaries (import-linter)" }
+deps = { cmd = "deptry src", help = "Unused, missing and misplaced dependencies" }
+deadcode = { cmd = "vulture", help = "Dead code" }
+test = { cmd = "pytest", help = "Run the tests" }
+test-cov = { cmd = "pytest --cov --cov-report=term-missing --cov-report=xml", help = "Tests with coverage thresholds" }
+check = { sequence = [
+  "format-check",
+  "lint",
+  "typecheck",
+  "arch",
+  "deps",
+  "deadcode",
+  "test-cov",
+], help = "All local quality gates (definition of done)" }
