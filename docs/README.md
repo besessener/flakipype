@@ -25,5 +25,6 @@ Organised by [Diátaxis](https://diataxis.fr/).
 
 - [Architecture](explanation/architecture.md) – packages, layers and data flow.
 - [How flakiness is detected](explanation/flake-detection.md) – signals, rates and error signatures.
+- [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts and budgets (M3 design).
 - [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
 - [Roadmap](explanation/roadmap.md) – scope and milestones.
