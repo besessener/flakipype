@@ -1,14 +1,21 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel
+import pytest
 
 from flakipype.agent.budget import Limits
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, ignore_steps, workspace_tools
 from flakipype.agent.prompts import CHAT_SYSTEM
-from flakipype.agent.tools import Mode, PolicyGate, RiskLevel, Tool, deny_all
+from flakipype.agent.tools import (
+    ActionRequest,
+    Mode,
+    PolicyGate,
+    PreparedAction,
+    ToolDeclinedError,
+    deny_all,
+)
 
 from support.fake_anthropic import ScriptedModel, call, message, text
 
@@ -35,9 +42,32 @@ class FakeWorkspace:
         self.calls.append(("verdict", number))
         return "verdict"
 
+    def rerun_failed(self, finding: int, run_id: int | None) -> PreparedAction:
+        return self._action("rerun_failed", finding, run_id)
 
-class Nothing(BaseModel):
-    pass
+    def rerun_run(self, finding: int, run_id: int | None) -> PreparedAction:
+        return self._action("rerun_run", finding, run_id)
+
+    def dispatch(self, finding: int, ref: str | None, repeats: int) -> PreparedAction:
+        return self._action("dispatch", finding, ref, repeats)
+
+    def cancel(self, run: int) -> PreparedAction:
+        return self._action("cancel", run)
+
+    def watched_runs(self) -> str:
+        self.calls.append(("watched_runs",))
+        return "R1 running"
+
+    def _action(self, *call: object) -> PreparedAction:
+        def run() -> str:
+            self.calls.append(call)
+            return f"{call[0]} started"
+
+        return PreparedAction(
+            ActionRequest(f"{call[0]}?", ()),
+            run=run,
+            declined=lambda: self.calls.append(("declined", *call)),
+        )
 
 
 def chat_agent(
@@ -45,7 +75,7 @@ def chat_agent(
     workspace: FakeWorkspace,
     *,
     limits: Limits | None = None,
-    extra: list[Tool] | None = None,
+    confirm: Callable[[ActionRequest], bool] = deny_all,
     clock: Callable[[], float] = lambda: 0.0,
 ) -> ChatAgent:
     return ChatAgent(
@@ -53,8 +83,8 @@ def chat_agent(
         settings=ChatSettings(
             model=ModelSettings(model="m-1"), limits=limits or Limits(), turn_tokens=1_000_000
         ),
-        tools=[*workspace_tools(workspace), *(extra or [])],
-        gate=PolicyGate(Mode.ASK, deny_all),
+        tools=workspace_tools(workspace),
+        gate=PolicyGate(Mode.ASK, confirm),
         masker=Masker.with_secrets([SECRET]),
         clock=clock,
     )
@@ -183,31 +213,96 @@ def test_repeating_the_same_call_ends_the_turn() -> None:
     assert workspace.calls == [("findings",)]
 
 
-def test_unknown_gated_and_invalid_calls_are_errors_for_the_model() -> None:
-    writes: list[str] = []
-
-    def open_pr(_: Nothing) -> str:
-        writes.append("pr")
-        return "opened"
-
-    write = Tool("open_pr", "Open a PR.", RiskLevel.WRITE, Nothing, open_pr)
+def test_unknown_and_invalid_calls_are_errors_for_the_model() -> None:
     model = ScriptedModel(
         [
-            message(
-                call("t1", "push", {}),
-                call("t2", "open_pr", {}),
-                call("t3", "investigate", {"findings": []}),
-            ),
+            message(call("t1", "push", {}), call("t3", "investigate", {"findings": []})),
             message(text("I cannot do that.")),
         ]
     )
 
-    reply = chat_agent(model, FakeWorkspace(), extra=[write]).ask("Fix it")
+    reply = chat_agent(model, FakeWorkspace()).ask("Fix it")
 
     results = model.tool_results(1)
     assert reply.completed
     assert results["t1"]["content"] == "push is not available."
-    assert results["t2"]["content"] == "open_pr is not available."
     assert results["t3"]["is_error"] is True
     assert "Invalid input for investigate" in results["t3"]["content"]
-    assert writes == []
+
+
+def test_confirmed_actions_run_with_the_requests_the_gate_saw() -> None:
+    model = ScriptedModel(
+        [
+            message(
+                call("t1", "rerun_failed", {"finding": 1}),
+                call("t2", "rerun_run", {"finding": 1, "run_id": 7}),
+                call("t3", "dispatch", {"finding": 2, "ref": "v1", "repeats": 3}),
+                call("t4", "cancel", {"run": 1}),
+                call("t5", "watched_runs", {}),
+            ),
+            message(text("Started.")),
+        ]
+    )
+    workspace = FakeWorkspace()
+    asked: list[str] = []
+
+    def confirm(request: ActionRequest) -> bool:
+        asked.append(request.title)
+        return True
+
+    chat_agent(model, workspace, confirm=confirm).ask("Rerun it")
+
+    assert asked == ["rerun_failed?", "rerun_run?", "dispatch?", "cancel?"]
+    assert workspace.calls == [
+        ("rerun_failed", 1, None),
+        ("rerun_run", 1, 7),
+        ("dispatch", 2, "v1", 3),
+        ("cancel", 1),
+        ("watched_runs",),
+    ]
+    assert "dispatch started" in model.tool_results(1)["t3"]["content"]
+
+
+def test_after_a_decline_no_other_action_is_asked_for_in_the_turn() -> None:
+    model = ScriptedModel(
+        [
+            message(call("t1", "rerun_failed", {"finding": 1})),
+            message(call("t2", "dispatch", {"finding": 1}), call("t3", "list_findings", {})),
+            message(text("Understood.")),
+            message(call("t4", "cancel", {"run": 1})),
+            message(text("Asked again.")),
+        ]
+    )
+    workspace = FakeWorkspace()
+    agent = chat_agent(model, workspace)
+
+    agent.ask("Rerun it")
+    first = model.tool_results(1)["t1"]
+    second = model.tool_results(2)
+
+    assert first == {
+        "type": "tool_result",
+        "tool_use_id": "t1",
+        "content": "rerun_failed: the user declined. Do not ask for it again in this turn.",
+        "is_error": True,
+    }
+    assert second["t2"]["content"] == (
+        "The user declined an action in this turn; do not ask for another one."
+    )
+    assert "is_error" not in second["t3"]
+    agent.ask("Cancel R1 then")
+    assert workspace.calls == [
+        ("declined", "rerun_failed", 1, None),
+        ("findings",),
+        ("declined", "cancel", 1),
+    ]
+
+
+def test_commands_pass_the_same_gate() -> None:
+    workspace = FakeWorkspace()
+    agent = chat_agent(ScriptedModel([]), workspace)
+
+    assert agent.run_tool("watched_runs", {}) == "R1 running"
+    with pytest.raises(ToolDeclinedError):
+        agent.run_tool("cancel", {"run": 1})
+    assert workspace.calls == [("watched_runs",), ("declined", "cancel", 1)]

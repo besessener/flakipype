@@ -138,3 +138,69 @@ class JobsPage(BaseModel):
 
     total_count: int
     jobs: list[JobPayload]
+
+
+class RunStatePayload(BaseModel):
+    """A run as `GET …/actions/runs/{id}` returns it, for watching."""
+
+    model_config = _IGNORE_EXTRA
+
+    id: int
+    name: str | None = None
+    path: str
+    status: str
+    conclusion: str | None = None
+    run_attempt: int = 1
+    head_sha: str
+    head_branch: str | None = None
+    html_url: str
+
+
+class JobStatePayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    name: str
+    status: str
+    conclusion: str | None = None
+
+
+class JobStatesPage(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    jobs: list[JobStatePayload]
+
+
+class DispatchPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    workflow_run_id: int
+
+
+class ShaPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    sha: str
+
+
+class BranchPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    commit: ShaPayload
+
+
+class GitRefPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    object: ShaPayload
+
+
+class RepositoryDetailsPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    default_branch: str
+
+
+class LoginPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    login: str

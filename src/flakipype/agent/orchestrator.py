@@ -13,7 +13,14 @@ from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Lim
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.prompts import CHAT_SYSTEM, data_block
-from flakipype.agent.tools import PolicyGate, RiskLevel, Tool, ToolError
+from flakipype.agent.tools import (
+    PolicyGate,
+    PreparedAction,
+    RiskLevel,
+    Tool,
+    ToolDeclinedError,
+    ToolError,
+)
 
 type StepListener = Callable[[str], None]
 
@@ -32,6 +39,16 @@ class Workspace(Protocol):
     def investigate(self, numbers: tuple[int, ...], *, fresh: bool) -> str: ...
 
     def verdict(self, number: int) -> str: ...
+
+    def rerun_failed(self, finding: int, run_id: int | None) -> PreparedAction: ...
+
+    def rerun_run(self, finding: int, run_id: int | None) -> PreparedAction: ...
+
+    def dispatch(self, finding: int, ref: str | None, repeats: int) -> PreparedAction: ...
+
+    def cancel(self, run: int) -> PreparedAction: ...
+
+    def watched_runs(self) -> str: ...
 
 
 class ScanInput(BaseModel):
@@ -52,8 +69,23 @@ class VerdictInput(BaseModel):
     finding: int = Field(ge=1)
 
 
+class RerunInput(BaseModel):
+    finding: int = Field(ge=1)
+    run_id: int | None = Field(default=None, description="default: the newest failed run")
+
+
+class DispatchInput(BaseModel):
+    finding: int = Field(ge=1)
+    ref: str | None = Field(default=None, max_length=255, description="default: default branch")
+    repeats: int = Field(default=1, ge=1, le=10)
+
+
+class CancelInput(BaseModel):
+    run: int = Field(ge=1, description="the R number of a started run")
+
+
 def workspace_tools(workspace: Workspace) -> list[Tool]:
-    read = RiskLevel.READ
+    read, write = RiskLevel.READ, RiskLevel.WRITE
     return [
         Tool("scan", "Scan the workflow runs and number the findings.", read, ScanInput,
              lambda given: workspace.scan(given.days, tuple(given.repositories))),
@@ -64,6 +96,16 @@ def workspace_tools(workspace: Workspace) -> list[Tool]:
              lambda given: workspace.investigate(tuple(given.findings), fresh=given.fresh)),
         Tool("show_verdict", "A stored verdict with its evidence.", read, VerdictInput,
              lambda given: workspace.verdict(given.finding)),
+        Tool("rerun_failed", "Rerun the failed jobs of a finding's run.", write, RerunInput,
+             lambda given: workspace.rerun_failed(given.finding, given.run_id)),
+        Tool("rerun_run", "Rerun all jobs of a finding's run.", write, RerunInput,
+             lambda given: workspace.rerun_run(given.finding, given.run_id)),
+        Tool("dispatch", "Start a finding's workflow on a branch or tag.", write, DispatchInput,
+             lambda given: workspace.dispatch(given.finding, given.ref, given.repeats)),
+        Tool("cancel", "Cancel a run started in this session.", write, CancelInput,
+             lambda given: workspace.cancel(given.run)),
+        Tool("watched_runs", "Runs started in this session and their state.", read, NoInput,
+             lambda _: workspace.watched_runs()),
     ]  # fmt: skip
 
 
@@ -101,6 +143,7 @@ class ChatAgent:
         self._clock = clock
         self._messages: list[dict[str, Any]] = []
         self._tool_seconds = 0.0
+        self._declined = False
 
     @property
     def history(self) -> list[dict[str, Any]]:
@@ -109,8 +152,13 @@ class ChatAgent:
     def restore(self, history: list[dict[str, Any]]) -> None:
         self._messages = list(history)
 
+    def run_tool(self, name: str, arguments: dict[str, Any]) -> str:
+        """A tool asked for by the user directly; it passes the same gate as the model's calls."""
+        return self._tools[name].invoke(arguments, self._gate)
+
     def ask(self, question: str, on_step: StepListener = ignore_steps) -> Reply:
         self._tool_seconds = 0.0
+        self._declined = False
         budget = InvestigationBudget(
             self._settings.limits, RunBudget(self._settings.turn_tokens), self._model_clock
         )
@@ -165,12 +213,18 @@ class ChatAgent:
     def _run(self, use: ToolUseBlock, on_step: StepListener) -> dict[str, Any]:
         tool = self._tools.get(use.name)
         result: dict[str, Any] = {"type": "tool_result", "tool_use_id": use.id}
-        if tool is None or not self._gate.permits(tool):
+        if tool is None:
             return {**result, "content": f"{use.name} is not available.", "is_error": True}
+        if self._declined and tool.risk is not RiskLevel.READ:
+            declined = "The user declined an action in this turn; do not ask for another one."
+            return {**result, "content": declined, "is_error": True}
         on_step(use.name)
         started = self._clock()
         try:
-            text = tool.invoke(dict(use.input))
+            text = tool.invoke(dict(use.input), self._gate)
+        except ToolDeclinedError as error:
+            self._declined = True
+            return {**result, "content": str(error), "is_error": True}
         except ToolError as error:
             return {**result, "content": self._masker.mask(str(error)), "is_error": True}
         finally:

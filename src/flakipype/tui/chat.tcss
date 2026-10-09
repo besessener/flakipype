@@ -54,7 +54,7 @@
     border-left: solid $primary;
 }
 
-#sidebar-title {
+#sidebar-title, #runs-title {
     padding: 0 1;
     text-style: bold;
     color: $accent;
@@ -65,5 +65,15 @@
 }
 
 #findings > ListItem {
+    padding: 0 1;
+}
+
+#runs-title {
+    border-top: solid $primary;
+}
+
+#runs {
+    height: auto;
+    max-height: 50%;
     padding: 0 1;
 }

@@ -89,6 +89,16 @@ class AgentSettings(BaseModel):
     excerpt_lines: int = Field(default=120, ge=20, le=400)
 
 
+class ActionSettings(BaseModel):
+    """Hard limits for reruns and dispatches started from the chat."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_per_session: int = Field(default=10, ge=1, le=100)
+    max_watched: int = Field(default=10, ge=1, le=50)
+    watch_hours: int = Field(default=6, ge=1, le=24)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -96,6 +106,7 @@ class Settings(BaseModel):
     github: GitHubSettings = GitHubSettings()
     scan: ScanSettings = ScanSettings()
     agent: AgentSettings = AgentSettings()
+    actions: ActionSettings = ActionSettings()
 
 
 def load_settings(path: Path) -> Settings:

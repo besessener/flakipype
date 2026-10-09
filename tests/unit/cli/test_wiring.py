@@ -5,6 +5,7 @@ import keyring
 import pytest
 from keyring.backends import fail
 
+from flakipype.agent.tools import ActionRequest
 from flakipype.cli.wiring import (
     NotReadyError,
     build_setup_service,
@@ -123,13 +124,19 @@ def test_investigation_is_wired_with_agent_settings(
 def test_chat_is_wired_with_scan_settings_and_sessions(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config = '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n\n[scan]\nwindow_days = 9\n'
+    config = (
+        '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n\n[scan]\nwindow_days = 9\n\n'
+        "[actions]\nmax_per_session = 3\n"
+    )
     write_config(isolated_home, config)
     store_api_key(isolated_home)
     binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
     monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
 
-    with open_chat() as (chat, _):
+    with open_chat() as (chat, settings):
         assert chat.workspace.request.owner == "octo-org"
         assert chat.workspace.request.window_days == 9
+        assert settings.actions.max_per_session == 3
         assert chat.handle("/sessions")[1].text == "No saved sessions yet."
+        assert chat.handle("/actions")[1].text == "No actions requested in this session."
+        assert not chat.confirmer(ActionRequest("Rerun?", ()))

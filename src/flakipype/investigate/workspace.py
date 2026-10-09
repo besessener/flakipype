@@ -3,6 +3,8 @@
 from collections.abc import Callable
 from dataclasses import replace
 
+from flakipype.actions.service import ActionService
+from flakipype.agent.tools import PreparedAction, ToolError
 from flakipype.flaky.findings import Finding
 from flakipype.investigate.chat_text import findings_text, result_text, scan_summary
 from flakipype.investigate.service import (
@@ -26,9 +28,12 @@ def ignore_activity(activity: str) -> None:
 class ChatWorkspace:
     """Implements the chat agent's Workspace; scans on demand with the last scan's options."""
 
-    def __init__(self, service: InvestigationService, request: ScanRequest) -> None:
+    def __init__(
+        self, service: InvestigationService, request: ScanRequest, *, actions: ActionService
+    ) -> None:
         self._service = service
         self.request = request
+        self.actions = actions
         self.report: ScanReport | None = None
         self.results: dict[int, InvestigationResult] = {}
         self.tokens = 0
@@ -65,6 +70,23 @@ class ChatWorkspace:
             return result_text(self.results[number])
         return self.investigate((number,), fresh=False)
 
+    def rerun_failed(self, finding: int, run_id: int | None) -> PreparedAction:
+        report = self._report()
+        return self.actions.rerun_failed(_finding(report, finding), report.evidence, run_id=run_id)
+
+    def rerun_run(self, finding: int, run_id: int | None) -> PreparedAction:
+        report = self._report()
+        return self.actions.rerun_run(_finding(report, finding), report.evidence, run_id=run_id)
+
+    def dispatch(self, finding: int, ref: str | None, repeats: int) -> PreparedAction:
+        return self.actions.dispatch(_finding(self._report(), finding), ref, repeats)
+
+    def cancel(self, run: int) -> PreparedAction:
+        return self.actions.cancel(run)
+
+    def watched_runs(self) -> str:
+        return self.actions.watched_runs()
+
     def _report(self) -> ScanReport:
         return self.report or self._run_scan()
 
@@ -84,3 +106,11 @@ class ChatWorkspace:
             self.on_activity(f"Investigating #{event.finding.number} {event.finding.key.job}")
         else:
             self.on_activity(f"Investigated {event.done}/{event.total}")
+
+
+def _finding(report: ScanReport, number: int) -> Finding:
+    for finding in report.findings:
+        if finding.number == number:
+            return finding
+    message = f"#{number}: no such finding in the current scan."
+    raise ToolError(message)

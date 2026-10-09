@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from flakipype.agent.finding_tools import FindingTools
-from flakipype.agent.tools import RiskLevel, ToolError
+from flakipype.agent.tools import Mode, PolicyGate, RiskLevel, ToolError, deny_all
 from flakipype.flaky.signature import Category, ErrorSignature
 from flakipype.github.actions import GitHubApiError
 from flakipype.github.contents import ChangedFile, Comparison
@@ -17,7 +17,7 @@ def tools(logs: FakeLogs | None = None, contents: FakeContents | None = None) ->
 
 def run(given: FindingTools, name: str, **arguments: Any) -> str:
     (tool,) = [tool for tool in given.tools() if tool.name == name]
-    return tool.invoke(arguments)
+    return tool.invoke(arguments, PolicyGate(Mode.ASK, deny_all))
 
 
 def test_every_tool_only_reads() -> None:

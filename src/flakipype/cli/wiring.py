@@ -14,12 +14,13 @@ from pathlib import Path
 import httpx2
 import keyring
 
+from flakipype.actions.service import ActionService
 from flakipype.agent.budget import Limits
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, workspace_tools
 from flakipype.agent.pipeline import AgentConfig, investigate_finding
-from flakipype.agent.tools import Mode, PolicyGate, deny_all
+from flakipype.agent.tools import Confirmer, Mode, PolicyGate
 from flakipype.config.paths import AppPaths, app_paths
 from flakipype.config.secrets import LLM_API_KEY, default_secret_store
 from flakipype.config.settings import Settings, SettingsError, load_settings
@@ -28,6 +29,7 @@ from flakipype.github.binary import GhInstaller
 from flakipype.github.contents import ContentsClient
 from flakipype.github.gh import GhCli
 from flakipype.github.provider import ManagedGh
+from flakipype.github.runs import RunControl
 from flakipype.investigate.chat import ChatService
 from flakipype.investigate.service import InvestigationService
 from flakipype.investigate.workspace import ChatWorkspace
@@ -133,6 +135,7 @@ class _Agentic:
     config: AgentConfig
     service: InvestigationService
     cache: ScanCache
+    gh: GhCli
 
 
 @contextmanager
@@ -157,7 +160,7 @@ def _open_agentic() -> Iterator[_Agentic]:
             run_tokens=settings.agent.max_tokens_per_run,
             parallel=settings.agent.parallel,
         )
-        yield _Agentic(settings, config, service, cache)
+        yield _Agentic(settings, config, service, cache, gh)
 
 
 @contextmanager
@@ -177,7 +180,17 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
             max_log_downloads=settings.scan.max_log_downloads,
             min_flaky_runs=settings.scan.min_flaky_runs,
         )
-        workspace = ChatWorkspace(agentic.service, request)
+        now = partial(datetime.now, UTC)
+        actions = ActionService(
+            runs=RunControl(agentic.gh),
+            files=ContentsClient(agentic.gh),
+            audit=agentic.cache.audit,
+            settings=settings.actions,
+            owner=settings.github.owner,
+            now=now,
+        )
+        workspace = ChatWorkspace(agentic.service, request, actions=actions)
+        confirmer = Confirmer()
         agent = ChatAgent(
             client=agentic.config.client,
             settings=ChatSettings(
@@ -186,8 +199,7 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
                 turn_tokens=settings.agent.max_tokens_per_investigation,
             ),
             tools=workspace_tools(workspace),
-            # The chat is "ask" mode; in M3 all its tools only read.
-            gate=PolicyGate(Mode.ASK, deny_all),
+            gate=PolicyGate(Mode.ASK, confirmer),
             masker=agentic.config.masker,
             clock=time.monotonic,
         )
@@ -195,6 +207,7 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
             workspace=workspace,
             agent=agent,
             sessions=agentic.cache.sessions,
-            now=lambda: datetime.now(UTC),
+            confirmer=confirmer,
+            now=now,
         )
         yield chat, settings

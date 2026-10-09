@@ -16,9 +16,9 @@ review it.
 - **Headless** commands and a systemd timer for unattended scans.
 - **Safe by design**: never touches the default branch; unattended runs open draft PRs only.
 
-> **Status:** pre-alpha. Setup, scanning, agent investigations and the chat
-> work; reruns and fixes land milestone by milestone, see the
-> [roadmap](docs/explanation/roadmap.md).
+> **Status:** pre-alpha. Setup, scanning, agent investigations, the chat and
+> confirmed reruns and dispatches work; fixes land milestone by milestone, see
+> the [roadmap](docs/explanation/roadmap.md).
 
 ## Installation
 
@@ -30,7 +30,7 @@ flakipype setup     # model endpoint, gh (downloaded and verified if missing), G
 flakipype doctor    # check everything
 flakipype scan          # find and rank flaky jobs (--json for scripts)
 flakipype investigate   # let the agent explain them, with evidence
-flakipype               # the chat: ask, scan and investigate interactively
+flakipype               # the chat: ask, scan, investigate and rerun interactively
 ```
 
 Step by step: [getting started](docs/tutorials/getting-started.md).

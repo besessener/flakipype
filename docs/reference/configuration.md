@@ -7,7 +7,7 @@
 | `$XDG_CONFIG_HOME/flakipype/config.toml` (default `~/.config/flakipype/config.toml`) | Settings below; never contains secrets |
 | `$XDG_CONFIG_HOME/flakipype/secrets.json` | Only on machines without a system keyring; mode `0600` |
 | `$XDG_DATA_HOME/flakipype/bin/gh` (default `~/.local/share/flakipype/bin/gh`) | `gh` downloaded by flakipype |
-| `$XDG_DATA_HOME/flakipype/cache.sqlite3` | Scan cache (jobs of finished attempts, log signatures, verdicts) and chat sessions; deleting it also deletes the sessions |
+| `$XDG_DATA_HOME/flakipype/cache.sqlite3` | Scan cache (jobs of finished attempts, log signatures, verdicts), chat sessions and the action audit log; deleting it also deletes the sessions and the log |
 
 Relative `XDG_*` values are ignored, as the XDG specification requires.
 
@@ -37,6 +37,11 @@ max_output_tokens = 16000
 thinking = "adaptive"
 thinking_budget = 8000
 excerpt_lines = 120
+
+[actions]
+max_per_session = 10
+max_watched = 10
+watch_hours = 6
 ```
 
 | Key | Default | Rules |
@@ -48,7 +53,6 @@ excerpt_lines = 120
 | `scan.window_days` | `30` | 1–400 days to look back (GitHub keeps run history for 400 days, logs usually 90) |
 | `scan.max_log_downloads` | `50` | 0–1000; hard limit of job logs read per scan. Read logs are cached, so later scans continue |
 | `scan.min_flaky_runs` | `2` | 1–100; runs with proven flaky events before a job counts as flaky (and before an error counts as recurring). With `1` every single event counts |
-
 | `agent.max_rounds` | `12` | 1–50 model calls per investigation |
 | `agent.max_tokens_per_investigation` | `200000` | 10k–2M tokens (input, output, cache, thinking) per investigation |
 | `agent.max_seconds_per_investigation` | `300` | 30–3600 |
@@ -58,9 +62,12 @@ excerpt_lines = 120
 | `agent.thinking` | `adaptive` | `adaptive`, `enabled` (uses `thinking_budget`) or `off`. Newer models only accept `adaptive`; the others are for older models |
 | `agent.thinking_budget` | `8000` | 1,024–60k; only with `thinking = "enabled"`, must be below `max_output_tokens` |
 | `agent.excerpt_lines` | `120` | 20–400 lines in a log excerpt |
+| `actions.max_per_session` | `10` | 1–100 reruns and dispatches per chat session (each repeat of a dispatch counts); `/new` starts a new count |
+| `actions.max_watched` | `10` | 1–50 started runs watched at the same time |
+| `actions.watch_hours` | `6` | 1–24 hours a started run is polled before the chat stops watching it |
 
 Unknown keys are an error, so a typo never goes unnoticed. `flakipype setup`
-does not edit `[scan]` and `[agent]` and keeps whatever the file has.
+does not edit `[scan]`, `[agent]` and `[actions]` and keeps whatever the file has.
 
 ## Secrets
 

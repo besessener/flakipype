@@ -63,8 +63,9 @@ keyring, or a `0600` file where no keyring exists; the GitHub token stays in
 
 ## Budgets
 
-Each run has hard, configurable limits with safe defaults: reruns (10 per chat
-session), pull requests, tokens and wall-clock time, plus loop detection. Reaching a limit
+Each run has hard, configurable limits with safe defaults: reruns and
+dispatches (10 per chat session, `actions.max_per_session`), runs watched at
+once, pull requests, tokens and wall-clock time, plus loop detection. Reaching a limit
 ends the run with a summary of what was done and what is left — never a
 half-finished state without explanation. No limit is unlimited by default.
 

@@ -1,5 +1,6 @@
 """The chat window: conversation, activity line, input, and the findings sidebar."""
 
+import queue
 from typing import ClassVar
 
 from rich.text import Text
@@ -10,13 +11,19 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Markdown, Static
 
+from flakipype.actions.watch import WatchedRun
+from flakipype.agent.tools import ActionRequest
 from flakipype.investigate.chat import ChatEntry, ChatService, EntryKind, SidebarItem
+from flakipype.tui.confirm import ConfirmScreen
 
 WELCOME = (
     "Welcome to **flakipype**. Start with `/scan`, ask a question, or type `/help`.\n\n"
-    "Everything here only reads: nothing in your repositories changes."
+    "Scans and investigations only read. Reruns and dispatches start only when you confirm "
+    "them, and no code, branch or pull request changes."
 )
 _QUIT = frozenset({"/quit", "/exit"})
+POLL_SECONDS = 10.0
+_STATE_STYLES = {"✓": "green", "✗": "red"}
 
 
 def entry_widget(entry: ChatEntry) -> Widget:
@@ -38,6 +45,17 @@ def sidebar_label(item: SidebarItem) -> Text:
     return text
 
 
+def runs_text(runs: list[WatchedRun]) -> Text:
+    text = Text()
+    for run in runs:
+        if text:
+            text.append("\n")
+        text.append(f"R{run.number} ", style="bold")
+        text.append(f"{run.title}\n  ")
+        text.append(run.state, style=_STATE_STYLES.get(run.state[:1], "dim"))
+    return text
+
+
 class FindingItem(ListItem):
     def __init__(self, item: SidebarItem) -> None:
         super().__init__(Label(sidebar_label(item)))
@@ -53,6 +71,8 @@ class ChatApp(App[None]):
         super().__init__()
         self._service = service
         self.sub_title = subtitle
+        self._polling = False
+        self._answers: queue.SimpleQueue[bool] = queue.SimpleQueue()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -64,6 +84,8 @@ class ChatApp(App[None]):
             with Vertical(id="sidebar"):
                 yield Static("Findings", id="sidebar-title")
                 yield ListView(id="findings")
+                yield Static("Runs", id="runs-title")
+                yield Static("", id="runs")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -74,6 +96,42 @@ class ChatApp(App[None]):
         conversation.mount_all([entry_widget(entry) for entry in self._service.entries])
         self._refresh_sidebar()
         self.query_one("#prompt", Input).focus()
+        self._service.confirmer.ask = self._confirm_from_worker
+        self.set_interval(POLL_SECONDS, self.action_poll_runs)
+
+    def action_poll_runs(self) -> None:
+        """Polls the started runs in the background unless a poll is still going."""
+        if self._polling or all(run.done for run in self._service.watched_runs()):
+            return
+        self._polling = True
+        self._poll_runs()
+
+    @work(thread=True, group="poll")
+    def _poll_runs(self) -> None:
+        notes = self._service.poll()
+        self.call_from_thread(self._show_poll, notes)
+
+    def _show_poll(self, notes: list[ChatEntry]) -> None:
+        self._polling = False
+        conversation = self.query_one("#conversation", VerticalScroll)
+        conversation.mount_all([entry_widget(entry) for entry in notes])
+        conversation.anchor()
+        self._refresh_runs()
+
+    def _confirm_from_worker(self, request: ActionRequest) -> bool:
+        """Called by the gate in the chat's worker thread; waits for the person's answer."""
+
+        def show() -> None:
+            self.push_screen(
+                ConfirmScreen(request), lambda answer: self._answers.put(answer is True)
+            )
+
+        self.call_from_thread(show)
+        return self._answers.get()
+
+    def on_unmount(self) -> None:
+        # A worker waiting for an answer would keep the process from ending.
+        self._answers.put(item=False)
 
     @on(Input.Submitted, "#prompt")
     def submit(self, event: Input.Submitted) -> None:
@@ -126,7 +184,14 @@ class ChatApp(App[None]):
         prompt.disabled = False
         prompt.focus()
 
+    def _refresh_runs(self) -> None:
+        runs = self._service.watched_runs()
+        self.query_one("#runs", Static).update(runs_text(runs))
+        for widget in self.query("#runs-title, #runs"):
+            widget.display = bool(runs)
+
     def _refresh_sidebar(self) -> None:
+        self._refresh_runs()
         findings = self.query_one("#findings", ListView)
         findings.clear()
         items = self._service.sidebar()
