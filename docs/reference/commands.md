@@ -24,9 +24,33 @@ Outside poe:
 
 ## `flakipype` CLI
 
-| Command | Status | Purpose |
+| Command | Purpose |
+| --- | --- |
+| `flakipype --version` | Print the installed version |
+| `flakipype` (no args) | Show help; becomes the chat in M3 |
+| `flakipype setup` | Full-screen setup wizard (needs a terminal) |
+| `flakipype setup --non-interactive [options]` | Headless setup, see below |
+| `flakipype doctor` | Check configuration, model connection, `gh` and the GitHub login |
+
+### `flakipype setup --non-interactive`
+
+| Option | Meaning |
+| --- | --- |
+| `--base-url URL` | Anthropic Messages API base URL |
+| `--model NAME` | Model, or deployment name on Foundry |
+| `--host HOST` | GitHub host |
+| `--owner NAME` | GitHub user or organisation to scan |
+| `--api-key-stdin` | Read the API key from standard input |
+
+Omitted options keep their saved value. Setup downloads `gh` if needed and
+ends with the `doctor` checks.
+
+### Exit codes
+
+| Code | `setup` | `doctor` |
 | --- | --- | --- |
-| `flakipype --version` | available | Print the installed version |
-| `flakipype` (no args) | available | Show help; becomes the chat in M3 |
+| 0 | Saved and all checks passed (warnings allowed) | All checks passed (warnings allowed) |
+| 1 | Saved, but a check failed; or the wizard was cancelled | A check failed |
+| 2 | Invalid input, or no terminal for the wizard | — |
 
 The commands planned per milestone are listed in the [roadmap](../explanation/roadmap.md).

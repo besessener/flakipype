@@ -1,0 +1,14 @@
+HTTP/2.0 200 OK
+Access-Control-Allow-Origin: *
+Cache-Control: private, max-age=60, s-maxage=60
+Content-Type: application/json; charset=utf-8
+Date: Fri, 09 Oct 2026 09:13:53 GMT
+Server: github.com
+X-Accepted-Oauth-Scopes:
+X-Github-Api-Version-Selected: 2022-11-28
+X-Github-Media-Type: github.v3; format=json
+X-Oauth-Scopes: gist, read:org, repo, workflow
+X-Ratelimit-Limit: 5000
+X-Ratelimit-Remaining: 4992
+
+{"login":"octocat","id":583231,"type":"User","name":"The Octocat"}

@@ -18,12 +18,24 @@
 
 Tests never reach real GitHub or a real model.
 
-- **GitHub**: a fake `gh` executable on `PATH` replays recorded JSON
-  (from M2).
-- **LLM**: a local fake server speaking the Anthropic Messages API, including
-  streaming and tool use, with scripted turns per test (from M3).
-- **TUI**: Textual Pilot tests drive the app; new views get an SVG snapshot
-  (from M1).
+- **GitHub**: `tests/fakes/gh.py` stands in for `gh`. Each test records the
+  expected calls with the `fake_gh` fixture (`tests/conftest.py`,
+  `tests/support/fake_gh.py`); the fake replays recorded output from
+  `tests/fixtures/gh/` and logs every call (arguments, stdin, `GH_HOST`) for
+  assertions. It runs as `python tests/fakes/gh.py`, so it works on Windows too.
+- **Downloads**: the `gh` installer is tested against an `httpx2.MockTransport`
+  serving a release, checksum file and tarball built in the test.
+- **LLM**: in M1 the connection test runs against `httpx2.MockTransport`
+  answering like the Messages API. From M3 a local fake server with streaming,
+  tool use and scripted turns per test.
+- **Setup world**: `tests/support/fake_setup.py` builds a `SetupService` with a
+  temporary config dir, file secret store, fake `gh` provider and fake model.
+- **TUI**: Textual Pilot tests drive the app (`tests/tui/`); each view has an
+  SVG snapshot in `tests/tui/__snapshots__/`. After an intended UI change,
+  update it with `uv run pytest tests/tui --snapshot-update` and review the SVG
+  diff.
+- **Platform-specific tests**: two tests check POSIX file modes (`0600`
+  secrets, executable `gh`); they are skipped on Windows and run in CI.
 
 Evaluations against a real model live in `tests/eval`, are not part of
 `poe check` or CI, and run only when asked.

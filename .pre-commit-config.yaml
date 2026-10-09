@@ -11,10 +11,14 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=1024']
       - id: detect-private-key
+      # Textual snapshots are generated SVG and must stay byte-identical to what the test produced.
       - id: end-of-file-fixer
+        exclude: '/__snapshots__/'
       - id: trailing-whitespace
+        exclude: '/__snapshots__/'
       - id: mixed-line-ending
         args: ['--fix=no']
+        exclude: '/__snapshots__/'
   - repo: https://github.com/gitleaks/gitleaks
     rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # frozen: v8.30.1
     hooks:

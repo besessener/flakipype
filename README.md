@@ -16,14 +16,20 @@ review it.
 - **Headless** commands and a systemd timer for unattended scans.
 - **Safe by design**: never touches the default branch; unattended runs open draft PRs only.
 
-> **Status:** pre-alpha. The foundation is in place; features land milestone
-> by milestone, see the [roadmap](docs/explanation/roadmap.md).
+> **Status:** pre-alpha. Setup and health checks work; scanning, the chat and
+> fixes land milestone by milestone, see the [roadmap](docs/explanation/roadmap.md).
 
 ## Installation
 
-Planned: `uv tool install git+https://github.com/besessener/flakipype` plus an
-install script. Requires Linux; the `gh` CLI is downloaded and verified
-automatically if it is missing.
+Requires Linux and [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv tool install git+https://github.com/besessener/flakipype
+flakipype setup     # model endpoint, gh (downloaded and verified if missing), GitHub login
+flakipype doctor    # check everything
+```
+
+Step by step: [getting started](docs/tutorials/getting-started.md).
 
 ## Development
 

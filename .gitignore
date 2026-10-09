@@ -28,3 +28,6 @@ mutants/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Textual snapshot diff report
+snapshot_report.html
