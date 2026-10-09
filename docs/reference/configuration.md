@@ -50,5 +50,12 @@ for the machine (`amd64`, `arm64`, `armv6`, `386`), verifies the tarball
 against the release's `gh_<version>_checksums.txt` and installs it
 atomically. A mismatch aborts and installs nothing.
 
+The download uses only `github.com` URLs, never `api.github.com`: the latest
+version is read from the redirect of `github.com/cli/cli/releases/latest`.
+Unauthenticated API calls are limited to 60 per hour per IP address, which
+users behind a shared company address exhaust quickly. If GitHub still
+refuses (HTTP 403 or 429), setup says so and suggests installing `gh` from
+<https://cli.github.com> instead.
+
 Required token scopes for classic and OAuth tokens: `repo`, `workflow`,
 `read:org` (`write:org` or `admin:org` also satisfy `read:org`).

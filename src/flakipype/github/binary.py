@@ -6,22 +6,24 @@ import subprocess
 import tarfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 
 import httpx2
 
 from flakipype.github.release import (
+    LATEST_RELEASE_URL,
     MINIMUM_GH_VERSION,
     ChecksumMissingError,
     GhRelease,
     GhVersion,
     expected_sha256,
     parse_gh_version,
-    release_from_tag,
+    release_from_redirect,
 )
 
-LATEST_RELEASE_API = "https://api.github.com/repos/cli/cli/releases/latest"
 _VERSION_TIMEOUT_SECONDS = 10
+_RATE_LIMITED = frozenset({HTTPStatus.FORBIDDEN, HTTPStatus.TOO_MANY_REQUESTS})
 
 
 class GhInstallError(Exception):
@@ -30,6 +32,10 @@ class GhInstallError(Exception):
 
 class ChecksumMismatchError(GhInstallError):
     """The downloaded archive does not match the published SHA-256."""
+
+
+class RateLimitedError(GhInstallError):
+    """GitHub refused the request because this network made too many."""
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,16 @@ def locate_gh(
     return None
 
 
+def _raise_for_status(response: httpx2.Response) -> None:
+    if response.status_code in _RATE_LIMITED:
+        message = (
+            f"GitHub refused the download from this network (HTTP {response.status_code}, "
+            "rate limit). Wait an hour, or install gh yourself: https://cli.github.com"
+        )
+        raise RateLimitedError(message)
+    response.raise_for_status()
+
+
 class GhInstaller:
     def __init__(self, http: httpx2.Client, bin_dir: Path) -> None:
         self._http = http
@@ -81,7 +97,7 @@ class GhInstaller:
             checksums = self._get(release.download_url(release.checksums_name)).text
             expected = expected_sha256(checksums, tarball_name)
             archive = self._get(release.download_url(tarball_name)).content
-        except (httpx2.HTTPError, ChecksumMissingError, ValueError, KeyError) as error:
+        except (httpx2.HTTPError, ChecksumMissingError, ValueError) as error:
             message = f"Downloading gh failed: {error}"
             raise GhInstallError(message) from error
         actual = hashlib.sha256(archive).hexdigest()
@@ -92,12 +108,16 @@ class GhInstaller:
         return GhBinary(path=self.target, version=release.version)
 
     def _latest_release(self) -> GhRelease:
-        payload = self._get(LATEST_RELEASE_API).json()
-        return release_from_tag(str(payload["tag_name"]))
+        response = self._http.head(LATEST_RELEASE_URL, follow_redirects=False)
+        if not response.is_redirect:
+            _raise_for_status(response)
+            message = f"{LATEST_RELEASE_URL} did not redirect to a release"
+            raise ValueError(message)
+        return release_from_redirect(response.headers.get("location", ""))
 
     def _get(self, url: str) -> httpx2.Response:
         response = self._http.get(url)
-        response.raise_for_status()
+        _raise_for_status(response)
         return response
 
     def _write_binary(self, archive: bytes, member_name: str) -> None:

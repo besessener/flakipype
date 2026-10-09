@@ -7,6 +7,9 @@ type GhVersion = tuple[int, int, int]
 
 MINIMUM_GH_VERSION: GhVersion = (2, 40, 0)
 RELEASE_DOWNLOAD_BASE = "https://github.com/cli/cli/releases/download"
+# A web URL, not api.github.com: it redirects to the newest tag and has no API rate limit.
+LATEST_RELEASE_URL = "https://github.com/cli/cli/releases/latest"
+_TAG_PAGE_PREFIX = "https://github.com/cli/cli/releases/tag/"
 
 _ARCHITECTURES = {
     "x86_64": "amd64",
@@ -67,6 +70,14 @@ def release_from_tag(tag: str) -> GhRelease:
         raise ValueError(message)
     major, minor, patch = (int(part) for part in match.groups())
     return GhRelease(version=(major, minor, patch))
+
+
+def release_from_redirect(location: str) -> GhRelease:
+    """Read the release from where LATEST_RELEASE_URL redirects to."""
+    if not location.startswith(_TAG_PAGE_PREFIX):
+        message = f"unexpected redirect for the latest gh release: {location!r}"
+        raise ValueError(message)
+    return release_from_tag(location.removeprefix(_TAG_PAGE_PREFIX))
 
 
 def expected_sha256(checksums: str, asset_name: str) -> str:
