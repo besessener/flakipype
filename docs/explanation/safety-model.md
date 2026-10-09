@@ -18,7 +18,8 @@ configured away.
 | `auto` | headless commands and the systemd timer | Actions run without confirmation inside the budgets; pull requests are opened **as drafts only**. |
 
 Switch in the chat with `/mode ask|auto`, or on the command line with
-`--mode`.
+`--mode` (planned with M5 and M6; until then the chat is always `ask` and
+only `investigate`, which only reads, runs headless).
 
 ## Risk levels, enforced in code
 
@@ -33,6 +34,16 @@ change it. The policy gate in `agent` decides before a tool runs:
 
 The gate lives in code, not in prompts or the UI, so a prompt injection or a
 UI bug cannot skip it.
+
+## Confirmations show facts from code
+
+A confirmation shows an action request that code builds from the validated
+arguments and GitHub's data: repository, workflow, run, ref, commit, and how
+much of the budget is used. It never shows text the model wrote, so a
+manipulated model cannot dress up an action. Write tools only accept targets
+the scan found or flakipype started itself. Every request is written to an
+append-only audit log, together with your answer. Details for reruns and
+dispatches: [actions](actions.md).
 
 ## Logs are data
 
@@ -52,8 +63,8 @@ keyring, or a `0600` file where no keyring exists; the GitHub token stays in
 
 ## Budgets
 
-Each run has hard, configurable limits with safe defaults: reruns, pull
-requests, tokens and wall-clock time, plus loop detection. Reaching a limit
+Each run has hard, configurable limits with safe defaults: reruns (10 per chat
+session), pull requests, tokens and wall-clock time, plus loop detection. Reaching a limit
 ends the run with a summary of what was done and what is left — never a
 half-finished state without explanation. No limit is unlimited by default.
 
