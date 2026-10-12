@@ -3,14 +3,14 @@
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from anthropic import Anthropic, APIError
 from anthropic.types.beta import BetaMessage, BetaTextBlock, BetaToolUseBlock
 from pydantic import BaseModel, Field
 
-from flakipype.agent.budget import BudgetExceededError, Limits, QuestionBudget, RunBudget
+from flakipype.agent.budget import BudgetExceededError, Limits, QuestionBudget, RunBudget, Stop
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.messages import (
@@ -149,6 +149,8 @@ class ChatSettings:
     model: ModelSettings
     limits: Limits
     turn_tokens: int
+    # Shared with the investigations and fixes the chat starts.
+    stop: Stop = field(default_factory=Stop)
 
 
 class ChatAgent:
@@ -194,6 +196,10 @@ class ChatAgent:
             end -= 1
         self._messages = list(history[:end])
 
+    def stop(self) -> None:
+        """Ends the running question, and what it started, at their next model round."""
+        self._settings.stop.request()
+
     def run_tool(self, name: str, arguments: dict[str, Any]) -> str:
         """A tool asked for by the user directly; it passes the same gate as the model's calls."""
         return self._tools[name].invoke(arguments, self._gate)
@@ -213,7 +219,10 @@ class ChatAgent:
 
     def _turn(self, question: str, start: int, on_step: StepListener) -> Reply:
         budget = QuestionBudget(
-            self._settings.limits, RunBudget(self._settings.turn_tokens), self._model_clock
+            self._settings.limits,
+            RunBudget(self._settings.turn_tokens),
+            self._model_clock,
+            stop=self._settings.stop,
         )
         self._messages.append({"role": "user", "content": self._masker.mask(question)})
         last_call = ""

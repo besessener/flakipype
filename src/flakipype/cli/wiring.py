@@ -244,7 +244,7 @@ def _fix_service(
         client=config.client, settings=config.settings,
         limits=Limits(rounds=fix.max_rounds, tokens=fix.max_tokens, seconds=fix.max_seconds),
         masker=config.masker, logs=config.logs, contents=config.contents, files=pulls,
-        clock=time.monotonic, excerpt_lines=config.excerpt_lines,
+        clock=time.monotonic, excerpt_lines=config.excerpt_lines, stop=config.stop,
     )  # fmt: skip
     return FixService(
         pulls=pulls, delivery=Delivery(pulls=pulls, verifier=verifier, now=now),
@@ -287,6 +287,7 @@ def open_chat() -> Generator[tuple[ChatService, Settings]]:
                 model=agentic.config.settings,
                 limits=agentic.config.limits,
                 turn_tokens=settings.agent.max_tokens_per_investigation,
+                stop=agentic.config.stop,
             ),
             tools=workspace_tools(workspace),
             gate=gate,

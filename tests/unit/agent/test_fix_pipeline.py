@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from flakipype.agent.budget import Limits
+from flakipype.agent.budget import Limits, Stop
 from flakipype.agent.fix_pipeline import FixConfig, FixRequest, FixResult, propose_fix
 from flakipype.agent.fixer import FixStatus
 from flakipype.agent.investigator import ModelSettings
@@ -38,6 +38,7 @@ def propose(
     earlier: tuple[FileChange, ...] = (),
     instructions: str = "",
     check_changes: Callable[[list[FileChange]], list[str]] | None = None,
+    stop: Stop | None = None,
 ) -> FixResult:
     answers = iter(check or [])
     config = FixConfig(
@@ -49,6 +50,7 @@ def propose(
         contents=FakeContents(),
         files=FakeFiles(),
         clock=lambda: 0.0,
+        stop=stop or Stop(),
     )
     request = FixRequest(
         finding=finding(),
@@ -202,6 +204,17 @@ def test_a_refused_fix_ends_without_one() -> None:
     assert result.status is FixStatus.NO_FIX
     assert result.detail == "The model declined to answer or gave an empty answer."
     assert len(model.requests) == 1
+
+
+def test_a_requested_stop_ends_the_fix_before_the_model_is_asked() -> None:
+    model = ScriptedModel([])
+    stop = Stop()
+    stop.request()
+
+    result = propose(model, stop=stop)
+
+    assert (result.status, result.detail) == (FixStatus.BUDGET, "Stopped at the request to stop.")
+    assert model.requests == []
 
 
 def test_limits_loops_and_model_errors_end_the_fix() -> None:

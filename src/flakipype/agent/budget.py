@@ -33,6 +33,20 @@ def total_tokens(usage: TokenUsage) -> int:
     )
 
 
+class Stop:
+    """Asked for when the chat window closes; work ends at its next model round."""
+
+    def __init__(self) -> None:
+        self._event = threading.Event()
+
+    @property
+    def requested(self) -> bool:
+        return self._event.is_set()
+
+    def request(self) -> None:
+        self._event.set()
+
+
 @dataclass(frozen=True)
 class Limits:
     rounds: int = 12
@@ -65,16 +79,27 @@ class RunBudget:
 class InvestigationBudget:
     _subject = "one investigation"
 
-    def __init__(self, limits: Limits, run: RunBudget, clock: Callable[[], float]) -> None:
+    def __init__(
+        self,
+        limits: Limits,
+        run: RunBudget,
+        clock: Callable[[], float],
+        *,
+        stop: Stop | None = None,
+    ) -> None:
         self._limits = limits
         self._run = run
         self._clock = clock
+        self._stop = stop
         self._started = clock()
         self.rounds = 0
         self.tokens = 0
 
     def check(self) -> None:
-        """Raise before the next model call if any limit is reached."""
+        """Raise before the next model call if any limit is reached or a stop was asked for."""
+        if self._stop is not None and self._stop.requested:
+            message = "the request to stop"
+            raise BudgetExceededError(message)
         if self.rounds >= self._limits.rounds:
             message = f"the limit of {self._limits.rounds} rounds"
             raise BudgetExceededError(message)
@@ -106,8 +131,15 @@ class QuestionBudget(InvestigationBudget):
 
     _subject = "one question"
 
-    def __init__(self, limits: Limits, run: RunBudget, clock: Callable[[], float]) -> None:
-        super().__init__(limits, run, clock)
+    def __init__(
+        self,
+        limits: Limits,
+        run: RunBudget,
+        clock: Callable[[], float],
+        *,
+        stop: Stop | None = None,
+    ) -> None:
+        super().__init__(limits, run, clock, stop=stop)
         # Every token the API bills, for the session's total.
         self.billed = 0
         self._prefix: int | None = None

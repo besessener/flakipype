@@ -116,6 +116,10 @@ class ChatService:
                 self._save()
         return notes
 
+    def close(self) -> None:
+        """The window closed: work still running stops at its next model round."""
+        self._agent.stop()
+
     def watched_runs(self) -> list[WatchedRun]:
         return self._workspace.actions.watched
 

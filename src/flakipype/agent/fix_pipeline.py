@@ -1,11 +1,11 @@
 """Propose a fix for one finding: fixer, code checks, reviewer, at most one revision."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from anthropic import Anthropic
 
-from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget
+from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.finding_tools import ContentsSource, FindingTools, LogSource
 from flakipype.agent.fix_tools import FixTools
 from flakipype.agent.fixer import FixDecision, Fixer, FixOutcome, FixProposal, FixReview, FixStatus
@@ -36,6 +36,7 @@ class FixConfig:
     files: RepositoryFiles
     clock: Callable[[], float]
     excerpt_lines: int = 120
+    stop: Stop = field(default_factory=Stop)
 
 
 @dataclass(frozen=True)
@@ -91,7 +92,9 @@ def review_task(task: str, proposal: FixProposal, changes: list[FileChange]) -> 
 
 
 def propose_fix(config: FixConfig, request: FixRequest) -> FixResult:
-    budget = InvestigationBudget(config.limits, RunBudget(config.limits.tokens), config.clock)
+    budget = InvestigationBudget(
+        config.limits, RunBudget(config.limits.tokens), config.clock, stop=config.stop
+    )
     copy = WorkingCopy(config.files, request.finding.key.repository, request.commit)
     copy.apply(list(request.earlier))
     finding_tools = FindingTools(
