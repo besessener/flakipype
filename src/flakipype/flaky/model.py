@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 FAILED_CONCLUSIONS = frozenset({"failure", "timed_out"})
-COMPLETED_CONCLUSIONS = FAILED_CONCLUSIONS | {"success"}
 # GitHub runs Dependabot and similar services as generated workflows without a file in the repo.
 _GENERATED_WORKFLOW_PREFIX = "dynamic/"
 

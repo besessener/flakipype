@@ -19,11 +19,12 @@ import keyring
 from flakipype.actions.service import ActionService, Origin
 from flakipype.agent.budget import Limits
 from flakipype.agent.fix_pipeline import FixConfig, propose_fix
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, workspace_tools
 from flakipype.agent.pipeline import AgentConfig, investigate_finding
 from flakipype.agent.tools import Confirmer, HeadlessGate, Mode, PolicyGate
+from flakipype.cli.readiness import NotReadyError, check_logged_in, check_run_owner
 from flakipype.config.paths import AppPaths, app_paths
 from flakipype.config.secrets import LLM_API_KEY, SecretStore, SecretStoreError, secret_store
 from flakipype.config.settings import (
@@ -73,10 +74,6 @@ def check_llm_endpoint(endpoint: LlmEndpoint) -> ConnectionResult:
     return check_connection(client, endpoint.model)
 
 
-class NotReadyError(Exception):
-    """flakipype is not set up far enough for this command; the message says what to do."""
-
-
 def _paths() -> AppPaths:
     return app_paths(os.environ, Path.home())
 
@@ -123,6 +120,14 @@ def unit_options(schedule: str, mode: Mode) -> UnitOptions:
         schedule=schedule,
         mode=mode.value,
     )
+
+
+def require_configuration() -> None:
+    """The timer only runs a set-up flakipype; previewing its units needs no configuration."""
+    config_file = _paths().config_file
+    if not config_file.exists():
+        message = f"No configuration at {config_file}. {RUN_SETUP}"
+        raise NotReadyError(message)
 
 
 def _ready_settings(paths: AppPaths) -> Settings:
@@ -311,7 +316,8 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
     with run_lock(_paths().run_lock_file), _open_agentic() as agentic:
         settings, cache = agentic.settings, agentic.cache
         request = request_for(settings)
-        _check_run_owner(request.owner, settings.github.owner)
+        check_run_owner(request.owner, settings.github.owner)
+        check_logged_in(agentic.gh, settings.github.host)
         now = partial(datetime.now, UTC)
         since = (now() - DAY).isoformat()
         limits = run_limits(
@@ -333,14 +339,3 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
             workspace=workspace, gate=HeadlessGate(mode), cache=cache, limits=limits,
             clock=RunClock(now=now, sleep=time.sleep),
         )  # fmt: skip
-
-
-def _check_run_owner(owner: str, configured: str) -> None:
-    """A run fixes only the configured owner, so it never scans one it may not fix."""
-    if configured and owner.lower() == configured.lower():
-        return
-    message = (
-        f"A run fixes only the configured owner ({configured or 'none set'}), not {owner}. "
-        "`flakipype scan` and `flakipype investigate` read other owners."
-    )
-    raise NotReadyError(message)

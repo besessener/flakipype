@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from flakipype.actions.service import ActionService, Origin
+from flakipype.actions.service import ActionRefusedError, ActionService, Origin
 from flakipype.actions.watch import RunKind, WatchedRun
 from flakipype.agent.tools import Answer, PreparedAction, ToolError
 from flakipype.config.settings import ActionSettings
@@ -269,19 +269,19 @@ def test_authorised_reruns_and_dispatches_use_the_budget(cache: ScanCache) -> No
     )  # fmt: skip
 
     dispatched = actions.dispatch_authorised(template)
-    assert dispatched is not None
     finished = replace(dispatched, conclusion="failure", done=True)
     rerun = actions.rerun_authorised(finished, "verify 2/3")
 
-    assert rerun is not None
     assert (dispatched.number, dispatched.run_id) == (1, 70)
     assert (rerun.number, rerun.label, rerun.attempt, rerun.before, rerun.done) == (
         2, "verify 2/3", 2, "failure", False,
     )  # fmt: skip
     assert "rerun octo-org/app 70" in runs.calls
     assert actions.used == 2
-    assert actions.rerun_authorised(finished, "verify 3/3") is None
-    assert actions.dispatch_authorised(template) is None
+    with pytest.raises(ActionRefusedError, match="action budget of this session is used up"):
+        actions.rerun_authorised(finished, "verify 3/3")
+    with pytest.raises(ActionRefusedError, match="action budget of this session is used up"):
+        actions.dispatch_authorised(template)
     entries = cache.audit.entries(actions.session)
     assert [(entry.action, entry.answer, entry.outcome, entry.run_id) for entry in entries] == [
         ("verify_dispatch", "covered by the push", "Started R1.", 70),
@@ -388,7 +388,8 @@ def test_an_authorised_rerun_needs_a_run_id(cache: ScanCache) -> None:
         run_id=None, attempt=1,
     )  # fmt: skip
 
-    assert actions.rerun_authorised(unlocated, "verify 2/3") is None
+    with pytest.raises(ActionRefusedError, match="R1 has no run on GitHub to rerun"):
+        actions.rerun_authorised(unlocated, "verify 2/3")
     assert actions.used == 0
 
 

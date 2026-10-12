@@ -89,7 +89,7 @@ read.
 ### Summary and exit codes
 
 ```text
-flakipype run · octo-org · auto · 2026-10-12 06:02–06:41
+flakipype run · octo-org · auto · 2026-10-12 06:02–06:41 CEST
 Scan: 42 repositories, 1,204 runs, 5 flaky, 2 recurring error
 Investigated: 2 (1 flaky_test, 1 real_bug), 3 verdicts from the cache
 Fixes: #1 octo-org/app › E2E › e2e: Opened draft pull request #57: https://github.com/octo-org/app/pull/57 (branch flakipype/fix-e2e-7c41d0).
@@ -100,6 +100,11 @@ Verification: octo-org/app#51: flakipype verification: E2E passed 3 of 3 runs on
               octo-org/app#57: 1 of 3 runs, continues in the next run
 Budget: pull requests today 1 of 3 · actions today 4 of 20 · tokens 412,000 of 1,000,000 (today 412,000 of 3,000,000)
 ```
+
+The header shows the machine's local time and zone, like the timer's
+schedule and the journal; `--json` and the stored session keep UTC. The run's
+session in the chat's `/sessions` is named the same way, for example
+`run 2026-10-12 06:02 CEST (auto)`.
 
 `Fixes` has a line for every flaky finding and recurring error: the pull
 request, or why there is none (no verdict, a classification flakipype does
@@ -112,7 +117,7 @@ and the errors (`Problems:`). `--json` prints the same as one object with
 | --- | --- |
 | 0 | The run finished; a reached budget or time limit is a normal end and named in the summary |
 | 1 | Something was incomplete: the scan stopped early, GitHub or the model failed, an investigation or a delivery failed |
-| 2 | Not ready: no configuration, no key, an unreachable keyring, no `gh` login, an `--owner` other than the configured one |
+| 2 | Not ready: no configuration, no key, an unreachable keyring, `gh` not logged in or its token expired (checked before the scan), an `--owner` other than the configured one |
 | 3 | Another `flakipype run` holds the lock |
 
 ## Verifications across runs

@@ -64,8 +64,9 @@ Tests never reach real GitHub or a real model.
   known way, and its README lists the expected verdict per case, which is the
   checklist for evaluations against a real model.
 
-Evaluations against a real model live in `tests/eval`, are not part of
-`poe check` or CI, and run only when asked.
+Evaluations against a real model are planned for `tests/eval`, which does
+not exist yet. They will not be part of `poe check` or CI, and run only when
+asked.
 
 ## CI (`.github/workflows/`)
 

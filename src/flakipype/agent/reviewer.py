@@ -8,9 +8,8 @@ from anthropic.types import Message, ToolUseBlock
 from pydantic import BaseModel, ValidationError
 
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
-from flakipype.agent.messages import DECLINED, content_blocks, declined
+from flakipype.agent.messages import DECLINED, ModelSettings, content_blocks, declined
 from flakipype.agent.prompts import REVIEWER_SYSTEM, data_block
 from flakipype.agent.verdict import Review, Verdict
 from flakipype.llm.client import create_message
@@ -80,14 +79,7 @@ class Reviewer:
             "description": kind.description,
             "input_schema": kind.answer.model_json_schema(),
         }
-        request: dict[str, Any] = {
-            "model": self._settings.model,
-            "max_tokens": self._settings.max_tokens,
-            "system": kind.system,
-            "tools": [tool],
-            "messages": messages,
-            **self._settings.thinking_parameter(),
-        }
+        request = self._settings.request(system=kind.system, tools=[tool], messages=messages)
         try:
             self._budget.check()
             response: Message = create_message(self._client, request)

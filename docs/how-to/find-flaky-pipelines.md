@@ -85,7 +85,10 @@ flakipype caches them in `~/.local/share/flakipype/cache.sqlite3`. A second
 scan only lists the runs again. Jobs are read for at most `max_job_reads`
 attempts and logs at most `max_log_downloads` per scan, newest flaky
 failures first; the next scan continues where the last one stopped, and the
-*Notes* say how many are left. Deleting the cache file is always safe.
+*Notes* say how many are left. Deleting the cache file only costs time for
+scan data, but it also deletes the chat and run sessions, pending
+verifications and the audit log behind the daily limits of `flakipype run`;
+see [configuration](../reference/configuration.md).
 
 ## When something goes wrong
 

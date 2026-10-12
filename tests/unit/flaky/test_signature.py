@@ -7,7 +7,6 @@ from flakipype.flaky.signature import (
     Category,
     categorise,
     clean_text,
-    error_entries,
     log_entries,
     normalise,
     signature_from_log,
@@ -126,7 +125,6 @@ def test_entries_join_continuation_lines_and_normalise_newlines() -> None:
     log = f"\nbefore stamp\r\n{STAMP}first\r\ncontinued\r\n{STAMP}##[error]boom\n  detail\n"
 
     assert log_entries(log) == ["before stamp", "first\ncontinued", "##[error]boom\n  detail\n"]
-    assert error_entries(log) == ["boom\n  detail"]
 
 
 @pytest.mark.parametrize(

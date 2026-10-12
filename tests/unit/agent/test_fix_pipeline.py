@@ -4,8 +4,8 @@ from typing import Any
 from flakipype.agent.budget import Limits, Stop
 from flakipype.agent.fix_pipeline import FixConfig, FixRequest, FixResult, propose_fix
 from flakipype.agent.fixer import FixStatus
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.verdict import Verdict
 from flakipype.agent.workcopy import FileChange
 

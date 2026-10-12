@@ -5,8 +5,8 @@ from datetime import timedelta
 
 from flakipype.actions.service import ActionService
 from flakipype.agent.budget import Limits
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, workspace_tools
 from flakipype.agent.tools import Confirmer, Mode, PolicyGate
 from flakipype.config.settings import ActionSettings, FixSettings

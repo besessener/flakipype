@@ -110,14 +110,6 @@ def log_entries(log: str) -> list[str]:
     return ["\n".join(lines) for lines in entries]
 
 
-def error_entries(log: str) -> list[str]:
-    return [
-        entry.removeprefix(_ERROR_MARK).strip()
-        for entry in log_entries(log)
-        if entry.startswith(_ERROR_MARK)
-    ]
-
-
 def cause_before(entries: list[str], end: int) -> list[str]:
     """The most telling error lines before a generic exit-code error, or none."""
     start = max(0, end - _LOOKBACK_ENTRIES)

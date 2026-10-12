@@ -61,12 +61,20 @@ def test_the_run_is_kept_as_a_session_for_the_chat(cache: ScanCache) -> None:
     run_once(world)
 
     (summary,) = cache.sessions.recent(5)
-    assert (summary.title, summary.kind) == ("run 2026-10-09 08:00 (auto)", SessionKind.RUN)
+    assert (summary.title, summary.kind) == ("run 2026-10-09 08:00 UTC (auto)", SessionKind.RUN)
     document = json.loads(cache.sessions.load(summary.session_id) or "{}")
     assert (document["mode"], document["tokens"], document["history"]) == ("auto", 3_000, [])
     assert document["entries"][0]["text"].startswith("#1 octo-org/app › CI › test: Opened draft")
     assert [item["verdict"] for item in document["findings"]][:1] == ["flaky test (high)"]
     assert document["fix"]["opened"] == 1
+
+
+@pytest.mark.usefixtures("berlin_time_zone")
+def test_the_run_session_is_named_in_local_time(cache: ScanCache) -> None:
+    run_once(RunWorld(cache))
+
+    (summary,) = cache.sessions.recent(5)
+    assert summary.title == "run 2026-10-09 10:00 CEST (auto)"
 
 
 def test_ask_mode_only_reports_and_keeps_the_fix(cache: ScanCache) -> None:

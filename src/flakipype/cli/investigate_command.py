@@ -5,14 +5,11 @@ import typer
 from rich.console import Console
 
 from flakipype.cli import wiring
+from flakipype.cli.errors import EXIT_INCOMPLETE, command_errors, error_console
 from flakipype.cli.investigation_report import investigation_as_json, render_investigation
 from flakipype.cli.scan_command import ProgressView, ScanOptions, progress_display
 from flakipype.flaky.findings import FindingKind
-from flakipype.github.actions import GitHubApiError
 from flakipype.investigate.service import InvestigationRequest, Selection
-
-EXIT_INCOMPLETE = 1
-EXIT_NOT_READY = 2
 
 
 def investigate(  # noqa: PLR0913 - Typer maps every command line option to one parameter
@@ -42,26 +39,20 @@ def investigate(  # noqa: PLR0913 - Typer maps every command line option to one 
 
     Without --finding or --all: the flaky jobs and the recurring errors.
     """
-    errors = Console(stderr=True, highlight=False)
+    errors = error_console()
     options = ScanOptions(
         owner=owner, days=days, max_logs=None, min_runs=None, repositories=tuple(repo or ())
     )
     selection = _selection(finding or [])
     if all_findings:
         selection = Selection(kinds=tuple(FindingKind))
-    try:
-        with (
-            wiring.open_investigation() as (service, settings),
-            ProgressView(progress_display(errors)) as view,
-        ):
-            request = InvestigationRequest(options.request(settings), selection, fresh=fresh)
-            report = service.run(request, view.update, view.investigation)
-    except wiring.NotReadyError as error:
-        errors.print(f"[red]Not ready:[/] {error}")
-        raise typer.Exit(EXIT_NOT_READY) from error
-    except GitHubApiError as error:
-        errors.print(f"[red]GitHub:[/] {error}")
-        raise typer.Exit(EXIT_INCOMPLETE) from error
+    with (
+        command_errors(errors),
+        wiring.open_investigation() as (service, settings),
+        ProgressView(progress_display(errors)) as view,
+    ):
+        request = InvestigationRequest(options.request(settings), selection, fresh=fresh)
+        report = service.run(request, view.update, view.investigation)
     if as_json:
         typer.echo(json.dumps(investigation_as_json(report), indent=2))
     else:

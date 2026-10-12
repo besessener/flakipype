@@ -11,7 +11,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from flakipype.agent.tools import Mode
-from flakipype.cli import app, run_command, wiring
+from flakipype.cli import app, errors, wiring
 from flakipype.cli.run_report import render_run
 from flakipype.config.settings import GitHubSettings, Settings
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
@@ -49,7 +49,7 @@ def test_run_prints_a_summary(opened: list[tuple[Mode, ScanRequest]]) -> None:
 
     assert result.exit_code == 0, result.output
     lines = click.unstyle(result.stdout).splitlines()
-    assert lines[0] == "flakipype run · octo-org · auto · 2026-10-09 08:00–08:00"
+    assert lines[0] == "flakipype run · octo-org · auto · 2026-10-09 08:00–08:00 UTC"
     assert lines[1] == "Scan: 1 repositories, 6 runs, 1 flaky, 1 seen once, 1 recurring error"
     assert lines[2] == "Investigated: 2 (1 flaky_test, 1 real_bug)"
     assert lines[3].startswith("Fixes: #1 octo-org/app › CI › test: Opened draft pull request #12")
@@ -63,6 +63,14 @@ def test_run_prints_a_summary(opened: list[tuple[Mode, ScanRequest]]) -> None:
     )
     ((mode, request),) = opened
     assert (mode, request.window_days, request.repositories) == (Mode.AUTO, 7, ("app",))
+
+
+@pytest.mark.usefixtures("berlin_time_zone", "opened")
+def test_the_summary_shows_local_time() -> None:
+    result = runner.invoke(app, ["run"])
+
+    first = click.unstyle(result.stdout).splitlines()[0]
+    assert first == "flakipype run · octo-org · auto · 2026-10-09 10:00–10:00 CEST"
 
 
 def test_run_in_ask_mode_as_json(opened: list[tuple[Mode, ScanRequest]]) -> None:
@@ -111,7 +119,7 @@ def test_the_summary_of_runs_that_stopped(cache: ScanCache) -> None:
     assert "Stopped by: the time limit of 10 minutes; verifications continue" in render_run(report)
     assert "Investigated: 0, 2 verdicts from the cache" in render_run(cached)
     assert render_run(failed).splitlines()[:3] == [
-        f"flakipype run · — · auto · {failed.started:%Y-%m-%d %H:%M}–{failed.finished:%H:%M}",
+        f"flakipype run · — · auto · {failed.started:%Y-%m-%d %H:%M}–{failed.finished:%H:%M} UTC",
         "Scan: not finished",
         "Investigated: 0",
     ]
@@ -180,7 +188,7 @@ def test_progress_goes_to_a_terminal_on_stderr(
         assert stderr
         return Console(file=terminal, force_terminal=True, highlight=highlight, width=100)
 
-    monkeypatch.setattr(run_command, "Console", console)
+    monkeypatch.setattr(errors, "Console", console)
 
     result = runner.invoke(app, ["run"])
 
@@ -209,7 +217,7 @@ def test_progress_shows_job_names_as_text_not_markup(
     terminal = io.StringIO()
     monkeypatch.setattr(wiring, "open_run", open_run)
     monkeypatch.setattr(
-        run_command, "Console", lambda **_: Console(file=terminal, force_terminal=True, width=100)
+        errors, "Console", lambda **_: Console(file=terminal, force_terminal=True, width=100)
     )
 
     result = runner.invoke(app, ["run"])

@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from flakipype.actions.dispatchable import dispatch_problem, triggers
-from flakipype.actions.service import ActionService
+from flakipype.actions.service import ActionRefusedError, ActionService
 from flakipype.actions.watch import RunKind, WatchedRun
 from flakipype.fix.texts import Rate, VerificationFacts, verification_text
 from flakipype.flaky.model import FAILED_CONCLUSIONS, JobResult
@@ -103,9 +103,10 @@ class Verifier:
         return self._dispatch(verification)
 
     def _dispatch(self, verification: Verification) -> Verification:
-        dispatched = self._actions.dispatch_authorised(self._run(verification, run_id=None))
-        if dispatched is None:
-            return self._finish(verification, "the action budget of this session is used up")
+        try:
+            dispatched = self._actions.dispatch_authorised(self._run(verification, run_id=None))
+        except ActionRefusedError as error:
+            return self._finish(verification, str(error))
         return replace(verification, stage=Stage.WATCHING, watched=(dispatched.number,))
 
     def poll(self, verification: Verification) -> Verification:
@@ -169,8 +170,8 @@ class Verifier:
             raise
         except GitHubApiError as error:
             return self._finish(verification, f"GitHub refused the rerun: {error}")
-        if rerun is None:
-            return self._finish(verification, "the action budget of this session is used up")
+        except ActionRefusedError as error:
+            return self._finish(verification, str(error))
         return replace(verification, watched=(*verification.watched, rerun.number))
 
     def _result(self, verification: Verification, run: WatchedRun) -> str:

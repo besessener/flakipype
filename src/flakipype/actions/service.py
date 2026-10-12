@@ -3,27 +3,27 @@
 import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
 from flakipype.actions.api import RunApi, WorkflowFiles
+from flakipype.actions.audit import audit_text
 from flakipype.actions.dispatchable import dispatch_problem
 from flakipype.actions.refusal import from_github, refusal
+from flakipype.actions.starting import WATCHING, Dispatch, Started, Starter
 from flakipype.actions.targets import check_owner, newest_failed_run, newest_run
-from flakipype.actions.watch import RunKind, RunWatch, WatchedRun
+from flakipype.actions.watch import RunWatch, WatchedRun
 from flakipype.agent.tools import ActionRequest, Answer, PreparedAction, ToolError
 from flakipype.config.settings import ActionSettings
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.flaky.model import FAILED_CONCLUSIONS, WorkflowRun
-from flakipype.flaky.scoring import FlakyKey
 from flakipype.github.actions import GitHubApiError
 from flakipype.github.runs import RunState
 from flakipype.store.audit import AuditEntry, AuditLog
 
-_WATCHING = "It is watched; a note follows when it finishes."
 # The audit answer of a verification run: the confirmation of the fix's push covers it.
 COVERED_BY_PUSH = "covered by the push"
 
@@ -34,18 +34,8 @@ class Origin(StrEnum):
     RUN = "run"
 
 
-@dataclass(frozen=True)
-class _Started:
-    outcome: str
-    run_id: int | None
-
-
-@dataclass(frozen=True)
-class _Dispatch:
-    key: FlakyKey
-    ref: str
-    commit: str
-    repeats: int
+class ActionRefusedError(Exception):
+    """A verification run was not started; the message says why."""
 
 
 class ActionService:
@@ -67,6 +57,7 @@ class ActionService:
         self._owner = owner
         self._now = now
         self._watch = RunWatch(runs, watch_time=timedelta(hours=settings.watch_hours), now=now)
+        self._starter = Starter(runs, self._watch, now)
         self._base_origin = origin
         self._origin = origin
         self.session = uuid4().hex
@@ -97,11 +88,13 @@ class ActionService:
         """Watch a run flakipype did not start, e.g. a pull request's checks; costs no budget."""
         return self._watch.add(run)
 
-    def rerun_authorised(self, run: WatchedRun, label: str) -> WatchedRun | None:
-        """Rerun a finished watched run that a confirmed fix covers; None if the budget is used."""
+    def rerun_authorised(self, run: WatchedRun, label: str) -> WatchedRun:
+        """Rerun a finished watched run that a confirmed fix covers; raises ActionRefusedError."""
         with self._spending:
-            if run.run_id is None or self.used >= self._settings.max_per_session:
-                return None
+            if run.run_id is None:
+                message = f"R{run.number} has no run on GitHub to rerun"
+                raise ActionRefusedError(message)
+            self._check_authorised_room()
             try:
                 self._runs.rerun(run.repository, run.run_id)
             except GitHubApiError as error:
@@ -117,11 +110,10 @@ class ActionService:
         self._record_covered("verify_rerun", started, f"Started R{started.number}.")
         return started
 
-    def dispatch_authorised(self, template: WatchedRun) -> WatchedRun | None:
-        """Dispatch for a confirmed fix; None if the budget is used up."""
+    def dispatch_authorised(self, template: WatchedRun) -> WatchedRun:
+        """Dispatch for a confirmed fix; raises ActionRefusedError when the budget is used up."""
         with self._spending:
-            if self.used >= self._settings.max_per_session:
-                return None
+            self._check_authorised_room()
             try:
                 run_id = self._runs.dispatch(
                     template.repository, template.workflow_path, template.ref
@@ -159,7 +151,7 @@ class ActionService:
         return self._prepare(
             "rerun_failed",
             request,
-            lambda: self._start_rerun(run, state, self._runs.rerun_failed_jobs),
+            lambda: self._starter.rerun(run, state, self._runs.rerun_failed_jobs),
             spends=1,
         )
 
@@ -170,7 +162,10 @@ class ActionService:
         state = self._checked_run(run)
         request = self._rerun_request("Rerun all jobs?", run, state)
         return self._prepare(
-            "rerun_run", request, lambda: self._start_rerun(run, state, self._runs.rerun), spends=1
+            "rerun_run",
+            request,
+            lambda: self._starter.rerun(run, state, self._runs.rerun),
+            spends=1,
         )
 
     def dispatch(self, finding: Finding, ref: str | None, repeats: int) -> PreparedAction:
@@ -199,9 +194,9 @@ class ActionService:
                 self._budget_line(repeats),
             ),
         )
-        dispatch = _Dispatch(key, name, commit, repeats)
+        dispatch = Dispatch(key, name, commit, repeats)
         return self._prepare(
-            "dispatch", request, lambda: self._start_dispatches(dispatch), spends=repeats
+            "dispatch", request, lambda: self._starter.dispatches(dispatch), spends=repeats
         )
 
     def cancel(self, number: int) -> PreparedAction:
@@ -221,9 +216,9 @@ class ActionService:
                             f"run {run_id} · {run.state}")
         )  # fmt: skip
 
-        def start() -> _Started:
+        def start() -> Started:
             self._runs.cancel(run.repository, run_id)
-            return _Started(f"Cancel requested for R{number}. {_WATCHING}", run_id)
+            return Started(f"Cancel requested for R{number}. {WATCHING}", run_id)
 
         return self._prepare("cancel", request, start, spends=0)
 
@@ -243,15 +238,7 @@ class ActionService:
         return self._watch.poll()
 
     def audit_text(self) -> str:
-        entries = self._audit.entries(self.session)
-        if not entries:
-            return "No actions requested in this session."
-        lines = [
-            f"- {entry.time[11:16]} `{entry.action}` asked by {entry.origin}, {entry.answer}: "
-            f"{entry.outcome}"
-            for entry in entries
-        ]
-        return "Actions in this session:\n" + "\n".join(lines)
+        return audit_text(self._audit.entries(self.session))
 
     def state(self) -> dict[str, Any]:
         return {
@@ -297,49 +284,6 @@ class ActionService:
             ),
         )
 
-    def _start_rerun(
-        self, run: WorkflowRun, state: RunState, start: Callable[[str, int], None]
-    ) -> _Started:
-        start(run.repository, run.run_id)
-        self.used += 1
-        attempt = state.attempt + 1
-        watched = self._watch.add(
-            WatchedRun(
-                number=0, kind=RunKind.RERUN, repository=run.repository,
-                workflow_path=run.workflow_path, workflow_name=state.workflow_name,
-                label=f"#{run.run_id}/{attempt}", commit=state.head_sha, ref=state.head_branch,
-                started=self._now(), run_id=run.run_id, attempt=attempt, before=state.conclusion,
-            )
-        )  # fmt: skip
-        return _Started(f"Started R{watched.number}: {watched.title}. {_WATCHING}", run.run_id)
-
-    def _start_dispatches(self, dispatch: _Dispatch) -> _Started:
-        key, repeats = dispatch.key, dispatch.repeats
-        group = self._watch.next_number if repeats > 1 else None
-        started: list[WatchedRun] = []
-        for index in range(1, repeats + 1):
-            try:
-                run_id = self._runs.dispatch(key.repository, key.workflow_path, dispatch.ref)
-            except GitHubApiError as error:
-                if not started:
-                    raise
-                return _partly_started(dispatch, started, index=index, error=error)
-            self.used += 1
-            label = f"dispatch {index}/{repeats}" if group else "dispatch"
-            started.append(
-                self._watch.add(
-                    WatchedRun(
-                        number=0, kind=RunKind.DISPATCH, repository=key.repository,
-                        workflow_path=key.workflow_path, workflow_name=key.workflow_name,
-                        label=label, commit=dispatch.commit, ref=dispatch.ref,
-                        started=self._now(), run_id=run_id, attempt=1, group=group,
-                    )
-                )
-            )  # fmt: skip
-        numbers = ", ".join(f"R{run.number}" for run in started)
-        outcome = f"Started {numbers}: {key.workflow_name} on {dispatch.ref}. {_WATCHING}"
-        return _Started(outcome, started[0].run_id)
-
     def _check_room(self, count: int) -> None:
         limit, left = self._settings.max_per_session, self._settings.max_per_session - self.used
         if left <= 0:
@@ -359,6 +303,11 @@ class ActionService:
             )
             raise ToolError(message)
 
+    def _check_authorised_room(self) -> None:
+        if self.used >= self._settings.max_per_session:
+            message = "the action budget of this session is used up"
+            raise ActionRefusedError(message)
+
     def _record_covered(self, action: str, run: WatchedRun, outcome: str) -> None:
         self._audit.record(
             AuditEntry(
@@ -372,7 +321,7 @@ class ActionService:
         return f"Actions this session: {self.used + count} of {self._settings.max_per_session}"
 
     def _prepare(
-        self, action: str, request: ActionRequest, start: Callable[[], _Started], *, spends: int
+        self, action: str, request: ActionRequest, start: Callable[[], Started], *, spends: int
     ) -> PreparedAction:
         origin = self._origin
 
@@ -392,6 +341,7 @@ class ActionService:
                     if spends:
                         self._check_room(spends)
                     started = start()
+                    self.used += started.spent
             except ToolError as error:
                 record(answer.value, f"not run: {error}")
                 raise
@@ -402,15 +352,3 @@ class ActionService:
             return started.outcome
 
         return PreparedAction(request, run, lambda answer: record(answer.value, "not run"))
-
-
-def _partly_started(
-    dispatch: _Dispatch, started: list[WatchedRun], *, index: int, error: GitHubApiError
-) -> _Started:
-    """The runs that did start stay counted and watched, so the answer names them."""
-    numbers = ", ".join(f"R{run.number}" for run in started)
-    outcome = (
-        f"Started {numbers}: {dispatch.key.workflow_name} on {dispatch.ref}, then dispatch "
-        f"{index}/{dispatch.repeats} failed: {refusal(error).rstrip('.')}. {_WATCHING}"
-    )
-    return _Started(outcome, started[0].run_id)

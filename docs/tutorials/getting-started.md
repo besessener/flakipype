@@ -47,7 +47,7 @@ token) and shows the model that answered, or what went wrong and what to do.
 
 - **Host**: `github.com`, or your GitHub Enterprise Server host.
 - **User or organisation to scan**.
-- **gh**: if no `gh` 2.40 or newer is on your `PATH`, press **Download gh**.
+- **gh**: if no `gh` 2.97.0 or newer is on your `PATH`, press **Download gh**.
   flakipype fetches the latest release for your architecture, checks its
   SHA-256 against the release's checksum file and installs it to
   `~/.local/share/flakipype/bin/gh`. A progress bar shows the download
