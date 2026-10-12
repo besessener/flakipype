@@ -121,8 +121,12 @@ class ScanCache:
     def open(cls, path: Path) -> "ScanCache":
         path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(path, timeout=_BUSY_SECONDS, check_same_thread=False)
-        connection.execute("PRAGMA journal_mode = WAL")
-        return cls(connection)
+        try:
+            connection.execute("PRAGMA journal_mode = WAL")
+            return cls(connection)
+        except BaseException:
+            connection.close()
+            raise
 
     @classmethod
     def in_memory(cls) -> "ScanCache":
