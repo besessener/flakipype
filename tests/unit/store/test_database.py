@@ -1,10 +1,14 @@
 import sqlite3
+import threading
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from flakipype.flaky.model import AttemptRef
 from flakipype.flaky.signature import Category, ErrorSignature
+from flakipype.store import database
 from flakipype.store.database import MIGRATIONS, LogResult, LogState, ScanCache
 
 from support.builders import job
@@ -96,6 +100,47 @@ def test_schema_version_is_recorded_and_migrations_run_once(tmp_path: Path) -> N
     ScanCache.open(path).close()
     ScanCache.open(path).close()
 
+    assert schema_version(path) == len(MIGRATIONS)
+
+
+def test_processes_opening_a_new_cache_together_all_succeed(tmp_path: Path) -> None:
+    path = tmp_path / "cache.sqlite3"
+    openers = 8
+    start = threading.Barrier(openers)
+    errors: list[Exception] = []
+
+    def open_cache() -> None:
+        start.wait()
+        try:
+            ScanCache.open(path).close()
+        except sqlite3.Error as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=open_cache) for _ in range(openers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert schema_version(path) == len(MIGRATIONS)
+
+
+def test_a_failing_migration_leaves_the_cache_as_it_was(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "cache.sqlite3"
+    broken = "ALTER TABLE sessions ADD COLUMN extra TEXT; INSERT INTO missing VALUES (1);"
+    monkeypatch.setattr(database, "MIGRATIONS", (*MIGRATIONS, broken))
+
+    with pytest.raises(sqlite3.OperationalError, match="missing"):
+        ScanCache.open(path)
+
+    assert schema_version(path) == 0
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("SELECT name FROM sqlite_master").fetchall() == []
+    monkeypatch.undo()
+    ScanCache.open(path).close()
     assert schema_version(path) == len(MIGRATIONS)
 
 

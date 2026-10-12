@@ -50,7 +50,7 @@ def setup(  # noqa: PLR0913 - Typer maps every command line option to one parame
     with _secret_store_errors():
         service = wiring.build_setup_service(secret_store)
         if not non_interactive:
-            _run_wizard(service)
+            _run_wizard(service, secret_store)
             return
         state = service.load()
         draft = SetupDraft(
@@ -73,13 +73,15 @@ def _secret_store_errors() -> Generator[None]:
         raise typer.Exit(EXIT_USAGE) from error
 
 
-def _run_wizard(service: SetupService) -> None:
+def _run_wizard(service: SetupService, secret_store: SecretStoreChoice | None) -> None:
     if not is_interactive_terminal():
         _console().print(
             "[red]No terminal attached.[/] Use [bold]--non-interactive[/] with options."
         )
         raise typer.Exit(EXIT_USAGE)
-    if not SetupWizard(service).run():
+    # Read the store before the wizard: an unreadable one gets the file-store hint, no traceback.
+    service.load()
+    if not SetupWizard(service, secret_store=secret_store).run():
         _console().print("Setup cancelled, nothing saved.")
         raise typer.Exit(EXIT_CHECKS_FAILED)
     _report(service)

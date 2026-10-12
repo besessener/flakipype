@@ -65,7 +65,9 @@ cli                               Typer entry point, composition root (cli/wirin
   can show it their own way.
 - **`store`** owns the SQLite cache under `$XDG_DATA_HOME/flakipype`: jobs of
   finished attempts and log results, which never change. Schema migrations
-  are append-only (`PRAGMA user_version`); cached signatures carry the
+  are append-only (`PRAGMA user_version`) and run in one transaction under
+  the write lock, so a killed or concurrent open never leaves half a
+  schema; cached signatures carry the
   signature algorithm's version and are recomputed when it changes. Run lists
   are   not cached: listing them is cheap and they change constantly. Chat and run
   sessions are stored there too, as one JSON document per session, and so is

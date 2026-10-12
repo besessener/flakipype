@@ -7,11 +7,20 @@ from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Footer, Header, Input, Label, ProgressBar, Static
 
-from flakipype.config.settings import DEFAULT_BASE_URL
+from flakipype.config.secrets import SecretStoreError
+from flakipype.config.settings import DEFAULT_BASE_URL, SecretStoreChoice
 from flakipype.github.auth import browser_login_arguments
 from flakipype.github.binary import GhInstallError
 from flakipype.github.gh import GhCommandError
-from flakipype.setup.doctor import RUN_SETUP, Check, CheckStatus, gh_check, github_check, llm_check
+from flakipype.setup.doctor import (
+    KEY_IN_A_FILE,
+    RUN_SETUP,
+    Check,
+    CheckStatus,
+    gh_check,
+    github_check,
+    llm_check,
+)
 from flakipype.setup.service import InvalidSetupError, SetupDraft, SetupService
 
 _STATUS_CLASSES = ("ok", "warning", "failed", "busy")
@@ -51,9 +60,12 @@ class SetupWizard(App[bool]):
         Binding("escape", "cancel", "Cancel"),
     ]
 
-    def __init__(self, service: SetupService) -> None:
+    def __init__(
+        self, service: SetupService, *, secret_store: SecretStoreChoice | None = None
+    ) -> None:
         super().__init__()
         self._service = service
+        self._secret_store = secret_store
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -124,6 +136,7 @@ class SetupWizard(App[bool]):
             host=self.query_one("#host", Input).value,
             owner=self.query_one("#owner", Input).value,
             api_key=self.query_one("#api-key", Input).value.strip(),
+            secret_store=self._secret_store,
         )
 
     def _host(self) -> str:
@@ -276,6 +289,10 @@ class SetupWizard(App[bool]):
             self._service.save(self.draft())
         except InvalidSetupError as error:
             self.query_one("#save-status", Static).update(Text(f"Cannot save: {error}"))
+            return
+        except SecretStoreError as error:
+            message = f"Secret store: {error}\n{KEY_IN_A_FILE}"
+            self.query_one("#save-status", Static).update(Text(message))
             return
         self.exit(result=True)
 

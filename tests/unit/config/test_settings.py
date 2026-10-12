@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from flakipype.config.settings import (
+    AgentSettings,
     GitHubSettings,
     LlmSettings,
     Settings,
@@ -85,6 +86,25 @@ def test_unknown_keys_are_a_settings_error(tmp_path: Path) -> None:
 
     with pytest.raises(SettingsError, match="api_key"):
         load_settings(path)
+
+
+def test_an_enabled_thinking_budget_must_leave_room_for_the_answer(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[agent]\nthinking = "enabled"\nthinking_budget = 8000\nmax_output_tokens = 4000\n'
+    )
+
+    with pytest.raises(SettingsError, match="thinking_budget must be below max_output_tokens"):
+        load_settings(path)
+
+
+@pytest.mark.parametrize("thinking", ["adaptive", "off"])
+def test_the_thinking_budget_only_counts_when_thinking_is_enabled(thinking: str) -> None:
+    settings = AgentSettings.model_validate(
+        {"thinking": thinking, "thinking_budget": 8000, "max_output_tokens": 4000}
+    )
+
+    assert settings.thinking == thinking
 
 
 @pytest.mark.parametrize(

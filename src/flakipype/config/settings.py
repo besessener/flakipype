@@ -2,11 +2,18 @@ import re
 import tomllib
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
 import tomli_w
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 DEFAULT_GITHUB_HOST = "github.com"
@@ -90,6 +97,14 @@ class AgentSettings(BaseModel):
     thinking_budget: int = Field(default=8_000, ge=1_024, le=60_000)
     excerpt_lines: int = Field(default=120, ge=20, le=400)
 
+    @model_validator(mode="after")
+    def _thinking_fits_the_output(self) -> Self:
+        # The Messages API rejects a thinking budget that does not leave room for the answer.
+        if self.thinking == "enabled" and self.thinking_budget >= self.max_output_tokens:
+            message = "thinking_budget must be below max_output_tokens"
+            raise ValueError(message)
+        return self
+
 
 class ActionSettings(BaseModel):
     """Hard limits for reruns and dispatches started from the chat."""
@@ -152,12 +167,22 @@ class Settings(BaseModel):
     secrets: SecretSettings = SecretSettings()
 
 
-def load_settings(path: Path) -> Settings:
+def read_settings_file(path: Path) -> dict[str, object]:
+    """The file's tables as written, not validated; empty when there is no file."""
     if not path.exists():
-        return Settings()
+        return {}
     try:
-        return Settings.model_validate(tomllib.loads(path.read_text(encoding="utf-8")))
-    except (tomllib.TOMLDecodeError, UnicodeDecodeError, ValidationError, OSError) as error:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError, OSError) as error:
+        message = f"Cannot read {path}: {error}"
+        raise SettingsError(message) from error
+
+
+def load_settings(path: Path) -> Settings:
+    content = read_settings_file(path)
+    try:
+        return Settings.model_validate(content)
+    except ValidationError as error:
         message = f"Cannot read {path}: {error}"
         raise SettingsError(message) from error
 

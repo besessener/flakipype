@@ -63,6 +63,47 @@ def test_save_keeps_every_section_setup_does_not_edit(tmp_path: Path, fake_gh: F
     assert saved.secrets.store is SecretStoreChoice.FILE
 
 
+def test_save_never_replaces_a_broken_file_with_defaults(tmp_path: Path, fake_gh: FakeGh) -> None:
+    world = setup_world(tmp_path, fake_gh)
+    world.paths.config_dir.mkdir(parents=True)
+    content = "[run]\nmax_prs_per_day = 1\n\n[agent]\nparalel = 2\n"
+    world.paths.config_file.write_text(content, encoding="utf-8")
+
+    with pytest.raises(InvalidSetupError) as error:
+        world.service.save(complete_draft(api_key="key-1"))
+
+    assert error.value.errors["agent.paralel"] == "Extra inputs are not permitted"
+    assert "fix " + str(world.paths.config_file) in error.value.errors["config"]
+    assert world.paths.config_file.read_text(encoding="utf-8") == content
+    assert world.secrets.get(LLM_API_KEY) is None
+
+
+def test_save_never_replaces_a_file_that_is_no_toml(tmp_path: Path, fake_gh: FakeGh) -> None:
+    world = setup_world(tmp_path, fake_gh)
+    world.paths.config_dir.mkdir(parents=True)
+    world.paths.config_file.write_text("[run\nmax_prs_per_day = 1\n", encoding="utf-8")
+
+    with pytest.raises(InvalidSetupError) as error:
+        world.service.save(complete_draft())
+
+    assert error.value.errors["config"].startswith("Cannot read")
+    assert world.paths.config_file.read_text(encoding="utf-8").startswith("[run\n")
+
+
+def test_save_repairs_the_sections_it_edits(tmp_path: Path, fake_gh: FakeGh) -> None:
+    world = setup_world(tmp_path, fake_gh)
+    world.paths.config_dir.mkdir(parents=True)
+    world.paths.config_file.write_text(
+        '[llm]\nbase_url = "http://remote.example"\n\n[run]\nmax_prs_per_day = 1\n',
+        encoding="utf-8",
+    )
+
+    world.service.save(complete_draft())
+
+    saved = load_settings(world.paths.config_file)
+    assert (saved.llm.base_url, saved.run.max_prs_per_day) == ("https://api.anthropic.com", 1)
+
+
 def test_save_records_a_new_secret_store(tmp_path: Path, fake_gh: FakeGh) -> None:
     world = setup_world(tmp_path, fake_gh)
 

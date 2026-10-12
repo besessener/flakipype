@@ -80,7 +80,7 @@ store = "auto"
 | `agent.parallel` | `3` | 1–8 investigations at once (GitHub calls still go one at a time) |
 | `agent.max_output_tokens` | `16000` | 1k–64k per model call; calls are streamed, so the whole range works |
 | `agent.thinking` | `adaptive` | `adaptive`, `enabled` (uses `thinking_budget`) or `off`. Newer models only accept `adaptive`; the others are for older models |
-| `agent.thinking_budget` | `8000` | 1,024–60k; only with `thinking = "enabled"`, must be below `max_output_tokens` |
+| `agent.thinking_budget` | `8000` | 1,024–60k; only with `thinking = "enabled"`, must then be below `max_output_tokens` |
 | `agent.excerpt_lines` | `120` | 20–400 lines in a log excerpt |
 | `actions.max_per_session` | `10` | 1–100 reruns and dispatches per chat session (each repeat of a dispatch counts); `/new` starts a new count |
 | `actions.max_watched` | `10` | 1–50 started runs watched at the same time |
@@ -104,7 +104,10 @@ and fixes share the token limit.
 
 Unknown keys are an error, so a typo never goes unnoticed. `flakipype setup`
 edits only `[llm]`, `[github]` and `secrets.store` and keeps every other
-section as the file has it.
+section as the file has it. It replaces invalid values in the sections it
+edits, but refuses to save, and names the error, when the file is no valid
+TOML or another section is invalid: fix those by hand, setup never resets
+them to the defaults.
 
 ## Secrets
 
@@ -116,6 +119,8 @@ section as the file has it.
 A keyring that is locked or unreachable, typically under a systemd timer
 without a desktop session, is reported with exit code 2 and the next step:
 `flakipype setup --non-interactive --secret-store file --api-key-stdin`.
+`secrets.json` is replaced whole through a temporary file, so a failed write
+(a full disk) keeps the previous file.
 
 ## gh
 

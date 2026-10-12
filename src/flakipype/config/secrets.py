@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Protocol
 
@@ -94,12 +95,23 @@ class FileSecretStore:
         return {str(key): str(value) for key, value in content.items()}
 
     def _write(self, secrets: dict[str, str]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        # Created with 0600 from the start, so the secret is never readable by others.
-        descriptor = os.open(self._path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-            json.dump(secrets, file)
-        self._path.chmod(0o600)
+        # A new file replaces the old one whole, so a failed write never leaves it empty or partial.
+        temporary: Path | None = None
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            # mkstemp creates the file with 0600, so the secret is never readable by others.
+            descriptor, name = tempfile.mkstemp(dir=self._path.parent, prefix=".secrets-")
+            temporary = Path(name)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+                json.dump(secrets, file)
+                file.flush()
+                os.fsync(file.fileno())
+            temporary.replace(self._path)
+        except OSError as error:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+            message = f"Cannot write {self._path}: {error}"
+            raise SecretStoreError(message) from error
 
 
 def secret_store(choice: SecretStoreChoice, backend: KeyringBackend, file: Path) -> SecretStore:
