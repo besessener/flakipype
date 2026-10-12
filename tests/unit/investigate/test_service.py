@@ -71,6 +71,37 @@ def test_failed_investigations_are_not_cached(cache: ScanCache) -> None:
     assert agent.calls == [2, 2]
 
 
+def test_verdicts_whose_review_failed_are_investigated_again(cache: ScanCache) -> None:
+    unreviewed = FakeAgent(review="not reviewed: Error code: 400 - tool_choice not supported")
+    scanner = service(cache, unreviewed)
+    first = scanner.run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    finding = first.results[0].finding
+    # As an older version stored it, before failed reviews were left out of the cache.
+    cache.save_verdict(
+        SCAN.host, finding.identity, last_seen=finding.last_seen.isoformat(),
+        result=first.results[0].stored(),
+    )  # fmt: skip
+
+    second = scanner.run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    revised = FakeAgent(review="revised, second review unavailable: HTTP 500")
+    service(cache, revised).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    service(cache, revised).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+
+    assert unreviewed.calls == [1, 1]
+    assert not second.results[0].from_cache
+    assert revised.calls == [1, 1]
+
+
+def test_a_lower_token_limit_for_one_call(cache: ScanCache) -> None:
+    agent = FakeAgent(tokens=5_000)
+
+    report = service(cache, agent, parallel=1).run(
+        InvestigationRequest(SCAN, Selection(), max_tokens=1_000)
+    )
+
+    assert [result.status for result in report.results] == [Status.COMPLETED, Status.BUDGET]
+
+
 def test_unknown_numbers_and_all_kinds(cache: ScanCache) -> None:
     agent = FakeAgent()
 

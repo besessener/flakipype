@@ -9,9 +9,10 @@ from typing import Any
 
 from flakipype.agent.investigator import Status
 from flakipype.agent.orchestrator import workspace_tools
+from flakipype.agent.pipeline import reviewed
 from flakipype.agent.tools import HeadlessGate, Mode, ToolDeclinedError, ToolError
 from flakipype.agent.workcopy import unified_diff
-from flakipype.fix.service import FIXABLE, FixDeliveryError, FixNotMadeError, reviewed
+from flakipype.fix.service import FIXABLE, FixDeliveryError, FixNotMadeError
 from flakipype.fix.state import OpenedPull
 from flakipype.flaky.findings import Finding
 from flakipype.github.actions import GitHubApiError
@@ -26,6 +27,8 @@ from flakipype.unattended.limits import RunLimits
 
 POLL_SECONDS = 10.0
 _NORMAL_ENDS = frozenset({Status.COMPLETED, Status.BUDGET})
+# Ends the same input would likely repeat; limits and model errors are tried again.
+_NO_VERDICT_REMEMBERED = frozenset({Status.NO_VERDICT, Status.LOOP})
 
 
 class FixOutcomeKind(StrEnum):
@@ -143,34 +146,67 @@ class RunService:
         if self._limits.tokens <= 0:
             stops.append("the token limit: today's tokens are used up")
             return
-        numbers = tuple(f.number for f in report.findings if f.kind in DEFAULT_KINDS)
+        numbers = self._to_investigate(report)
         if numbers:
             workspace.investigate(numbers, fresh=False, max_tokens=self._limits.tokens)
+            self._remember_no_verdicts(report.host)
             self._save()
         self._fix_all(report, deadline)
 
-    def _fix_all(self, report: ScanReport, deadline: datetime) -> None:
-        workspace, progress = self._workspace, self._progress
-        for result in sorted(workspace.results.values(), key=lambda item: item.finding.number):
-            if not _fixable(result):
+    def _to_investigate(self, report: ScanReport) -> tuple[int, ...]:
+        """Flaky findings and recurring errors, except those that ended without a verdict."""
+        numbers: list[int] = []
+        for finding in report.findings:
+            if finding.kind not in DEFAULT_KINDS:
                 continue
-            stop = self._stop_before_fix(deadline)
-            if stop:
-                progress.stops.append(stop)
-                return
-            finding = result.finding
-            earlier = self._cache.unpushed_fix(
+            earlier = self._cache.no_verdict(
                 report.host, finding.identity, finding.last_seen.isoformat()
             )
-            if earlier is not None:
-                progress.fixes.append(_outcome(
-                    finding, FixOutcomeKind.SKIPPED,
-                    f"not tried again: an earlier run did not push its fix ({earlier}), "
-                    "and it has not failed since",
-                ))  # fmt: skip
+            if earlier is None:
+                numbers.append(finding.number)
                 continue
-            progress.fixes.append(self._fix(finding, report.host))
+            self._progress.fixes.append(_outcome(
+                finding, FixOutcomeKind.SKIPPED,
+                f"not investigated again: an earlier run ended without a verdict ({earlier}), "
+                "and it has not failed since",
+            ))  # fmt: skip
+        return tuple(numbers)
+
+    def _remember_no_verdicts(self, host: str) -> None:
+        """A finding the model could not judge costs every run again; runs wait for news."""
+        for result in self._workspace.results.values():
+            if result.verdict is None and result.status in _NO_VERDICT_REMEMBERED:
+                finding = result.finding
+                self._cache.save_no_verdict(
+                    host, finding.identity, last_seen=finding.last_seen.isoformat(),
+                    detail=f"{result.status.value}: {_first_line(result.detail)}",
+                )  # fmt: skip
+
+    def _fix_all(self, report: ScanReport, deadline: datetime) -> None:
+        stopped = ""
+        for result in sorted(self._workspace.results.values(), key=lambda r: r.finding.number):
+            if not stopped and not _not_fixable(result):
+                stopped = self._stop_before_fix(deadline)
+            self._progress.fixes.append(self._fix_or_say_why(result, report.host, stopped))
             self._save()
+        if stopped:
+            self._progress.stops.append(stopped)
+
+    def _fix_or_say_why(self, result: InvestigationResult, host: str, stopped: str) -> FixOutcome:
+        finding = result.finding
+        reason = _not_fixable(result)
+        if reason:
+            return _outcome(finding, FixOutcomeKind.SKIPPED, reason)
+        if stopped:
+            return _outcome(finding, FixOutcomeKind.SKIPPED, f"not tried: {stopped}")
+        earlier = self._cache.unpushed_fix(host, finding.identity, finding.last_seen.isoformat())
+        if earlier is not None:
+            return _outcome(
+                finding, FixOutcomeKind.SKIPPED,
+                f"not tried again: an earlier run did not push its fix ({earlier}), "
+                "and it has not failed since",
+            )  # fmt: skip
+        return self._fix(finding, host)
 
     def _stop_before_fix(self, deadline: datetime) -> str:
         limits = self._limits
@@ -264,16 +300,33 @@ class RunService:
             mode=self._gate.mode, started=started, finished=self._clock.now(),
             scan=workspace.report,
             results=tuple(sorted(workspace.results.values(), key=lambda r: r.finding.number)),
-            fixes=tuple(progress.fixes), pulls=tuple(workspace.fixes.pulls),
+            fixes=tuple(sorted(progress.fixes, key=lambda fix: fix.finding)),
+            pulls=tuple(workspace.fixes.pulls),
             tokens=workspace.tokens, pull_requests=workspace.fixes.opened,
             actions=workspace.actions.used, limits=self._limits,
             stops=tuple(progress.stops), problems=tuple(progress.problems),
         )  # fmt: skip
 
 
-def _fixable(result: InvestigationResult) -> bool:
+def _not_fixable(result: InvestigationResult) -> str:
+    """Why the run does not fix the finding; empty when it may."""
     verdict = result.verdict
-    return verdict is not None and verdict.classification in FIXABLE and reviewed(result.review)
+    if verdict is None:
+        detail = _first_line(result.detail)
+        return f"no verdict ({result.status.value})" + (f": {detail}" if detail else "")
+    if verdict.classification not in FIXABLE:
+        label = verdict.classification.value.replace("_", " ")
+        return f"not fixed: {label}, which flakipype does not fix"
+    if not reviewed(result.review):
+        return (
+            f"not fixed: the verdict was not reviewed ({_first_line(result.review)}); "
+            "the next run investigates it again"
+        )
+    return ""
+
+
+def _first_line(text: str) -> str:
+    return text.strip().splitlines()[0] if text.strip() else ""
 
 
 def _outcome(finding: Finding, kind: FixOutcomeKind, text: str, *, diff: str = "") -> FixOutcome:

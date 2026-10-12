@@ -15,6 +15,14 @@ from flakipype.agent.tools import Mode, PolicyGate, deny_all
 from flakipype.agent.verdict import Decision, Review, Verdict, apply_review
 from flakipype.flaky.findings import Evidence, Finding
 
+_NOT_REVIEWED = "not reviewed"
+_SECOND_REVIEW_UNAVAILABLE = "revised, second review unavailable"
+
+
+def reviewed(review: str) -> bool:
+    """Whether a reviewer answered; False when the review could not run, e.g. an HTTP error."""
+    return bool(review) and not review.startswith((_NOT_REVIEWED, _SECOND_REVIEW_UNAVAILABLE))
+
 
 @dataclass(frozen=True)
 class AgentConfig:
@@ -86,7 +94,7 @@ def investigate_finding(
     try:
         review = reviewer.review(text, outcome.verdict, config.masker)
     except ReviewUnavailableError as error:
-        return result(outcome, outcome.verdict, f"not reviewed: {error}")
+        return result(outcome, outcome.verdict, f"{_NOT_REVIEWED}: {error}")
     if review.decision is not Decision.REVISE:
         return result(
             outcome, apply_review(outcome.verdict, review), describe_review(review, revised=False)
@@ -98,7 +106,7 @@ def investigate_finding(
     try:
         second = reviewer.review(text, revised.verdict, config.masker)
     except ReviewUnavailableError as error:
-        return result(revised, revised.verdict, f"revised, second review unavailable: {error}")
+        return result(revised, revised.verdict, f"{_SECOND_REVIEW_UNAVAILABLE}: {error}")
     return result(
         revised, apply_review(revised.verdict, second), describe_review(second, revised=True)
     )

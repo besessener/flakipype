@@ -20,6 +20,8 @@ from support.fake_runs import state
 CI = ".github/workflows/ci.yml"
 WARNED = (CHANGE, FileChange(CI, "on: push\njobs: {}\n", "on: [push]\njobs: {}\n"))
 SERVER_ERROR = GitHubApiError("Server Error (HTTP 500)", 500)
+# Finding 3, the recurring lint error, is a real bug in this world: never fixed, always listed.
+REAL_BUG = (3, FixOutcomeKind.SKIPPED)
 
 
 def run_once(world: RunWorld) -> RunReport:
@@ -36,7 +38,7 @@ def test_auto_mode_opens_a_draft_pull_request_for_a_fixable_verdict(cache: ScanC
     report = run_once(world)
 
     assert [result.finding.number for result in report.results] == [1, 3]
-    assert kinds(report) == [(1, FixOutcomeKind.OPENED)]
+    assert kinds(report) == [(1, FixOutcomeKind.OPENED), REAL_BUG]
     assert report.fixes[0].text.startswith("Opened draft pull request #12: https://github.com/")
     assert world.github.drafts[0].head.startswith("flakipype/fix-ci-")
     assert (report.pull_requests, report.tokens, report.complete) == (1, 3_000, True)
@@ -65,7 +67,7 @@ def test_ask_mode_only_reports_and_keeps_the_fix(cache: ScanCache) -> None:
 
     report = run_once(world)
 
-    (outcome,) = report.fixes
+    outcome = report.fixes[0]
     assert outcome.kind is FixOutcomeKind.KEPT
     assert outcome.text == (
         "would open a draft pull request: Wait for the document rows "
@@ -125,7 +127,7 @@ def test_a_failed_delivery_makes_the_run_incomplete(cache: ScanCache) -> None:
 
     report = run_once(world)
 
-    assert kinds(report) == [(1, FixOutcomeKind.FAILED)]
+    assert kinds(report) == [(1, FixOutcomeKind.FAILED), REAL_BUG]
     assert report.problems[0].startswith("Branch flakipype/fix-ci-")
     assert not report.complete
 
@@ -136,7 +138,7 @@ def test_a_finding_that_cannot_be_pushed_is_skipped(cache: ScanCache) -> None:
 
     report = run_once(world)
 
-    assert kinds(report) == [(1, FixOutcomeKind.SKIPPED)]
+    assert kinds(report) == [(1, FixOutcomeKind.SKIPPED), REAL_BUG]
     assert report.fixes[0].text.startswith("You cannot push to octo-org/app")
     assert report.complete
 
@@ -155,8 +157,43 @@ def test_a_github_error_ends_the_run_with_a_problem(cache: ScanCache) -> None:
 def test_failed_investigations_make_the_run_incomplete(cache: ScanCache) -> None:
     report = run_once(RunWorld(cache, agent=ClassifyingAgent(status=Status.MODEL_ERROR)))
 
-    assert report.fixes == ()
+    assert [fix.text for fix in report.fixes] == ["no verdict (model_error)"] * 2
     assert not report.complete
+    assert cache.no_verdict("github.com", report.results[0].finding.identity,
+                            report.results[0].finding.last_seen.isoformat()) is None  # fmt: skip
+
+
+def test_an_investigation_without_verdict_is_not_repeated_until_a_newer_failure(
+    cache: ScanCache,
+) -> None:
+    agent = ClassifyingAgent(status=Status.NO_VERDICT, detail="Verdict rejected: cite a log")
+
+    first = run_once(RunWorld(cache, agent=agent))
+    second = run_once(RunWorld(cache, agent=agent))
+
+    assert first.fixes[0].text == "no verdict (no_verdict): Verdict rejected: cite a log"
+    assert agent.calls == [1, 3]
+    assert second.results == ()
+    assert second.fixes[0].text == (
+        "not investigated again: an earlier run ended without a verdict "
+        "(no_verdict: Verdict rejected: cite a log), and it has not failed since"
+    )
+    assert second.tokens == 0
+
+
+def test_every_investigated_finding_says_why_it_was_not_fixed(cache: ScanCache) -> None:
+    reviews = {1: "not reviewed: Error code: 400 - tool_choice is not supported"}
+
+    report = run_once(RunWorld(cache, agent=ClassifyingAgent(reviews=reviews)))
+
+    unreviewed = (
+        "not fixed: the verdict was not reviewed (not reviewed: Error code: 400 - tool_choice "
+        "is not supported); the next run investigates it again"
+    )
+    assert [fix.text for fix in report.fixes] == [
+        unreviewed,
+        "not fixed: real bug, which flakipype does not fix",
+    ]
 
 
 def test_no_investigation_without_tokens_left(cache: ScanCache) -> None:
@@ -174,7 +211,7 @@ def test_the_pull_request_limit_stops_further_fixes(cache: ScanCache) -> None:
 
     report = run_once(RunWorld(cache, limits=limits(pull_requests=1), agent=both))
 
-    assert kinds(report) == [(1, FixOutcomeKind.OPENED)]
+    assert kinds(report) == [(1, FixOutcomeKind.OPENED), REAL_BUG]
     assert report.stops == ("the pull request limit (1 for this run)",)
 
 
@@ -182,7 +219,8 @@ def test_the_token_limit_stops_fixes(cache: ScanCache) -> None:
     report = run_once(RunWorld(cache, limits=limits(tokens=1_500)))
 
     assert report.tokens == 2_000
-    assert report.fixes == ()
+    assert kinds(report) == [(1, FixOutcomeKind.SKIPPED), REAL_BUG]
+    assert report.fixes[0].text == "not tried: the token limit (1,500 for this run)"
     assert report.stops == ("the token limit (1,500 for this run)",)
 
 
@@ -203,7 +241,7 @@ def test_the_time_limit_stops_before_the_scan_ends_and_between_fixes(cache: Scan
     report = run_once(RunWorld(cache, clock=clock, agent=both, fixer=SlowFixer(clock=clock)))
     none_left = run_once(RunWorld(cache, limits=limits(minutes=0)))
 
-    assert kinds(report) == [(1, FixOutcomeKind.OPENED)]
+    assert kinds(report) == [(1, FixOutcomeKind.OPENED), REAL_BUG]
     assert report.stops == ("the time limit of 120 minutes",)
     assert none_left.stops == ("the time limit of 0 minutes",)
     assert none_left.results == ()
@@ -248,7 +286,7 @@ def test_verifications_left_at_the_time_limit_continue_in_the_next_auto_run(
     assert third.pulls[0].verified
     assert third.pulls[0].verification.outcome.startswith("flakipype verification: CI passed 1")
     assert third.pull_requests == 0
-    assert kinds(third) == [(1, FixOutcomeKind.SKIPPED)]
+    assert kinds(third) == [(1, FixOutcomeKind.SKIPPED), REAL_BUG]
     assert third.fixes[0].text.startswith("An open flakipype pull request for #1 exists")
 
 

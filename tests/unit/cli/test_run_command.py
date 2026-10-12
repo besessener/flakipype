@@ -52,8 +52,11 @@ def test_run_prints_a_summary(opened: list[tuple[Mode, ScanRequest]]) -> None:
     assert lines[1] == "Scan: 1 repositories, 6 runs, 1 flaky, 1 seen once, 1 recurring error"
     assert lines[2] == "Investigated: 2 (1 flaky_test, 1 real_bug)"
     assert lines[3].startswith("Fixes: #1 octo-org/app › CI › test: Opened draft pull request #12")
-    assert lines[4].startswith("Verification: octo-org/app#12: flakipype verification: cannot")
-    assert lines[5] == (
+    assert lines[4] == (
+        "       #3 octo-org/app › CI › lint: not fixed: real bug, which flakipype does not fix"
+    )
+    assert lines[5].startswith("Verification: octo-org/app#12: flakipype verification: cannot")
+    assert lines[6] == (
         "Budget: pull requests today 1 of 3 · actions today 0 of 20 · tokens 3,000 of "
         "1,000,000 (today 3,000 of 3,000,000)"
     )
@@ -67,8 +70,9 @@ def test_run_in_ask_mode_as_json(opened: list[tuple[Mode, ScanRequest]]) -> None
     exported = json.loads(result.stdout)
     assert result.exit_code == 0
     assert (exported["schema_version"], exported["mode"], exported["complete"]) == (1, "ask", True)
-    (fix,) = exported["fixes"]
+    fix, real_bug = exported["fixes"]
     assert (fix["finding"], fix["kind"]) == (1, "kept")
+    assert (real_bug["finding"], real_bug["kind"]) == (3, "skipped")
     assert "+await rows.waitFor()" in fix["diff"]
     assert exported["investigations"][0] == {
         "finding": 1, "status": "completed", "classification": "flaky_test",

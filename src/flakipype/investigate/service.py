@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 from flakipype.agent.budget import RunBudget
 from flakipype.agent.investigator import Status
-from flakipype.agent.pipeline import FindingResult
+from flakipype.agent.pipeline import FindingResult, reviewed
 from flakipype.agent.verdict import Verdict
 from flakipype.flaky.findings import Evidence, Finding, FindingKind
 from flakipype.scan.progress import ProgressListener, ignore_progress
@@ -166,7 +166,12 @@ class InvestigationService:
             self._investigate_all(todo, evidence=report.evidence, budget=budget, on_event=on_event)
         )
         for result in results.values():
-            if not result.from_cache and result.status is Status.COMPLETED:
+            # A review that could not run (e.g. an HTTP error) is retried next time, not kept.
+            if (
+                not result.from_cache
+                and result.status is Status.COMPLETED
+                and reviewed(result.review)
+            ):
                 finding = result.finding
                 self._cache.save_verdict(
                     host,
@@ -183,8 +188,12 @@ class InvestigationService:
             stored = self._cache.cached_verdict(
                 host, finding.identity, finding.last_seen.isoformat()
             )
-            if stored is not None:
-                cached[finding.number] = InvestigationResult.restored(finding, stored)
+            if stored is None:
+                continue
+            restored = InvestigationResult.restored(finding, stored)
+            # Older versions kept verdicts whose review failed; they are investigated again.
+            if reviewed(restored.review):
+                cached[finding.number] = restored
         return cached
 
     def _investigate_all(

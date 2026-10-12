@@ -232,7 +232,12 @@ are kept.
 A verdict is stored with the finding's key, its signature fingerprint and the
 id of the newest run it saw. It is reused until a newer failure of that
 finding appears; `/investigate --fresh` forces a new one. That keeps repeat
-runs cheap and stable.
+runs cheap and stable. Only verdicts the reviewer answered are kept: when the
+review could not run (an HTTP error, for example), the next investigation
+starts over, and verdicts older versions kept that way are not reused.
+Investigations without a verdict are not kept either; only
+[unattended runs](unattended.md) remember them, so they do not pay for the
+same dead end every day.
 
 ## In the chat
 
