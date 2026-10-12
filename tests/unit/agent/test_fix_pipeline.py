@@ -39,6 +39,7 @@ def propose(
     instructions: str = "",
     check_changes: Callable[[list[FileChange]], list[str]] | None = None,
     stop: Stop | None = None,
+    max_seconds: float | None = None,
 ) -> FixResult:
     answers = iter(check or [])
     config = FixConfig(
@@ -61,6 +62,7 @@ def propose(
         check=check_changes or (lambda changes: next(answers, []) if changes else ["no changes"]),
         earlier=earlier,
         instructions=instructions,
+        max_seconds=max_seconds,
     )
     return propose_fix(config, request)
 
@@ -214,6 +216,16 @@ def test_a_requested_stop_ends_the_fix_before_the_model_is_asked() -> None:
     result = propose(model, stop=stop)
 
     assert (result.status, result.detail) == (FixStatus.BUDGET, "Stopped at the request to stop.")
+    assert model.requests == []
+
+
+def test_less_time_than_configured_ends_the_fix_sooner() -> None:
+    model = ScriptedModel([submit("toolu_1")])
+
+    result = propose(model, max_seconds=0)
+
+    assert result.status is FixStatus.BUDGET
+    assert result.detail == "Stopped at the time limit of 0 seconds."
     assert model.requests == []
 
 

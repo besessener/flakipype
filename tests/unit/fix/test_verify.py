@@ -92,6 +92,23 @@ def test_no_run_within_ten_minutes_cannot_be_verified(cache: ScanCache) -> None:
     assert setup.github.comments == [done.outcome]
 
 
+def test_a_lookup_that_keeps_failing_ends_the_wait_after_ten_minutes(cache: ScanCache) -> None:
+    setup = Setup(cache)
+    waiting = setup.verifier.begin(verification(), "on: push\njobs: {}\n")
+    setup.github.errors["commit_runs"] = GitHubApiError("Not Found (HTTP 404)", 404)
+
+    with pytest.raises(GitHubApiError):
+        setup.verifier.poll(waiting)
+    setup.clock.advance(minutes=10, seconds=1)
+    done = setup.verifier.poll(waiting)
+
+    assert done.stage is Stage.DONE
+    assert done.outcome.startswith(f"{CANNOT}GitHub did not answer: Not Found (HTTP 404).")
+    setup.github.errors["commit_runs"] = ApiRateLimitError("API rate limit exceeded", 403)
+    with pytest.raises(ApiRateLimitError):
+        setup.verifier.poll(waiting)
+
+
 def test_a_dispatch_only_workflow_is_dispatched_on_the_fix_branch(cache: ScanCache) -> None:
     setup = Setup(cache, runs=FakeRuns(dispatch_ids=[80]))
 

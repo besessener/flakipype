@@ -112,6 +112,8 @@ class InvestigationRequest:
     fresh: bool = False
     # A lower token limit than the configured one for this call, e.g. what a day has left.
     max_tokens: int | None = None
+    # True once no new investigation may start; investigations already running finish.
+    out_of_time: Callable[[], bool] | None = None
 
 
 class InvestigationService:
@@ -144,11 +146,22 @@ class InvestigationService:
     ) -> ScanReport:
         return self._scan.scan(request, on_progress)
 
+    def budget_for(self, request: InvestigationRequest) -> RunBudget:
+        """The token budget investigate uses for the request; it counts even if a step crashes."""
+        limit = self._run_tokens
+        if request.max_tokens is not None:
+            limit = min(limit, request.max_tokens)
+        if request.out_of_time is None:
+            return RunBudget(limit)
+        return RunBudget(limit, out_of_time=request.out_of_time)
+
     def investigate(
         self,
         report: ScanReport,
         request: InvestigationRequest,
         on_event: EventListener = ignore_events,
+        *,
+        budget: RunBudget | None = None,
     ) -> InvestigationReport:
         """Investigate findings of an existing scan; `request.scan` names its host."""
         findings = report.findings
@@ -157,10 +170,7 @@ class InvestigationService:
         unknown = tuple(number for number in request.selection.numbers if number not in known)
         host = request.scan.host
         results = {} if request.fresh else self._cached(host, chosen)
-        limit = self._run_tokens
-        if request.max_tokens is not None:
-            limit = min(limit, request.max_tokens)
-        budget = RunBudget(limit)
+        budget = budget or self.budget_for(request)
         todo = [finding for finding in chosen if finding.number not in results]
         results.update(
             self._investigate_all(todo, evidence=report.evidence, budget=budget, on_event=on_event)
@@ -238,6 +248,9 @@ class InvestigationService:
                 0,
                 0,
             )
+        if budget.out_of_time():
+            detail = "Not started: the run's time limit is reached."
+            return InvestigationResult(finding, Status.BUDGET, None, "", detail, 0, 0)
         on_event(InvestigationEvent(EventKind.STARTED, finding, 0, total))
         try:
             outcome = self._investigate(finding, evidence=evidence, run_budget=budget)

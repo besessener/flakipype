@@ -20,7 +20,7 @@ def systemd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     monkeypatch.setattr(wiring, "build_daemon", lambda: service)
 
     def unit_options(schedule: str, mode: Mode) -> UnitOptions:
-        return UnitOptions(Path("/home/me/.local/bin/flakipype"), schedule, mode.value, 60)
+        return UnitOptions(Path("/home/me/.local/bin/flakipype"), schedule, mode.value)
 
     monkeypatch.setattr(wiring, "unit_options", unit_options)
     return fake
@@ -36,7 +36,7 @@ def test_install_print_changes_nothing(systemd: FakeRunner) -> None:
     assert result.exit_code == 0
     assert "# --- flakipype.service" in result.output
     assert "ExecStart=/home/me/.local/bin/flakipype run --mode ask" in result.output
-    assert "TimeoutStartSec=70min" in result.output
+    assert "TimeoutStartSec=730min" in result.output
     assert systemd.calls == []
 
 

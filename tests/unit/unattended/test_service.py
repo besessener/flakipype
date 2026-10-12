@@ -1,16 +1,23 @@
 import json
 from dataclasses import dataclass, field
 
+import pytest
+
+from flakipype.agent.budget import RunBudget
 from flakipype.agent.fix_pipeline import FixRequest, FixResult
+from flakipype.agent.fixer import FixStatus
 from flakipype.agent.investigator import Status
+from flakipype.agent.pipeline import FindingResult
 from flakipype.agent.tools import Mode
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings
-from flakipype.github.actions import GitHubApiError
+from flakipype.flaky.findings import Evidence, Finding
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import PullRequest
 from flakipype.github.runs import CommitRun
 from flakipype.store.database import ScanCache
 from flakipype.store.sessions import SessionKind
+from flakipype.unattended.limits import day_usage
 from flakipype.unattended.service import FixOutcomeKind, RunReport
 
 from support.fake_fix import CHANGE, FIX_COMMIT, Clock, FakeFixer, fixed
@@ -109,6 +116,49 @@ def test_a_rejected_fix_is_remembered(cache: ScanCache) -> None:
     )
     assert second.fixes[0].kind is FixOutcomeKind.SKIPPED
     assert len(fixer.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        FixResult(FixStatus.MODEL_ERROR, None, (), accepted=False, review="",
+                  detail="Error code: 529 - overloaded", tokens=5),
+        fixed(accepted=False, review="not reviewed: Error code: 529 - overloaded"),
+    ],
+)  # fmt: skip
+def test_a_model_error_during_the_fix_fails_the_run_and_is_tried_again(
+    cache: ScanCache, result: FixResult
+) -> None:
+    fixer = FakeFixer([result])
+
+    first = run_once(RunWorld(cache, fixer=fixer))
+    run_once(RunWorld(cache, fixer=fixer))
+
+    assert kinds(first) == [(1, FixOutcomeKind.FAILED), REAL_BUG]
+    assert "529 - overloaded" in first.problems[0]
+    assert not first.complete
+    assert len(fixer.requests) == 2
+
+
+def test_a_pushed_fix_without_pull_request_counts_and_is_not_pushed_again(
+    cache: ScanCache,
+) -> None:
+    world = RunWorld(cache)
+    world.github.errors["open_draft"] = GitHubApiError(
+        "Draft pull requests are not supported in this repository (HTTP 422)", 422
+    )
+
+    first = run_once(world)
+    second = run_once(RunWorld(cache, fixer=world.fixer))
+
+    assert kinds(first) == [(1, FixOutcomeKind.FAILED), REAL_BUG]
+    assert first.pull_requests == 1
+    assert not first.complete
+    assert len(world.fixer.requests) == 1
+    assert second.fixes[0].text.startswith(
+        "not tried again: an earlier run did not push its fix (pushed, no pull request: Branch "
+    )
+    assert day_usage(cache.audit.since(""), 0).pull_requests == 1
 
 
 def test_a_dry_run_remembers_nothing(cache: ScanCache) -> None:
@@ -247,6 +297,39 @@ def test_the_time_limit_stops_before_the_scan_ends_and_between_fixes(cache: Scan
     assert none_left.results == ()
 
 
+@dataclass
+class SlowAgent(ClassifyingAgent):
+    """Each investigation takes two hours on the run's clock."""
+
+    clock: Clock = field(default_factory=Clock)
+
+    def __call__(
+        self, finding: Finding, *, evidence: Evidence, run_budget: RunBudget
+    ) -> FindingResult:
+        self.clock.advance(hours=2)
+        return super().__call__(finding, evidence=evidence, run_budget=run_budget)
+
+
+def test_no_investigation_starts_after_the_time_limit(cache: ScanCache) -> None:
+    clock = Clock(NOW)
+    agent = SlowAgent(clock=clock)
+
+    report = run_once(RunWorld(cache, clock=clock, agent=agent))
+
+    assert agent.calls == [1]
+    assert report.results[1].detail == "Not started: the run's time limit is reached."
+    assert report.fixes[0].text == "not tried: the time limit of 120 minutes"
+    assert report.stops == ("the time limit of 120 minutes",)
+
+
+def test_a_fix_gets_at_most_the_time_the_run_has_left(cache: ScanCache) -> None:
+    world = RunWorld(cache, limits=limits(minutes=30))
+
+    run_once(world)
+
+    assert [request.max_seconds for request in world.fixer.requests] == [1800.0]
+
+
 def verifying_world(cache: ScanCache, mode: Mode = Mode.AUTO, minutes: int = 120) -> RunWorld:
     world = RunWorld(
         cache, mode=mode, limits=limits(minutes=minutes), fix_settings=FixSettings(verify_runs=1)
@@ -291,6 +374,53 @@ def test_verifications_left_at_the_time_limit_continue_in_the_next_auto_run(
     assert third.pull_requests == 0
     assert kinds(third) == [(1, FixOutcomeKind.SKIPPED), REAL_BUG]
     assert third.fixes[0].text.startswith("An open flakipype pull request for #1 exists")
+
+
+def test_pull_requests_taken_over_survive_a_run_that_dies_in_its_scan(
+    cache: ScanCache,
+) -> None:
+    first_world = verifying_world(cache, minutes=10)
+    run_once(first_world)
+    crashing = verifying_world(cache)
+    crashing.source.repositories_error = TimeoutError("gh did not answer")
+
+    with pytest.raises(TimeoutError):
+        run_once(crashing)
+
+    stored = cache.sessions.latest_run(before=10**6)
+    assert stored is not None
+    assert len(json.loads(stored)["fix"]["pulls"]) == 1
+
+
+def test_the_tokens_of_a_crashed_step_are_stored(cache: ScanCache) -> None:
+    world = RunWorld(cache)
+    service = world.service()
+
+    def crash_after_an_investigation(text: str) -> None:
+        if text.startswith("Investigated"):
+            raise RuntimeError("display failed")
+
+    service.show_activity(crash_after_an_investigation)
+    with pytest.raises(RuntimeError):
+        service.run()
+
+    assert world.agent.calls
+    assert cache.sessions.run_tokens_since("") == 1_000 * len(world.agent.calls)
+
+
+def test_a_scan_stopped_by_the_rate_limit_investigates_nothing(cache: ScanCache) -> None:
+    world = RunWorld(cache)
+    world.source.logs = dict.fromkeys(
+        world.source.logs, ApiRateLimitError("API rate limit exceeded", 403)
+    )
+
+    report = run_once(world)
+
+    assert (world.agent.calls, report.results, report.fixes) == ([], (), ())
+    assert report.stops == (
+        "GitHub's rate limit; investigations and fixes continue in the next run",
+    )
+    assert not report.complete
 
 
 def test_activity_is_shown_while_it_runs(cache: ScanCache) -> None:

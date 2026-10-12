@@ -43,12 +43,13 @@ Outside poe:
 | Option | Meaning |
 | --- | --- |
 | `--mode auto\|ask` | `auto` (default) pushes draft pull requests within the limits; `ask` only reports what it would do |
-| `--days N`, `--repo NAME`, `--owner NAME` | As for `scan` |
+| `--days N`, `--repo NAME` | As for `scan` |
+| `--owner NAME` | Must be the configured `github.owner` (any case): a run fixes only that owner; any other exits with code 2 |
 | `--json` | Print the summary as JSON (`schema_version` 1) |
 
 Exit codes: 0 finished (a reached limit is a normal end), 1 something was
 incomplete (scan stopped early, GitHub or the model failed, a delivery
-failed), 2 not set up, 3 another `flakipype run` is running. How it works:
+failed), 2 not set up or another `--owner`, 3 another `flakipype run` is running. How it works:
 [unattended runs](../explanation/unattended.md).
 
 ### `flakipype daemon`

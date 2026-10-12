@@ -92,7 +92,7 @@ store = "auto"
 | `fix.max_rounds` | `20` | 5–60 model calls of the fixer |
 | `fix.max_tokens` | `300000` | 10k–2M tokens for the fixer and its reviewer together |
 | `fix.max_seconds` | `600` | 60–3600 seconds for the fixer |
-| `run.max_minutes` | `120` | 10–720 minutes one `flakipype run` may take; the systemd unit stops it 10 minutes later |
+| `run.max_minutes` | `120` | 10–720 minutes one `flakipype run` may take; no investigation or fix starts after it, and a fix gets at most the time left. The systemd unit's own limit is 730 minutes, whatever this is set to |
 | `run.max_prs_per_day` | `3` | 1–20 draft pull requests all runs of the last 24 hours may open |
 | `run.max_actions_per_day` | `20` | 1–200 reruns and dispatches all runs of the last 24 hours may start |
 | `run.max_tokens_per_day` | `3000000` | 10k–50M tokens all runs of the last 24 hours may use |

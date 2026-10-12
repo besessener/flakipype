@@ -12,7 +12,13 @@ from flakipype.agent.orchestrator import workspace_tools
 from flakipype.agent.pipeline import reviewed
 from flakipype.agent.tools import HeadlessGate, Mode, ToolDeclinedError, ToolError
 from flakipype.agent.workcopy import unified_diff
-from flakipype.fix.service import FIXABLE, FixDeliveryError, FixNotMadeError
+from flakipype.fix.service import (
+    FIXABLE,
+    FixDeliveryError,
+    FixNotMadeError,
+    FixPushedError,
+    FixUnavailableError,
+)
 from flakipype.fix.state import OpenedPull
 from flakipype.flaky.findings import Finding
 from flakipype.github.actions import GitHubApiError
@@ -119,13 +125,18 @@ class RunService:
             title, now=started.isoformat(), data=json.dumps(self._document()), kind=SessionKind.RUN
         )
         self._carry_over(sessions.latest_run(before=self._session_id))
-        try:
-            self._scan_and_fix(deadline)
-        except GitHubApiError as error:
-            self._progress.problems.append(f"GitHub: {error}")
-        if self._gate.mode is Mode.AUTO:
-            self._poll_until(deadline)
+        # Saved before the scan, so a run that dies in it does not lose the adopted pull requests.
         self._save()
+        try:
+            try:
+                self._scan_and_fix(deadline)
+            except GitHubApiError as error:
+                self._progress.problems.append(f"GitHub: {error}")
+            if self._gate.mode is Mode.AUTO:
+                self._poll_until(deadline)
+        finally:
+            # Also when a step crashes: its tokens count toward the daily limit.
+            self._save()
         return self._report(started)
 
     def _carry_over(self, document: str | None) -> None:
@@ -140,6 +151,10 @@ class RunService:
         workspace, stops = self._workspace, self._progress.stops
         report = workspace.scan_report()
         self._save()
+        if not report.complete:
+            # Investigations would only see GitHub refuse their tools, and keep those verdicts.
+            stops.append("GitHub's rate limit; investigations and fixes continue in the next run")
+            return
         if self._clock.now() >= deadline:
             stops.append(f"the time limit of {self._limits.minutes} minutes")
             return
@@ -148,7 +163,10 @@ class RunService:
             return
         numbers = self._to_investigate(report)
         if numbers:
-            workspace.investigate(numbers, fresh=False, max_tokens=self._limits.tokens)
+            workspace.investigate(
+                numbers, fresh=False, max_tokens=self._limits.tokens,
+                out_of_time=lambda: self._clock.now() >= deadline,
+            )  # fmt: skip
             self._remember_no_verdicts(report.host)
             self._save()
         self._fix_all(report, deadline)
@@ -183,6 +201,7 @@ class RunService:
                 )  # fmt: skip
 
     def _fix_all(self, report: ScanReport, deadline: datetime) -> None:
+        self._workspace.fixes.deadline = deadline
         stopped = ""
         for result in sorted(self._workspace.results.values(), key=lambda r: r.finding.number):
             if not stopped and not _not_fixable(result):
@@ -223,13 +242,17 @@ class RunService:
             text = self._fix_tool.invoke({"finding": finding.number}, self._gate)
         except ToolDeclinedError:
             return self._kept(finding, host)
+        except (FixUnavailableError, FixDeliveryError) as error:
+            # The model or GitHub failed, not the fix; only a pushed commit is not tried again.
+            reason = _first_line(str(error))
+            if isinstance(error, FixPushedError):
+                self._remember(finding, host, f"pushed, no pull request: {reason}")
+            self._progress.problems.append(reason)
+            return _outcome(finding, FixOutcomeKind.FAILED, reason)
         except FixNotMadeError as error:
-            reason = str(error).splitlines()[0]
+            reason = _first_line(str(error))
             self._remember(finding, host, reason)
             return _outcome(finding, FixOutcomeKind.SKIPPED, reason)
-        except FixDeliveryError as error:
-            self._progress.problems.append(str(error))
-            return _outcome(finding, FixOutcomeKind.FAILED, str(error))
         except ToolError as error:
             return _outcome(finding, FixOutcomeKind.SKIPPED, str(error))
         return _outcome(finding, FixOutcomeKind.OPENED, text.splitlines()[0])

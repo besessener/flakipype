@@ -108,6 +108,36 @@ def test_a_run_holds_the_lock_and_is_wired_with_the_mode(
     assert (isolated_home / "data" / "flakipype" / "run.lock").exists()
 
 
+@pytest.mark.parametrize(("configured", "asked"), [("octo-org", "other-org"), ("", "other-org")])
+def test_a_run_only_takes_the_configured_owner(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch, configured: str, asked: str
+) -> None:
+    write_config(isolated_home, f'[llm]\nmodel = "m-1"\n\n[github]\nowner = "{configured}"\n')
+    store_api_key(isolated_home)
+    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
+    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+
+    with (
+        pytest.raises(
+            NotReadyError, match=f"A run fixes only the configured owner .*, not {asked}"
+        ),
+        open_run(Mode.AUTO, lambda _: ScanRequest(asked, "github.com", 30, 50)),
+    ):
+        pass
+
+
+def test_a_run_takes_the_configured_owner_in_any_case(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n')
+    store_api_key(isolated_home)
+    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
+    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+
+    with open_run(Mode.ASK, lambda _: ScanRequest("Octo-Org", "github.com", 30, 50)) as service:
+        assert isinstance(service, RunService)
+
+
 def test_the_daemon_and_its_units_come_from_the_environment(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -118,7 +148,7 @@ def test_the_daemon_and_its_units_come_from_the_environment(
 
     options = unit_options("weekly", Mode.AUTO)
 
-    assert options == UnitOptions(command, "weekly", "auto", 30)
+    assert options == UnitOptions(command, "weekly", "auto")
     assert build_daemon().unit_dir == isolated_home / "config" / "systemd" / "user"
 
 

@@ -1,5 +1,6 @@
 """The chat's actions: targets checked, a request for the gate, budget, audit and watching."""
 
+import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -70,6 +71,8 @@ class ActionService:
         self._origin = origin
         self.session = uuid4().hex
         self.used = 0
+        # The chat's worker and its poll worker spend from the same budget.
+        self._spending = threading.Lock()
 
     @property
     def watched(self) -> list[WatchedRun]:
@@ -96,27 +99,39 @@ class ActionService:
 
     def rerun_authorised(self, run: WatchedRun, label: str) -> WatchedRun | None:
         """Rerun a finished watched run that a confirmed fix covers; None if the budget is used."""
-        if run.run_id is None or self.used >= self._settings.max_per_session:
-            return None
-        self._runs.rerun(run.repository, run.run_id)
-        self.used += 1
+        with self._spending:
+            if run.run_id is None or self.used >= self._settings.max_per_session:
+                return None
+            try:
+                self._runs.rerun(run.repository, run.run_id)
+            except GitHubApiError as error:
+                self._record_covered("verify_rerun", run, f"failed: {error}")
+                raise
+            self.used += 1
         started = self._watch.add(
             replace(
                 run, number=0, label=label, started=self._now(), attempt=run.attempt + 1,
                 before=run.conclusion, status="queued", conclusion=None, detail="", done=False,
             )
         )  # fmt: skip
-        self._record_covered("verify_rerun", started)
+        self._record_covered("verify_rerun", started, f"Started R{started.number}.")
         return started
 
     def dispatch_authorised(self, template: WatchedRun) -> WatchedRun | None:
         """Dispatch for a confirmed fix; None if the budget is used up."""
-        if self.used >= self._settings.max_per_session:
-            return None
-        run_id = self._runs.dispatch(template.repository, template.workflow_path, template.ref)
-        self.used += 1
+        with self._spending:
+            if self.used >= self._settings.max_per_session:
+                return None
+            try:
+                run_id = self._runs.dispatch(
+                    template.repository, template.workflow_path, template.ref
+                )
+            except GitHubApiError as error:
+                self._record_covered("verify_dispatch", template, f"failed: {error}")
+                raise
+            self.used += 1
         started = self._watch.add(replace(template, run_id=run_id, started=self._now()))
-        self._record_covered("verify_dispatch", started)
+        self._record_covered("verify_dispatch", started, f"Started R{started.number}.")
         return started
 
     def adopt(self, runs: list[WatchedRun]) -> None:
@@ -145,6 +160,7 @@ class ActionService:
             "rerun_failed",
             request,
             lambda: self._start_rerun(run, state, self._runs.rerun_failed_jobs),
+            spends=1,
         )
 
     def rerun_run(
@@ -154,7 +170,7 @@ class ActionService:
         state = self._checked_run(run)
         request = self._rerun_request("Rerun all jobs?", run, state)
         return self._prepare(
-            "rerun_run", request, lambda: self._start_rerun(run, state, self._runs.rerun)
+            "rerun_run", request, lambda: self._start_rerun(run, state, self._runs.rerun), spends=1
         )
 
     def dispatch(self, finding: Finding, ref: str | None, repeats: int) -> PreparedAction:
@@ -184,7 +200,9 @@ class ActionService:
             ),
         )
         dispatch = _Dispatch(key, name, commit, repeats)
-        return self._prepare("dispatch", request, lambda: self._start_dispatches(dispatch))
+        return self._prepare(
+            "dispatch", request, lambda: self._start_dispatches(dispatch), spends=repeats
+        )
 
     def cancel(self, number: int) -> PreparedAction:
         run = self._watch.find(number)
@@ -207,7 +225,7 @@ class ActionService:
             self._runs.cancel(run.repository, run_id)
             return _Started(f"Cancel requested for R{number}. {_WATCHING}", run_id)
 
-        return self._prepare("cancel", request, start)
+        return self._prepare("cancel", request, start, spends=0)
 
     def watched_runs(self) -> str:
         if not self._watch.runs:
@@ -300,7 +318,12 @@ class ActionService:
         group = self._watch.next_number if repeats > 1 else None
         started: list[WatchedRun] = []
         for index in range(1, repeats + 1):
-            run_id = self._runs.dispatch(key.repository, key.workflow_path, dispatch.ref)
+            try:
+                run_id = self._runs.dispatch(key.repository, key.workflow_path, dispatch.ref)
+            except GitHubApiError as error:
+                if not started:
+                    raise
+                return _partly_started(dispatch, started, index=index, error=error)
             self.used += 1
             label = f"dispatch {index}/{repeats}" if group else "dispatch"
             started.append(
@@ -336,12 +359,12 @@ class ActionService:
             )
             raise ToolError(message)
 
-    def _record_covered(self, action: str, run: WatchedRun) -> None:
+    def _record_covered(self, action: str, run: WatchedRun, outcome: str) -> None:
         self._audit.record(
             AuditEntry(
                 time=self._now().isoformat(), session=self.session, action=action,
                 origin=self._origin, request=f"{run.title} on {run.ref} @ {run.commit[:7]}",
-                answer=COVERED_BY_PUSH, outcome=f"Started R{run.number}.", run_id=run.run_id,
+                answer=COVERED_BY_PUSH, outcome=outcome, run_id=run.run_id,
             )
         )  # fmt: skip
 
@@ -349,7 +372,7 @@ class ActionService:
         return f"Actions this session: {self.used + count} of {self._settings.max_per_session}"
 
     def _prepare(
-        self, action: str, request: ActionRequest, start: Callable[[], _Started]
+        self, action: str, request: ActionRequest, start: Callable[[], _Started], *, spends: int
     ) -> PreparedAction:
         origin = self._origin
 
@@ -364,7 +387,14 @@ class ActionService:
 
         def run(answer: Answer) -> str:
             try:
-                started = start()
+                # Checked again: a verification rerun may have spent the budget during the dialog.
+                with self._spending:
+                    if spends:
+                        self._check_room(spends)
+                    started = start()
+            except ToolError as error:
+                record(answer.value, f"not run: {error}")
+                raise
             except GitHubApiError as error:
                 record(answer.value, f"failed: {error}")
                 raise ToolError(refusal(error)) from error
@@ -372,3 +402,15 @@ class ActionService:
             return started.outcome
 
         return PreparedAction(request, run, lambda answer: record(answer.value, "not run"))
+
+
+def _partly_started(
+    dispatch: _Dispatch, started: list[WatchedRun], *, index: int, error: GitHubApiError
+) -> _Started:
+    """The runs that did start stay counted and watched, so the answer names them."""
+    numbers = ", ".join(f"R{run.number}" for run in started)
+    outcome = (
+        f"Started {numbers}: {dispatch.key.workflow_name} on {dispatch.ref}, then dispatch "
+        f"{index}/{dispatch.repeats} failed: {refusal(error).rstrip('.')}. {_WATCHING}"
+    )
+    return _Started(outcome, started[0].run_id)

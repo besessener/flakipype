@@ -30,6 +30,10 @@ class DeliveryError(Exception):
     """A delivery step failed; the message says what exists on GitHub already."""
 
 
+class PushedWithoutPullError(DeliveryError):
+    """The fix's commit is on GitHub, but its pull request could not be opened."""
+
+
 def fix_refusal(error: GitHubApiError) -> str:
     if error.status == _HTTP_FORBIDDEN:
         return (
@@ -71,7 +75,7 @@ class Delivery:
                 f"Branch {branch} with commit {sha[:7]} created; opening the pull request failed: "
                 f"{fix_refusal(error)} {_LEFT}"
             )
-            raise DeliveryError(message) from error
+            raise PushedWithoutPullError(message) from error
         verification = self._start_verification(
             proposal, replace(proposal.verification, pull_number=pull.number, branch=branch,
                               commit=sha, started=self._now()),

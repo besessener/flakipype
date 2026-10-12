@@ -82,15 +82,27 @@ class ChatWorkspace:
         return self.report.findings if self.report else []
 
     def investigate(
-        self, numbers: tuple[int, ...], *, fresh: bool, max_tokens: int | None = None
+        self,
+        numbers: tuple[int, ...],
+        *,
+        fresh: bool,
+        max_tokens: int | None = None,
+        out_of_time: Callable[[], bool] | None = None,
     ) -> str:
         report = self._report()
         request = InvestigationRequest(
-            self.request, Selection(numbers=numbers), fresh=fresh, max_tokens=max_tokens
-        )
-        outcome = self._service.investigate(report, request, self._investigation_progress)
+            self.request, Selection(numbers=numbers), fresh=fresh, max_tokens=max_tokens,
+            out_of_time=out_of_time,
+        )  # fmt: skip
+        budget = self._service.budget_for(request)
+        try:
+            outcome = self._service.investigate(
+                report, request, self._investigation_progress, budget=budget
+            )
+        finally:
+            # Counted even when the step crashes, so the session and the daily limit see them.
+            self.tokens += budget.used
         self.on_activity("")
-        self.tokens += outcome.tokens
         self.results.update({result.finding.number: result for result in outcome.results})
         texts = [result_text(result) for result in outcome.results]
         texts.extend(f"#{number}: no such finding." for number in outcome.unknown_numbers)

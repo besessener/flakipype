@@ -54,13 +54,19 @@ class Limits:
     seconds: float = 300.0
 
 
+def _never() -> bool:
+    return False
+
+
 class RunBudget:
     """Tokens shared by all investigations of one run; safe across threads."""
 
-    def __init__(self, tokens: int) -> None:
+    def __init__(self, tokens: int, *, out_of_time: Callable[[], bool] = _never) -> None:
         self._limit = tokens
         self._used = 0
         self._lock = threading.Lock()
+        # True once no new investigation may start, e.g. after an unattended run's time limit.
+        self.out_of_time = out_of_time
 
     @property
     def used(self) -> int:
