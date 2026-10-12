@@ -15,11 +15,10 @@ _INDENT = " " * 14
 
 def render_run(report: RunReport) -> str:
     owner = report.scan.owner if report.scan else "—"
+    # Local time, like the timer's schedule and the journal; the JSON keeps UTC.
+    started, finished = report.started.astimezone(), report.finished.astimezone()
     lines = [
-        (
-            f"flakipype run · {owner} · {report.mode} · "
-            f"{report.started:%Y-%m-%d %H:%M}–{report.finished:%H:%M}"
-        ),
+        f"flakipype run · {owner} · {report.mode} · {started:%Y-%m-%d %H:%M}–{finished:%H:%M %Z}",
         _scan_line(report),
         _investigated_line(report),
         *_block("Fixes", [f"#{fix.finding} {fix.title}: {fix.text}" for fix in report.fixes]),

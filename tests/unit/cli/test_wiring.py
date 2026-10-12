@@ -32,7 +32,9 @@ from flakipype.store.lock import RunLockedError
 from flakipype.unattended.service import RunService
 
 from support.fake_fix import verdict
+from support.fake_gh import FakeGh
 from support.fake_runs import e2e_evidence, e2e_finding
+from support.fake_setup import USER_CALL, logged_in
 
 
 @pytest.fixture
@@ -86,13 +88,19 @@ def test_an_unreadable_keyring_is_not_ready(isolated_home: Path) -> None:
         pass
 
 
+def use_fake_gh(home: Path, monkeypatch: pytest.MonkeyPatch, fake_gh: FakeGh) -> None:
+    binary = GhBinary(path=home / "gh", version=(2, 102, 0))
+    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+    monkeypatch.setattr(ManagedGh, "cli", lambda _, __, host: fake_gh.cli(host))
+
+
 def test_a_run_holds_the_lock_and_is_wired_with_the_mode(
-    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch, fake_gh: FakeGh
 ) -> None:
     write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n')
     store_api_key(isolated_home)
-    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
-    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+    use_fake_gh(isolated_home, monkeypatch, fake_gh)
+    logged_in(fake_gh)
     requests: list[str] = []
 
     def request_for(settings: Settings) -> ScanRequest:
@@ -127,14 +135,41 @@ def test_a_run_only_takes_the_configured_owner(
 
 
 def test_a_run_takes_the_configured_owner_in_any_case(
-    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch, fake_gh: FakeGh
 ) -> None:
     write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n')
     store_api_key(isolated_home)
-    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
-    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+    use_fake_gh(isolated_home, monkeypatch, fake_gh)
+    logged_in(fake_gh)
 
     with open_run(Mode.ASK, lambda _: ScanRequest("Octo-Org", "github.com", 30, 50)) as service:
+        assert isinstance(service, RunService)
+
+
+def test_a_run_without_a_gh_login_is_not_ready(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch, fake_gh: FakeGh
+) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n')
+    store_api_key(isolated_home)
+    use_fake_gh(isolated_home, monkeypatch, fake_gh)
+    fake_gh.record(USER_CALL, stderr="gh auth login", exit_code=4)
+
+    with (
+        pytest.raises(NotReadyError, match=r"gh is not logged in to github\.com"),
+        open_run(Mode.AUTO, lambda _: ScanRequest("octo-org", "github.com", 30, 50)),
+    ):
+        pass
+
+
+def test_a_run_goes_on_when_the_login_cannot_be_checked(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch, fake_gh: FakeGh
+) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n')
+    store_api_key(isolated_home)
+    use_fake_gh(isolated_home, monkeypatch, fake_gh)
+    fake_gh.record(USER_CALL, stderr="gh: Server Error (HTTP 502)", exit_code=1)
+
+    with open_run(Mode.AUTO, lambda _: ScanRequest("octo-org", "github.com", 30, 50)) as service:
         assert isinstance(service, RunService)
 
 
@@ -150,6 +185,12 @@ def test_the_daemon_and_its_units_come_from_the_environment(
 
     assert options == UnitOptions(command, "weekly", "auto")
     assert build_daemon().unit_dir == isolated_home / "config" / "systemd" / "user"
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_units_need_a_configuration() -> None:
+    with pytest.raises(NotReadyError, match=r"No configuration at .*config\.toml\. Run"):
+        unit_options("daily", Mode.AUTO)
 
 
 def test_llm_check_against_a_closed_local_port() -> None:

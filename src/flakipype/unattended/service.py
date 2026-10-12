@@ -119,7 +119,7 @@ class RunService:
     def run(self) -> RunReport:
         started = self._clock.now()
         deadline = started + timedelta(minutes=self._limits.minutes)
-        title = f"run {started:%Y-%m-%d %H:%M} ({self._gate.mode})"
+        title = f"run {started.astimezone():%Y-%m-%d %H:%M %Z} ({self._gate.mode})"
         sessions = self._cache.sessions
         self._session_id = sessions.create(
             title, now=started.isoformat(), data=json.dumps(self._document()), kind=SessionKind.RUN

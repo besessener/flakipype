@@ -119,7 +119,9 @@ cli                               Typer entry point, composition root (cli/wirin
   prints ([unattended runs](unattended.md)). The systemd units are rendered
   and installed by `setup` (`daemon.py`).
 - **`cli`** wires everything together: `cli/wiring.py` is the only place that
-  reads the environment and builds real collaborators. Headless commands
+  reads flakipype's configuration from the environment and builds real
+  collaborators. `GhCli` passes the process environment (with `PATH`
+  filtered) on to `gh`. Headless commands
   bypass `tui` but not `setup` or `agent`.
 
 ## Data flow

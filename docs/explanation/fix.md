@@ -54,8 +54,9 @@ Merging stays your decision.
    verdict with its evidence (as data), and the tools below. It ends with
    `submit_fix`.
 4. **Checks** in code, then a **reviewer** pass on the diff (below). A fix
-   that fails a check or is rejected goes back to the fixer once with the
-   reasons, then the fix ends without a pull request.
+   that fails a check goes back to the fixer with the reasons at most twice.
+   A reviewer `revise` sends it back once; `reject` ends the fix without a
+   pull request.
 5. **Delivery** after confirmation: branch, commit, draft pull request,
    verification. Each step reports its result; a failure stops the next step
    and says what exists already.

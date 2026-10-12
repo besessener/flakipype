@@ -37,6 +37,7 @@ from flakipype.fix.delivery import Delivery
 from flakipype.fix.service import FixService
 from flakipype.fix.verify import Verifier, VerifyGitHub
 from flakipype.github.actions import ActionsClient
+from flakipype.github.auth import NotAuthenticated, auth_status
 from flakipype.github.binary import GhInstaller
 from flakipype.github.contents import ContentsClient
 from flakipype.github.gh import GhCli
@@ -117,7 +118,11 @@ def build_daemon() -> Daemon:
 
 def unit_options(schedule: str, mode: Mode) -> UnitOptions:
     """The units for the running flakipype command; refused when a run could not read the config."""
-    _ready_settings(_paths())
+    paths = _paths()
+    if not paths.config_file.exists():
+        message = f"No configuration at {paths.config_file}. {RUN_SETUP}"
+        raise NotReadyError(message)
+    _ready_settings(paths)
     return UnitOptions(
         executable=installed_executable(sys.argv[0], shutil.which),
         schedule=schedule,
@@ -312,6 +317,7 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
         settings, cache = agentic.settings, agentic.cache
         request = request_for(settings)
         _check_run_owner(request.owner, settings.github.owner)
+        _check_logged_in(agentic.gh, settings.github.host)
         now = partial(datetime.now, UTC)
         since = (now() - DAY).isoformat()
         limits = run_limits(
@@ -333,6 +339,14 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
             workspace=workspace, gate=HeadlessGate(mode), cache=cache, limits=limits,
             clock=RunClock(now=now, sleep=time.sleep),
         )  # fmt: skip
+
+
+def _check_logged_in(gh: GhCli, host: str) -> None:
+    """A missing or expired login is a setup problem, not a failed run; other answers go on."""
+    status = auth_status(gh)
+    if isinstance(status, NotAuthenticated):
+        message = f"gh is not logged in to {host}, or its token expired. {RUN_SETUP}"
+        raise NotReadyError(message)
 
 
 def _check_run_owner(owner: str, configured: str) -> None:

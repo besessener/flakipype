@@ -1,3 +1,5 @@
+import os
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -6,6 +8,29 @@ import pytest
 from flakipype.store.database import ScanCache
 
 from support.fake_gh import FakeGh
+
+
+def _set_time_zone(zone: str | None) -> None:
+    if zone is None:
+        os.environ.pop("TZ", None)
+    else:
+        os.environ["TZ"] = zone
+    time.tzset()
+
+
+@pytest.fixture(autouse=True)
+def utc_time_zone() -> Iterator[None]:
+    """Local times in output are UTC in every test, whatever the machine's zone."""
+    previous = os.environ.get("TZ")
+    _set_time_zone("UTC")
+    yield
+    _set_time_zone(previous)
+
+
+@pytest.fixture
+def berlin_time_zone() -> None:
+    """Autouse fixtures start first, so this replaces the UTC default; its teardown restores."""
+    _set_time_zone("Europe/Berlin")
 
 
 @pytest.fixture
