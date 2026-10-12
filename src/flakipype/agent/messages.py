@@ -3,9 +3,12 @@
 from typing import Any
 
 from anthropic.types import Message
+from anthropic.types.beta import BetaMessage
+
+_THINKING = frozenset({"thinking", "redacted_thinking"})
 
 
-def content_blocks(response: Message) -> list[dict[str, Any]]:
+def content_blocks(response: Message | BetaMessage) -> list[dict[str, Any]]:
     """The response's content as it goes back into the conversation."""
     return [block.model_dump(exclude_none=True) for block in response.content]
 
@@ -13,9 +16,19 @@ def content_blocks(response: Message) -> list[dict[str, Any]]:
 DECLINED = "The model declined to answer or gave an empty answer."
 
 
-def declined(response: Message) -> bool:
+def declined(response: Message | BetaMessage) -> bool:
     """A refusal or an empty answer; kept in a conversation, it makes every later request fail."""
     return response.stop_reason == "refusal" or not response.content
+
+
+def without_thinking(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The conversation without any thinking block; the API allows removing all, not some."""
+    return [
+        {**message, "content": [b for b in message["content"] if b.get("type") not in _THINKING]}
+        if isinstance(message["content"], list)
+        else message
+        for message in messages
+    ]
 
 
 def tool_result(tool_use_id: str, text: str, *, failed: bool) -> dict[str, Any]:

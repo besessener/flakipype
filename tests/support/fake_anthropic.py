@@ -44,9 +44,11 @@ class ScriptedModel:
 
     turns: list[dict[str, Any] | int]
     requests: list[dict[str, Any]] = field(default_factory=list)
+    headers: list[dict[str, str]] = field(default_factory=list)
 
     def _handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(json.loads(request.content))
+        self.headers.append(dict(request.headers))
         if not self.turns:
             return httpx2.Response(
                 500,

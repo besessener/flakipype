@@ -10,6 +10,7 @@ from enum import StrEnum
 from typing import Any
 
 from flakipype.actions.watch import WatchedRun
+from flakipype.agent.messages import without_thinking
 from flakipype.agent.orchestrator import ChatAgent, StepListener, ignore_steps
 from flakipype.agent.tools import Confirmer, Mode, PolicyGate, ToolDeclinedError, ToolError
 from flakipype.config.settings import MAX_WINDOW_DAYS
@@ -274,6 +275,7 @@ class ChatService:
         return {
             "entries": [asdict(entry) for entry in self._session.entries],
             "history": self._agent.history,
+            "fingerprint": self._agent.fingerprint,
             "scan": asdict(self._workspace.request),
             "findings": [asdict(item) for item in self.sidebar()],
             "chat_tokens": self._session.chat_tokens,
@@ -315,7 +317,11 @@ class ChatService:
             snapshot=[SidebarItem(**item) for item in document["findings"]],
             chat_tokens=int(document["chat_tokens"]),
         )
-        self._agent.restore(document["history"])
+        history = document["history"]
+        if document.get("fingerprint") != self._agent.fingerprint:
+            # Thinking blocks are bound to the prompt, tools and model that produced them.
+            history = without_thinking(history)
+        self._agent.restore(history)
         scan = document["scan"]
         self._workspace.resume(
             window_days=int(scan["window_days"]),

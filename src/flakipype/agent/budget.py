@@ -63,6 +63,8 @@ class RunBudget:
 
 
 class InvestigationBudget:
+    _subject = "one investigation"
+
     def __init__(self, limits: Limits, run: RunBudget, clock: Callable[[], float]) -> None:
         self._limits = limits
         self._run = run
@@ -77,7 +79,7 @@ class InvestigationBudget:
             message = f"the limit of {self._limits.rounds} rounds"
             raise BudgetExceededError(message)
         if self.tokens >= self._limits.tokens:
-            message = f"the limit of {self._limits.tokens:,} tokens for one investigation"
+            message = f"the limit of {self._limits.tokens:,} tokens for {self._subject}"
             raise BudgetExceededError(message)
         if self._clock() - self._started >= self._limits.seconds:
             message = f"the time limit of {self._limits.seconds:.0f} seconds"
@@ -87,7 +89,32 @@ class InvestigationBudget:
             raise BudgetExceededError(message)
 
     def record(self, usage: TokenUsage) -> None:
-        tokens = total_tokens(usage)
+        self._count(total_tokens(usage))
+
+    def _count(self, tokens: int) -> None:
         self.rounds += 1
         self.tokens += tokens
         self._run.add(tokens)
+
+
+class QuestionBudget(InvestigationBudget):
+    """A chat question's limits count only what it adds to the conversation it continues.
+
+    Every request sends the whole history again; counting it each round would stop every
+    question of a long session. The first request's prompt is that history plus the question.
+    """
+
+    _subject = "one question"
+
+    def __init__(self, limits: Limits, run: RunBudget, clock: Callable[[], float]) -> None:
+        super().__init__(limits, run, clock)
+        # Every token the API bills, for the session's total.
+        self.billed = 0
+        self._prefix: int | None = None
+
+    def record(self, usage: TokenUsage) -> None:
+        prompt = total_tokens(usage) - usage.output_tokens
+        if self._prefix is None:
+            self._prefix = prompt
+        self.billed += total_tokens(usage)
+        self._count(usage.output_tokens + max(0, prompt - self._prefix))

@@ -164,7 +164,7 @@ def test_a_limit_ends_the_turn_and_drops_it() -> None:
     reply = agent.ask("List them")
 
     assert not reply.completed
-    assert reply.text == "Stopped at the limit of 1 rounds."
+    assert reply.text.startswith("Stopped at the limit of 1 rounds. Ask in smaller steps")
     assert reply.tokens == 1_200
     assert agent.history == []
 
@@ -196,7 +196,7 @@ def test_a_slow_model_ends_the_turn() -> None:
         model, FakeWorkspace(), limits=Limits(seconds=60), clock=lambda: float(next(ticks))
     )
 
-    assert agent.ask("List").text == "Stopped at the time limit of 60 seconds."
+    assert agent.ask("List").text.startswith("Stopped at the time limit of 60 seconds. Ask in")
 
 
 def test_model_errors_end_the_turn() -> None:
@@ -470,3 +470,69 @@ def test_restore_drops_an_unfinished_turn() -> None:
 
     assert model.requests[0]["messages"][:2] == finished
     assert len(model.requests[0]["messages"]) == 3
+
+
+def test_a_question_is_charged_only_for_what_it_adds_to_a_long_history() -> None:
+    history = {"input_tokens": 150_000, "output_tokens": 100}
+    grown = {"input_tokens": 152_000, "output_tokens": 100}
+    model = ScriptedModel(
+        [
+            message(call("t1", "list_findings", {}), usage=history),
+            message(call("t2", "watched_runs", {}), usage=grown),
+            message(text("Done."), usage=grown),
+        ]
+    )
+    agent = chat_agent(model, FakeWorkspace(), limits=Limits(tokens=10_000))
+
+    reply = agent.ask("Which findings and runs?")
+
+    assert reply.completed
+    assert reply.tokens == 150_100 + 2 * 152_100
+
+
+def test_the_limit_for_one_question_says_how_to_go_on() -> None:
+    usage = {"input_tokens": 1_000, "output_tokens": 6_000}
+    model = ScriptedModel([message(call("t1", "list_findings", {}), usage=usage)])
+    agent = chat_agent(model, FakeWorkspace(), limits=Limits(tokens=5_000))
+
+    reply = agent.ask("List")
+
+    assert reply.text == (
+        "Stopped at the limit of 5,000 tokens for one question. Ask in smaller steps, "
+        "start over with /new, or raise the [agent] limits."
+    )
+
+
+def test_old_tool_results_are_cleared_by_the_api_not_in_the_history() -> None:
+    model = ScriptedModel([message(text("Hello."))])
+    agent = chat_agent(model, FakeWorkspace())
+
+    agent.ask("Hi")
+
+    request = model.requests[0]
+    assert request["context_management"]["edits"][0]["type"] == "clear_tool_uses_20250919"
+    assert model.headers[0]["anthropic-beta"] == "context-management-2025-06-27"
+
+
+def test_the_fingerprint_follows_the_model_and_the_tools() -> None:
+    model = ScriptedModel([])
+    agent = chat_agent(model, FakeWorkspace())
+    other_model = ChatAgent(
+        client=model.client(),
+        settings=ChatSettings(model=ModelSettings(model="m-2"), limits=Limits(), turn_tokens=1),
+        tools=workspace_tools(FakeWorkspace()),
+        gate=PolicyGate(Mode.ASK, deny_all),
+        masker=Masker(),
+        clock=lambda: 0.0,
+    )
+    fewer_tools = ChatAgent(
+        client=model.client(),
+        settings=ChatSettings(model=ModelSettings(model="m-1"), limits=Limits(), turn_tokens=1),
+        tools=workspace_tools(FakeWorkspace())[:-1],
+        gate=PolicyGate(Mode.ASK, deny_all),
+        masker=Masker(),
+        clock=lambda: 0.0,
+    )
+
+    assert agent.fingerprint == chat_agent(model, FakeWorkspace()).fingerprint
+    assert len({agent.fingerprint, other_model.fingerprint, fewer_tools.fingerprint}) == 3

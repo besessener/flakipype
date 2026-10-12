@@ -1,15 +1,16 @@
 """The chat agent: answers the user and drives scans and investigations through tools."""
 
+import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from anthropic import Anthropic, APIError
-from anthropic.types import Message, TextBlock, ToolUseBlock
+from anthropic.types.beta import BetaMessage, BetaTextBlock, BetaToolUseBlock
 from pydantic import BaseModel, Field
 
-from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Limits, RunBudget
+from flakipype.agent.budget import BudgetExceededError, Limits, QuestionBudget, RunBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.messages import (
@@ -31,7 +32,7 @@ from flakipype.agent.tools import (
 )
 from flakipype.config.settings import MAX_WINDOW_DAYS
 from flakipype.github.actions import GitHubApiError
-from flakipype.llm.client import create_message
+from flakipype.llm.client import create_beta_message
 
 type StepListener = Callable[[str], None]
 
@@ -174,6 +175,13 @@ class ChatAgent:
         self._declined = False
 
     @property
+    def fingerprint(self) -> str:
+        """What the model's thinking blocks are bound to besides the conversation itself."""
+        prefix = {"model": self._settings.model.model, "system": CHAT_SYSTEM,
+                  "tools": self._definitions()}  # fmt: skip
+        return hashlib.sha256(json.dumps(prefix, sort_keys=True).encode()).hexdigest()
+
+    @property
     def history(self) -> list[dict[str, Any]]:
         """The finished turns; a turn still running is left out, so a save never stores half."""
         end = self._turn_start
@@ -204,7 +212,7 @@ class ChatAgent:
             self._turn_start = None
 
     def _turn(self, question: str, start: int, on_step: StepListener) -> Reply:
-        budget = InvestigationBudget(
+        budget = QuestionBudget(
             self._settings.limits, RunBudget(self._settings.turn_tokens), self._model_clock
         )
         self._messages.append({"role": "user", "content": self._masker.mask(question)})
@@ -214,19 +222,19 @@ class ChatAgent:
                 budget.check()
                 response = self._call()
             except BudgetExceededError as error:
-                return self._abandon(start, f"Stopped at {error}.", budget.tokens)
+                return self._abandon(start, f"Stopped at {error}. {_LIMIT_HINT}", budget.billed)
             except APIError as error:
-                return self._abandon(start, f"The model could not answer: {error}", budget.tokens)
+                return self._abandon(start, f"The model could not answer: {error}", budget.billed)
             budget.record(response.usage)
             if declined(response):
-                return self._abandon(start, DECLINED, budget.tokens)
+                return self._abandon(start, DECLINED, budget.billed)
             self._messages.append({"role": "assistant", "content": content_blocks(response)})
-            uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
+            uses = [block for block in response.content if isinstance(block, BetaToolUseBlock)]
             if not uses:
-                return Reply(_text(response), budget.tokens, completed=True)
+                return Reply(_text(response), budget.billed, completed=True)
             calls = " ".join(f"{use.name} {json.dumps(use.input, sort_keys=True)}" for use in uses)
             if calls == last_call:
-                return self._abandon(start, "Stopped: the same tool call repeated.", budget.tokens)
+                return self._abandon(start, "Stopped: the same tool call repeated.", budget.billed)
             last_call = calls
             results = [self._run(use, on_step) for use in uses]
             self._messages.append({"role": "user", "content": results})
@@ -240,20 +248,24 @@ class ChatAgent:
         del self._messages[start:]
         return Reply(reason, tokens, completed=False)
 
-    def _call(self) -> Message:
-        definitions = [tool.definition() for tool in self._tools.values()]
+    def _definitions(self) -> list[dict[str, Any]]:
+        return [tool.definition() for tool in self._tools.values()]
+
+    def _call(self) -> BetaMessage:
         request: dict[str, Any] = {
             "model": self._settings.model.model,
             "max_tokens": self._settings.model.max_tokens,
             "system": cached_system(CHAT_SYSTEM),
-            "tools": cached_tools(definitions),
+            "tools": cached_tools(self._definitions()),
             "messages": cached_messages(self._messages),
             **self._settings.model.thinking_parameter(),
+            # The API clears old tool results itself; deleting them here would break thinking.
+            "betas": [_CONTEXT_MANAGEMENT],
+            "context_management": {"edits": [_CLEAR_OLD_TOOL_RESULTS]},
         }
-        response: Message = create_message(self._client, request)
-        return response
+        return create_beta_message(self._client, request)
 
-    def _run(self, use: ToolUseBlock, on_step: StepListener) -> dict[str, Any]:
+    def _run(self, use: BetaToolUseBlock, on_step: StepListener) -> dict[str, Any]:
         tool = self._tools.get(use.name)
         result: dict[str, Any] = {"type": "tool_result", "tool_use_id": use.id}
         if tool is None:
@@ -282,6 +294,15 @@ class ChatAgent:
         }
 
 
+_LIMIT_HINT = "Ask in smaller steps, start over with /new, or raise the [agent] limits."
+_CONTEXT_MANAGEMENT = "context-management-2025-06-27"
+# Clearing rewrites the cached prompt, so it only runs when it frees a worthwhile amount.
+_CLEAR_OLD_TOOL_RESULTS = {
+    "type": "clear_tool_uses_20250919",
+    "clear_at_least": {"type": "input_tokens", "value": 20_000},
+}
+
+
 def _is_answer(message: dict[str, Any]) -> bool:
     """A turn's final message: the model's, without tool calls waiting for results."""
     if message["role"] != "assistant":
@@ -290,5 +311,5 @@ def _is_answer(message: dict[str, Any]) -> bool:
     return isinstance(content, str) or all(block.get("type") != "tool_use" for block in content)
 
 
-def _text(response: Message) -> str:
-    return "\n\n".join(block.text for block in response.content if isinstance(block, TextBlock))
+def _text(response: BetaMessage) -> str:
+    return "\n\n".join(block.text for block in response.content if isinstance(block, BetaTextBlock))

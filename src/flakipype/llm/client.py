@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import httpx2
 from anthropic import Anthropic, AnthropicFoundry
 from anthropic.types import Message
+from anthropic.types.beta import BetaMessage
 
 _FOUNDRY_HOST_SUFFIX = ".services.ai.azure.com"
 
@@ -66,4 +67,10 @@ def create_client(
 def create_message(client: Anthropic, request: Mapping[str, Any]) -> Message:
     """One model turn, streamed: the SDK refuses non-streaming calls with a large max_tokens."""
     with client.messages.stream(**request) as stream:
+        return stream.get_final_message()
+
+
+def create_beta_message(client: Anthropic, request: Mapping[str, Any]) -> BetaMessage:
+    """create_message for requests that use beta features; the request names them in betas."""
+    with client.beta.messages.stream(**request) as stream:
         return stream.get_final_message()

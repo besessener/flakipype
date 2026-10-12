@@ -9,7 +9,7 @@ from flakipype.investigate.chat import ChatService, EntryKind
 from flakipype.store.database import ScanCache
 
 from support.fake_actions import FakeActions
-from support.fake_anthropic import ScriptedModel, call, message, text
+from support.fake_anthropic import ScriptedModel, call, message, text, thinking
 from support.fake_chat import chat_service
 from support.fake_investigation import SCAN
 from support.fake_runs import DISPATCHABLE, E2E, FakeRuns, state
@@ -128,3 +128,23 @@ def test_resume_keeps_the_configured_owner_and_host(cache: ScanCache) -> None:
     assert chat.workspace.request == replace(SCAN, window_days=7)
     chat.handle("/new")
     assert chat.workspace.request == SCAN
+
+
+@pytest.mark.parametrize(("changed", "kept"), [(False, True), (True, False)])
+def test_resume_after_an_upgrade_drops_the_thinking(
+    cache: ScanCache, *, changed: bool, kept: bool
+) -> None:
+    first = ScriptedModel([message(thinking("Reasoning."), text("Hello."))])
+    chat_service(cache, first).handle("Hi")
+    if changed:
+        document = json.loads(cache.sessions.load(1) or "{}")
+        document["fingerprint"] = "an older prompt"
+        cache.sessions.update(1, now="2026-10-09T08:00:00", data=json.dumps(document))
+    later = ScriptedModel([message(text("Welcome back."))])
+    resumed = chat_service(cache, later)
+
+    resumed.handle("/resume 1")
+    resumed.handle("Again")
+
+    sent = later.requests[0]["messages"][1]["content"]
+    assert [block["type"] for block in sent] == (["thinking", "text"] if kept else ["text"])
