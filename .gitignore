@@ -8,7 +8,6 @@ dist/
 
 # Tooling caches and reports
 .pytest_cache/
-.mypy_cache/
 .ruff_cache/
 .import_linter_cache/
 .coverage

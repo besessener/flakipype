@@ -1,6 +1,6 @@
 import io
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
@@ -36,7 +36,7 @@ def opened(monkeypatch: pytest.MonkeyPatch, cache: ScanCache) -> list[tuple[Mode
     @contextmanager
     def open_run(
         mode: Mode, request_for: Callable[[Settings], ScanRequest]
-    ) -> Iterator[RunService]:
+    ) -> Generator[RunService]:
         calls.append((mode, request_for(SETTINGS)))
         yield RunWorld(cache, mode=mode).service()
 
@@ -160,7 +160,7 @@ def test_an_incomplete_run_exits_with_one(
     world.source.repositories_error = GitHubApiError("Bad credentials (HTTP 401)", 401)
 
     @contextmanager
-    def open_run(*_: object) -> Iterator[RunService]:
+    def open_run(*_: object) -> Generator[RunService]:
         yield world.service()
 
     monkeypatch.setattr(wiring, "open_run", open_run)
@@ -202,7 +202,7 @@ def test_progress_shows_job_names_as_text_not_markup(
     @contextmanager
     def open_run(
         mode: Mode, request_for: Callable[[Settings], ScanRequest]
-    ) -> Iterator[RunService]:
+    ) -> Generator[RunService]:
         del request_for
         yield RunWorld(cache, mode=mode, source=source).service()
 

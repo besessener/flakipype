@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -42,7 +43,7 @@ def flaky_job(**changes: object) -> FlakyJob:
             SignatureCount(Category.OTHER, "something else", "b" * 12, 1),
         ),
     )
-    return type(base)(**{**base.__dict__, **changes})
+    return replace(base, **changes)
 
 
 def recurring_error(**changes: object) -> RecurringError:
@@ -55,7 +56,7 @@ def recurring_error(**changes: object) -> RecurringError:
         last_seen=NOW - timedelta(hours=5),
         examples=(),
     )
-    return type(base)(**{**base.__dict__, **changes})
+    return replace(base, **changes)
 
 
 def report(ranking: FlakyRanking, **changes: object) -> ScanReport:
@@ -71,7 +72,7 @@ def report(ranking: FlakyRanking, **changes: object) -> ScanReport:
         logs_not_read=0,
         complete=True,
     )
-    return type(base)(**{**base.__dict__, **changes})
+    return replace(base, **changes)
 
 
 def ranking(

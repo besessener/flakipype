@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 
 from flakipype.flaky.detection import find_flaky_failures
@@ -78,7 +79,7 @@ def test_rate_never_exceeds_one_when_runs_were_not_counted() -> None:
 def test_job_without_completion_time_uses_the_run_creation() -> None:
     runs = [run(1, attempt=2)]
     failure_job = job(11, run_id=1)
-    undated = type(failure_job)(**{**failure_job.__dict__, "completed_at": None})
+    undated = replace(failure_job, completed_at=None)
 
     ranked = rank_flaky_jobs(runs, find_flaky_failures(runs, {AttemptRef(1, 1): [undated]}), {})
 

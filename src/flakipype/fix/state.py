@@ -38,12 +38,13 @@ class Proposal:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Proposal":
-        return cls(**{
+        fields: dict[str, Any] = {
             **data,
             "changes": tuple(FileChange(**change) for change in data["changes"]),
             "warnings": tuple(data["warnings"]),
             "verification": Verification.from_dict(data["verification"]),
-        })  # fmt: skip
+        }
+        return cls(**fields)
 
 
 @dataclass(frozen=True)
@@ -63,4 +64,8 @@ class OpenedPull:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "OpenedPull":
-        return cls(**{**data, "verification": Verification.from_dict(data["verification"])})
+        fields: dict[str, Any] = {
+            **data,
+            "verification": Verification.from_dict(data["verification"]),
+        }
+        return cls(**fields)

@@ -8,7 +8,7 @@
 ![Anthropic](https://img.shields.io/badge/LLM-Anthropic%20Messages%20API-191919?logo=anthropic&logoColor=white)
 ![gh](https://img.shields.io/badge/GitHub-gh%20CLI-181717?logo=github&logoColor=white)
 ![Ruff](https://img.shields.io/badge/lint-Ruff-D7FF64?logo=ruff&logoColor=black)
-![mypy](https://img.shields.io/badge/types-mypy%20strict-2A6DB2)
+![ty](https://img.shields.io/badge/types-ty-261230)
 ![import-linter](https://img.shields.io/badge/architecture-import--linter-orange)
 ![pytest](https://img.shields.io/badge/tested%20with-pytest-0A9EDC?logo=pytest&logoColor=white)
 ![Gitleaks](https://img.shields.io/badge/secrets-Gitleaks-blue?logo=git&logoColor=white)

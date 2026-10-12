@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 from flakipype.flaky.model import AttemptRef
@@ -58,7 +59,7 @@ def test_log_results_round_trip(cache: ScanCache) -> None:
 
 def test_job_without_completion_time(cache: ScanCache) -> None:
     undated = job(11, run_id=1)
-    undated = type(undated)(**{**undated.__dict__, "completed_at": None})
+    undated = replace(undated, completed_at=None)
 
     cache.save_jobs(HOST, AttemptRef(1, 1), [undated])
 

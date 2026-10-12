@@ -1,6 +1,6 @@
 import io
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
@@ -42,7 +42,7 @@ def actions(monkeypatch: pytest.MonkeyPatch) -> FakeActions:
 
 def use_settings(monkeypatch: pytest.MonkeyPatch, fake: FakeActions, settings: Settings) -> None:
     @contextmanager
-    def open_scan() -> Iterator[tuple[ScanService, Settings]]:
+    def open_scan() -> Generator[tuple[ScanService, Settings]]:
         with ScanCache.in_memory() as cache:
             yield ScanService(actions=fake, cache=cache, now=lambda: NOW), settings
 

@@ -66,7 +66,7 @@ and say so; never work around it quietly. Reasoning lives in
 - Never lower the coverage threshold (`fail_under` in `pyproject.toml`) or
   auto-ratchet it. An unreachable threshold is a design problem: redesign, or
   raise it with the user.
-- No `# pragma: no cover`. No `# noqa` or `# type: ignore` without a specific
+- No `# pragma: no cover`. No `# noqa` or `# ty: ignore` without a specific
   code and the reason on the same line. No `pytest.mark.skip` without
   understanding the failure. No test gaming.
 - Never commit to `main`, skip hooks (`--no-verify`), force-push over others'
