@@ -30,6 +30,16 @@ def test_the_size_caps_are_errors() -> None:
     ]
 
 
+def test_a_masked_placeholder_written_back_is_an_error() -> None:
+    before = "token = [masked: secret]\nx = 1\n"
+    kept = edit("tests/test_login.py", "token = [masked: secret]\nx = 2\n", before)
+    added = edit("tests/test_login.py", "token = [masked: secret]\nx = 1\n", "token = t()\n")
+
+    assert change_errors([kept], LIMITS) == []
+    (error,) = change_errors([added], LIMITS)
+    assert error.startswith("tests/test_login.py adds `[masked: ...]`: masked lines hide")
+
+
 @pytest.mark.parametrize(
     ("path", "after", "problem"),
     [
@@ -69,7 +79,16 @@ def test_files_that_parse_pass(path: str, after: str) -> None:
         ("continue-on-error: true", "adds `continue-on-error: true`"),
         ("if: ${{ always() }}", "adds `if: ${{ always()`"),
         ("test.skip('slow', () => {})", "adds `.skip(`"),
-        ("@pytest.mark.xfail", "adds `@pytest.mark.xfail`"),
+        ("@pytest.mark.xfail", "adds `pytest.mark.xfail`"),
+        ("@pytest.mark.skipif(True, reason='x')", "adds `pytest.mark.skip`"),
+        ("pytestmark = [pytest.mark.xfail(strict=False)]", "adds `pytest.mark.xfail`"),
+        ("pytestmark = pytest.mark.skip", "adds `pytest.mark.skip`"),
+        ("pytest.param(1, marks=pytest.mark.xfail)", "adds `pytest.mark.xfail`"),
+        ("pytest.skip('flaky')", "adds `pytest.skip(`"),
+        ("pytest.xfail('flaky')", "adds `pytest.xfail(`"),
+        ("self.skipTest('flaky')", "adds `.skipTest(`"),
+        ("raise unittest.SkipTest('flaky')", "adds `SkipTest`"),
+        ("@unittest.skip('flaky')", "adds `@unittest.skip`"),
         ("@Disabled", "adds `@Disabled`"),
         ("t.Skip()", "adds `t.Skip(`"),
     ],
@@ -80,8 +99,9 @@ def test_hidden_failures_are_warnings(added: str, found: str) -> None:
     assert warning == f"hides failures: tests/test_app.py ({found})"
 
 
-def test_a_removed_test_is_a_warning() -> None:
-    before = "def test_one():\n    pass\ndef test_two():\n    pass\n"
+@pytest.mark.parametrize("removed", ["def test_two():", "async def test_two():"])
+def test_a_removed_test_is_a_warning(removed: str) -> None:
+    before = f"def test_one():\n    pass\n{removed}\n    pass\n"
     after = "def test_one():\n    pass\n"
 
     assert change_warnings([edit("tests/test_app.py", after, before)]) == [
@@ -114,8 +134,27 @@ def test_reaching_out_is_a_warning(added: str, found: str) -> None:
     assert warning == f"reaches out: scripts/setup.sh ({found})"
 
 
+@pytest.mark.parametrize(
+    ("added", "found"),
+    [
+        ("u = 'http://localhost@evil.example/'", "adds `http://localhost@`"),
+        ("u = 'http://localhost:1@evil.example/'", "adds `http://localhost:1@`"),
+        ("u = 'https://localhost.evil.example/'", "adds `https://`"),
+        ("u = 'http://127.0.0.1.nip.io/'", "adds `http://`"),
+        ("u = 'HTTPS://example.com'", "adds `HTTPS://`"),
+    ],
+)
+def test_a_host_that_only_starts_like_localhost_is_reaching_out(added: str, found: str) -> None:
+    (warning,) = change_warnings([edit("tests/conftest.py", f"{added}\n")])
+
+    assert warning == f"reaches out: tests/conftest.py ({found})"
+
+
 def test_localhost_is_not_reaching_out() -> None:
-    after = "url = 'http://localhost:3000'\nother = 'http://127.0.0.1:80'\n"
+    after = (
+        "url = 'http://localhost:3000'\nother = 'http://127.0.0.1:80/health'\n"
+        'v6 = "http://[::1]:8080"\nbare = http://localhost\n'
+    )
 
     assert change_warnings([edit("tests/e2e/config.ts", after)]) == []
 

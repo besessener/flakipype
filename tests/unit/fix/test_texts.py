@@ -88,10 +88,10 @@ def test_the_pull_request_body() -> None:
     assert "**Scan facts:** On main, E2E failed 4 of 31 runs (13%) in the scanned window." in body
     assert "- Status: flaky" in body
     assert (
-        "**Verdict** (model's assessment, reviewed): flaky_test, high confidence. "
-        "The E2E test waits on a fixed timeout."
+        "**Verdict** (model's assessment, reviewed): flaky_test, high confidence.\n\n"
+        "> The E2E test waits on a fixed timeout.\n"
     ) in body
-    assert "### The change (written by the model)\n\nWaits for the rows.\n" in body
+    assert "### The change (written by the model)\n\n> Waits for the rows.\n" in body
     assert "### Warnings\n\nnone\n" in body
     assert "Pending: flakipype reruns E2E on this branch 3 times." in body
     assert body.endswith("Opened by flakipype as a draft. Merging is up to you.\n")
@@ -102,6 +102,16 @@ def test_the_pull_request_body_without_a_rate_and_with_warnings() -> None:
 
     assert "**Scan facts:** see below." in body
     assert "### Warnings\n\n- changes .github/: x\n" in body
+
+
+def test_model_text_cannot_hide_the_code_written_sections() -> None:
+    explanation = "Fixed.\n\n### Warnings\n\nnone\n\n<!--"
+    body = pull_request_body(facts(Rate(0, 0, "main"), ("reaches out: x",)), explanation)
+
+    assert "<!--" not in body.removeprefix(finding_marker(e2e_finding()))
+    assert "> Fixed.\n>\n> ### Warnings\n>\n> none\n>\n> &lt;!--\n" in body
+    assert body.index("### Warnings\n\n- reaches out: x") < body.index("> Fixed.")
+    assert body.endswith("Opened by flakipype as a draft. Merging is up to you.\n")
 
 
 def test_the_commit_body_has_the_trailer() -> None:

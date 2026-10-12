@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from flakipype.agent.masking import MASK_MARKER
 from flakipype.agent.workcopy import FileChange
 
 if TYPE_CHECKING:
@@ -17,14 +18,17 @@ _WORKFLOWS = ".github/workflows/"
 _GITHUB = ".github/"
 _HIDES = re.compile(
     r"continue-on-error:\s*true|\bif:\s*(\$\{\{\s*)?always\(\)|"
-    r"\.skip\(|\bxit\(|\bxdescribe\(|\bxtest\(|pytest\.skip\(|@pytest\.mark\.(skip|xfail)|"
+    r"\.skip\(|\bxit\(|\bxdescribe\(|\bxtest\(|\bpytest\.(skip|xfail)\(|"
+    r"\bpytest\.mark\.(skip|xfail)|\.skipTest\(|\bSkipTest\b|"
     r"@unittest\.skip|@Disabled\b|@Ignore\b|\bt\.Skip(Now|f)?\(|\.only\("
 )
+# A loopback URL is exempt only when its host ends right after the name and has no userinfo.
 _REACHES_OUT = re.compile(
     r"\bsecrets\.|github\.token|\bprintenv\b|(^|[;&|]|run:)\s*env\s*($|[|>])|"
-    r"\b(curl|wget|nc|ncat)\b|https?://(?!(localhost|127\.0\.0\.1|\[::1\])\b)"
+    r"\b(curl|wget|nc|ncat)\b|(?i:https?://[^/?#\s]*@)|"
+    r"(?i:https?://(?!(localhost|127\.0\.0\.1|\[::1\])([:/?#'\"`)\]>,;\s]|$)))"
 )
-_TEST_DECLARATION = re.compile(r"^\s*(def test_|(it|test|describe)\(|func Test|@Test\b)")
+_TEST_DECLARATION = re.compile(r"^\s*((async\s+)?def test_|(it|test|describe)\(|func Test|@Test\b)")
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,12 @@ def change_errors(changes: list[FileChange], limits: DiffLimits) -> list[str]:
             f"The fix changes {lines} lines; at most {limits.max_changed_lines} are allowed."
         )
     errors.extend(problem for change in changes if (problem := _parse_problem(change)))
+    errors.extend(
+        f"{change.path} adds `{MASK_MARKER}...]`: masked lines hide real content; "
+        "leave them unchanged."
+        for change in changes
+        if change.after.count(MASK_MARKER) > (change.before or "").count(MASK_MARKER)
+    )
     return errors
 
 

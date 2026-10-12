@@ -18,6 +18,7 @@ from flakipype.github.payloads import (
     TreePayload,
 )
 
+_SYMLINK_MODE = "120000"
 _HTTP_NOT_FOUND = 404
 _HTTP_UNPROCESSABLE = 422
 _OPEN_PULLS_LISTED = 100
@@ -42,6 +43,8 @@ class FileTree:
     paths: tuple[str, ...]
     # GitHub cuts very large trees short; the listing is then incomplete.
     truncated: bool
+    # Symbolic links and submodules: a commit at their path replaces the link, not its target.
+    links: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,8 @@ class PullRequest:
     url: str
     branch: str
     body: str
+    # Empty when the fork the pull request came from was deleted.
+    head_repository: str
 
 
 @dataclass(frozen=True)
@@ -88,7 +93,12 @@ class PullRequests:
         output = self._get(f"repos/{repository}/git/trees/{commit}?recursive=1")
         payload = parse_answer(TreePayload.model_validate_json, output)
         paths = tuple(entry.path for entry in payload.tree if entry.type == "blob")
-        return FileTree(paths, payload.truncated)
+        links = tuple(
+            entry.path
+            for entry in payload.tree
+            if entry.mode == _SYMLINK_MODE or entry.type == "commit"
+        )
+        return FileTree(paths, payload.truncated, links)
 
     def file_bytes(self, repository: str, path: str, commit: str) -> bytes | None:
         """The file exactly as stored (line endings included); None if it does not exist."""
@@ -158,16 +168,11 @@ class PullRequests:
         output = self._send(
             ["api", "-X", "POST", f"repos/{repository}/pulls", "--input", "-"], request
         )
-        payload = parse_answer(PullPayload.model_validate_json, output)
-        return PullRequest(payload.number, payload.html_url, payload.head.ref, payload.body or "")
+        return _pull(parse_answer(PullPayload.model_validate_json, output))
 
     def open_pulls(self, repository: str) -> list[PullRequest]:
         path = f"repos/{repository}/pulls?state=open&per_page={_OPEN_PULLS_LISTED}"
-        payloads = parse_answer(_pull_list, self._get(path))
-        return [
-            PullRequest(item.number, item.html_url, item.head.ref, item.body or "")
-            for item in payloads
-        ]
+        return [_pull(item) for item in parse_answer(_pull_list, self._get(path))]
 
     def comment(self, repository: str, number: int, body: str) -> None:
         path = f"repos/{repository}/issues/{number}/comments"
@@ -184,6 +189,12 @@ class PullRequests:
         if not result.succeeded:
             raise api_error(result)
         return result.stdout
+
+
+def _pull(payload: PullPayload) -> PullRequest:
+    head = payload.head
+    repository = head.repo.full_name if head.repo is not None else ""
+    return PullRequest(payload.number, payload.html_url, head.ref, payload.body or "", repository)
 
 
 def _pull_list(text: str) -> list[PullPayload]:

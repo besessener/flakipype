@@ -146,10 +146,13 @@ class Fixer:
                 self._messages.append({"role": "user", "content": _NUDGE})
                 continue
             turn = _Turn()
-            for use in uses:
+            # submit_fix runs last, so its check sees every edit of the response.
+            for use in sorted(uses, key=lambda use: use.name == SUBMIT_FIX):
                 outcome = self._handle(use, turn)
                 if outcome is not None:
                     return outcome
+            order = [use.id for use in uses]
+            turn.results.sort(key=lambda result: order.index(result["tool_use_id"]))
             if turn.proposal is not None:
                 self._pending = turn
                 return FixOutcome(FixStatus.PROPOSED, turn.proposal)
@@ -193,7 +196,11 @@ class Fixer:
             proposal = FixProposal.model_validate(use.input)
         except ValidationError as error:
             return self._reject(use, turn, [f"The proposal does not match the schema: {error}"])
-        problems = self._check()
+        failed = sum(1 for result in turn.results if result.get("is_error"))
+        if failed:
+            problems = [f"{failed} other call(s) in this response failed; fix them first."]
+        else:
+            problems = self._check()
         if problems:
             return self._reject(use, turn, problems)
         turn.submit_id = use.id

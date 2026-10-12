@@ -262,7 +262,9 @@ def opened_meanwhile(first: RunWorld, later: RunWorld) -> None:
     draft = first.github.drafts[0]
     marker = draft.body.splitlines()[0]
     later.github.open = [
-        PullRequest(12, "https://github.com/octo-org/app/pull/12", draft.head, marker)
+        PullRequest(
+            12, "https://github.com/octo-org/app/pull/12", draft.head, marker, "octo-org/app"
+        )
     ]
 
 

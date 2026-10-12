@@ -50,13 +50,19 @@ def test_access_without_permissions_means_no_push(fake_gh: FakeGh) -> None:
 def test_file_tree_lists_files_only(fake_gh: FakeGh) -> None:
     tree = {
         "truncated": True,
-        "tree": [{"path": "src", "type": "tree"}, {"path": "src/a.py", "type": "blob"}],
+        "tree": [
+            {"path": "src", "type": "tree", "mode": "040000"},
+            {"path": "src/a.py", "type": "blob", "mode": "100644"},
+            {"path": "jest.config.js", "type": "blob", "mode": "120000"},
+            {"path": "vendor/lib", "type": "commit", "mode": "160000"},
+        ],
     }
     fake_gh.record(["api", f"repos/{REPO}/git/trees/{SHA}?recursive=1"], stdout=json.dumps(tree))
 
     found = PullRequests(fake_gh.cli()).file_tree(REPO, SHA)
 
-    assert (found.paths, found.truncated) == (("src/a.py",), True)
+    assert (found.paths, found.truncated) == (("src/a.py", "jest.config.js"), True)
+    assert found.links == ("jest.config.js", "vendor/lib")
 
 
 def test_file_bytes_keep_line_endings(fake_gh: FakeGh) -> None:
@@ -140,7 +146,8 @@ def test_a_refused_commit_raises(fake_gh: FakeGh) -> None:
 
 
 def test_pull_requests_are_always_drafts(fake_gh: FakeGh) -> None:
-    answer = {"number": 12, "html_url": "https://x/12", "body": "b", "head": {"ref": "fix"}}
+    head = {"ref": "fix", "repo": {"full_name": REPO}}
+    answer = {"number": 12, "html_url": "https://x/12", "body": "b", "head": head}
     fake_gh.record(
         ["api", "-X", "POST", f"repos/{REPO}/pulls", "--input", "-"], stdout=json.dumps(answer)
     )
@@ -151,13 +158,20 @@ def test_pull_requests_are_always_drafts(fake_gh: FakeGh) -> None:
 
     sent = json.loads(fake_gh.invocations()[0]["stdin"])
     assert sent == {"title": "T", "body": "B", "head": "fix", "base": "main", "draft": True}
-    assert (pull.number, pull.url, pull.branch) == (12, "https://x/12", "fix")
+    assert (pull.number, pull.url, pull.branch, pull.head_repository) == (
+        12, "https://x/12", "fix", REPO
+    )  # fmt: skip
 
 
 def test_open_pulls_and_comments(fake_gh: FakeGh) -> None:
     listed = [
         {"number": 3, "html_url": "u3", "body": None, "head": {"ref": "feature"}},
-        {"number": 4, "html_url": "u4", "body": "marker", "head": {"ref": "flakipype/fix"}},
+        {
+            "number": 4,
+            "html_url": "u4",
+            "body": "marker",
+            "head": {"ref": "flakipype/fix", "repo": {"full_name": "fork/app"}},
+        },
     ]
     fake_gh.record(
         ["api", f"repos/{REPO}/pulls?state=open&per_page=100"], stdout=json.dumps(listed)
@@ -168,7 +182,9 @@ def test_open_pulls_and_comments(fake_gh: FakeGh) -> None:
     found = pulls.open_pulls(REPO)
     pulls.comment(REPO, 4, "verified")
 
-    assert [(pull.number, pull.body) for pull in found] == [(3, ""), (4, "marker")]
+    assert [(pull.number, pull.body, pull.head_repository) for pull in found] == [
+        (3, "", ""), (4, "marker", "fork/app")
+    ]  # fmt: skip
     assert json.loads(fake_gh.invocations()[-1]["stdin"]) == {"body": "verified"}
 
 

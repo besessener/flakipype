@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 from flakipype.agent.budget import Limits
@@ -36,6 +37,7 @@ def propose(
     limits: Limits | None = None,
     earlier: tuple[FileChange, ...] = (),
     instructions: str = "",
+    check_changes: Callable[[list[FileChange]], list[str]] | None = None,
 ) -> FixResult:
     answers = iter(check or [])
     config = FixConfig(
@@ -54,7 +56,7 @@ def propose(
         verdict=Verdict.model_validate(verdict_input("timed out", "toolu_9")),
         commit=COMMIT,
         default_branch="main",
-        check=lambda changes: next(answers, []) if changes else ["no changes"],
+        check=check_changes or (lambda changes: next(answers, []) if changes else ["no changes"]),
         earlier=earlier,
         instructions=instructions,
     )
@@ -220,6 +222,43 @@ def test_unknown_and_failing_tools_answer_with_errors() -> None:
     results = model.tool_results(1)
     assert results["toolu_1"]["content"] == "There is no tool named push."
     assert "does not exist in the working copy" in results["toolu_2"]["content"]
+
+
+def test_edits_sent_with_the_submit_are_checked_before_it() -> None:
+    late_edit = call("toolu_3", "write_file", {"path": "config.yml", "content": "a: [1\n"})
+    model = ScriptedModel(
+        [message(EDIT), message(call("toolu_2", "submit_fix", PROPOSAL), late_edit)]
+    )
+    checked: list[list[str]] = []
+
+    def check(changes: list[FileChange]) -> list[str]:
+        checked.append([change.path for change in changes])
+        return ["config.yml no longer parses"]
+
+    propose(model, check_changes=check)
+
+    assert checked == [["config.yml", E2E_TEST]]
+    assert "config.yml no longer parses" in model.tool_results(2)["toolu_2"]["content"]
+
+
+def test_a_failed_edit_sent_with_the_submit_goes_back_to_the_fixer() -> None:
+    failing = call("toolu_3", "replace_in_file", {"path": E2E_TEST, "old": "nowhere", "new": "x"})
+    model = ScriptedModel(
+        [
+            message(EDIT),
+            message(failing, call("toolu_4", "submit_fix", PROPOSAL)),
+            submit("toolu_5"),
+            review("accept"),
+        ]
+    )
+
+    result = propose(model)
+
+    results = model.tool_results(2)
+    assert list(results) == ["toolu_3", "toolu_4"]
+    assert "not found" in results["toolu_3"]["content"]
+    assert results["toolu_4"]["content"].startswith("Rejected. Fix these and submit again:\n- 1 ")
+    assert result.status is FixStatus.PROPOSED
 
 
 def test_an_earlier_proposal_and_the_users_wishes_are_the_starting_point() -> None:
