@@ -116,14 +116,23 @@ class Verifier:
         return verification
 
     def _find_run(self, verification: Verification) -> Verification:
-        found = self._github.runs.commit_runs(
-            verification.repository, verification.workflow_path, verification.commit
-        )
+        waited_long_enough = self._now() - verification.started > WAIT_FOR_RUN
+        try:
+            found = self._github.runs.commit_runs(
+                verification.repository, verification.workflow_path, verification.commit
+            )
+        except ApiRateLimitError:
+            raise
+        except GitHubApiError as error:
+            # A lookup that keeps failing must not keep the verification waiting forever.
+            if not waited_long_enough:
+                raise
+            return self._finish(verification, f"GitHub did not answer: {error}")
         runs = [run for run in found if run.event in _EVENTS]
         if runs:
             watched = self._actions.watch(self._run(verification, run_id=runs[0].run_id))
             return replace(verification, stage=Stage.WATCHING, watched=(watched.number,))
-        if self._now() - verification.started <= WAIT_FOR_RUN:
+        if not waited_long_enough:
             return verification
         # Branch, type or path filters may keep push and pull_request from starting a run.
         if verification.dispatchable:

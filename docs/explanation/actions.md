@@ -111,6 +111,11 @@ cancelling does not. The count is part of the session, so `/resume` does not
 reset it, but `/new` does. A request that does not fit the budget or the
 watch limit fails with a message before any dialog is shown, for example
 "Action budget used up: 10 of 10 reruns and dispatches in this session".
+The budget is checked again when the confirmed action starts, because a
+fix's verification rerun may have used the last slots while the dialog was
+open; the action then does not run and is audited as `not run`. If a
+repeated dispatch fails partway, the runs that did start stay counted and
+watched, and the answer and the audit entry name them next to the error.
 
 ## The live run view
 
@@ -161,7 +166,8 @@ whether it ran or not. Each entry holds the time, session, tool, who asked
 request text, the answer (`confirmed`, `declined`, `auto`, `not run in auto
 mode` or `report only`), the outcome (GitHub's answer or the error) and the
 run id. The reruns and dispatches that verify a fix are recorded too, as
-`verify_rerun` and `verify_dispatch` with the answer `covered by the push`.
+`verify_rerun` and `verify_dispatch` with the answer `covered by the push`,
+also when GitHub refuses them (`failed: …`).
 `/actions` lists this session's entries. The log is append-only: nothing in
 flakipype updates or deletes it, apart from deleting the cache file.
 

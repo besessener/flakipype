@@ -43,7 +43,8 @@ class FakeRuns:
     jobs: dict[tuple[int, int], list[JobState]] = field(default_factory=dict)
     refs: dict[str, str] = field(default_factory=lambda: {"main": "3f2a9c1" + "0" * 33})
     files: dict[tuple[str, str], str] = field(default_factory=dict)
-    dispatch_ids: list[int | None] = field(default_factory=list)
+    # An exception in place of an id fails that dispatch.
+    dispatch_ids: list[int | Exception | None] = field(default_factory=list)
     found: list[int] = field(default_factory=list)
     errors: dict[str, Exception] = field(default_factory=dict)
     calls: list[str] = field(default_factory=list)
@@ -65,7 +66,10 @@ class FakeRuns:
 
     def dispatch(self, repository: str, workflow_path: str, ref: str) -> int | None:
         self._call(f"dispatch {repository} {workflow_path} {ref}")
-        return self.dispatch_ids.pop(0) if self.dispatch_ids else None
+        answer = self.dispatch_ids.pop(0) if self.dispatch_ids else None
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
     def dispatched_runs(
         self, repository: str, workflow_path: str, *, ref: str, since: datetime

@@ -289,6 +289,82 @@ def test_authorised_reruns_and_dispatches_use_the_budget(cache: ScanCache) -> No
     assert entries[0].request == "app · E2E verify 1/3 on flakipype/fix-e2e-1 @ c0ffee1"
 
 
+def test_the_budget_is_checked_again_when_the_action_runs(cache: ScanCache) -> None:
+    runs = failed_run()
+    actions = service(cache, runs, ActionSettings(max_per_session=3))
+    prepared = actions.dispatch(e2e_finding(), None, 3)
+    verified = replace(verification_run(), run_id=91, conclusion="success", done=True)
+
+    assert actions.rerun_authorised(verified, "verify 2/3") is not None
+    with pytest.raises(ToolError, match="Only 2 of this session's 3 reruns and dispatches"):
+        prepared.run(Answer.CONFIRMED)
+
+    assert actions.used == 1
+    assert not [call for call in runs.calls if call.startswith("dispatch ")]
+    entries = cache.audit.entries(actions.session)
+    assert [(entry.action, entry.outcome[:8]) for entry in entries] == [
+        ("verify_rerun", "Started "),
+        ("dispatch", "not run:"),
+    ]
+
+
+def test_a_dispatch_that_fails_partway_names_the_runs_that_started(cache: ScanCache) -> None:
+    runs = failed_run()
+    runs.dispatch_ids = [70, GitHubApiError("Server Error (HTTP 502)", 502)]
+    actions = service(cache, runs)
+
+    outcome = actions.dispatch(e2e_finding(), None, 3).run(Answer.CONFIRMED)
+
+    assert outcome == (
+        "Started R1: E2E on main, then dispatch 2/3 failed: GitHub: Server Error (HTTP 502). "
+        "It is watched; a note follows when it finishes."
+    )
+    assert (actions.used, [run.run_id for run in actions.watched]) == (1, [70])
+    (entry,) = cache.audit.entries(actions.session)
+    assert (entry.outcome, entry.run_id) == (outcome, 70)
+
+
+def test_a_dispatch_whose_first_run_fails_starts_nothing(cache: ScanCache) -> None:
+    runs = failed_run()
+    runs.dispatch_ids = [GitHubApiError("Server Error (HTTP 502)", 502)]
+    actions = service(cache, runs)
+
+    with pytest.raises(ToolError, match=r"GitHub: Server Error \(HTTP 502\)"):
+        actions.dispatch(e2e_finding(), None, 3).run(Answer.CONFIRMED)
+
+    assert (actions.used, actions.watched) == (0, [])
+    (entry,) = cache.audit.entries(actions.session)
+    assert (entry.outcome, entry.run_id) == ("failed: Server Error (HTTP 502)", None)
+
+
+def test_refused_authorised_runs_are_audited(cache: ScanCache) -> None:
+    runs = failed_run()
+    runs.errors["rerun"] = FORBIDDEN
+    runs.errors["dispatch"] = FORBIDDEN
+    actions = service(cache, runs)
+    finished = replace(verification_run(), run_id=91, conclusion="success", done=True)
+
+    with pytest.raises(GitHubApiError):
+        actions.rerun_authorised(finished, "verify 2/3")
+    with pytest.raises(GitHubApiError):
+        actions.dispatch_authorised(verification_run())
+
+    entries = cache.audit.entries(actions.session)
+    assert [(entry.action, entry.answer, entry.outcome) for entry in entries] == [
+        ("verify_rerun", "covered by the push", f"failed: {FORBIDDEN}"),
+        ("verify_dispatch", "covered by the push", f"failed: {FORBIDDEN}"),
+    ]
+    assert actions.used == 0
+
+
+def verification_run() -> WatchedRun:
+    return WatchedRun(
+        number=0, kind=RunKind.DISPATCH, repository="octo-org/app", workflow_path=E2E,
+        workflow_name="E2E", label="verify 1/3", commit="c0ffee1", ref="flakipype/fix-e2e-1",
+        started=START, run_id=None, attempt=1,
+    )  # fmt: skip
+
+
 def test_an_authorised_rerun_needs_a_run_id(cache: ScanCache) -> None:
     actions = service(cache, failed_run())
     unlocated = WatchedRun(

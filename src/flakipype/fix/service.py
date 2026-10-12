@@ -9,13 +9,14 @@ from typing import Any, Protocol
 from flakipype.actions.service import ActionService
 from flakipype.actions.targets import check_owner
 from flakipype.agent.fix_pipeline import FixRequest, FixResult
+from flakipype.agent.fixer import FixStatus
 from flakipype.agent.pipeline import reviewed
 from flakipype.agent.tools import ActionRequest, Answer, PreparedAction, ToolError
 from flakipype.agent.verdict import Classification, Verdict
 from flakipype.agent.workcopy import unified_diff
 from flakipype.config.settings import FixSettings
 from flakipype.fix.checks import DiffLimits, change_errors, change_warnings
-from flakipype.fix.delivery import Delivery, DeliveryError, fix_refusal
+from flakipype.fix.delivery import Delivery, DeliveryError, PushedWithoutPullError, fix_refusal
 from flakipype.fix.state import OpenedPull, Proposal
 from flakipype.fix.texts import (
     BRANCH_PREFIX,
@@ -35,6 +36,8 @@ FIXABLE = frozenset(
     {Classification.FLAKY_TEST, Classification.FLAKY_INFRASTRUCTURE, Classification.CONFIGURATION}
 )
 _PATHS_SHOWN = 3
+# Reviews that could not run, e.g. on an HTTP error; the fix itself may be fine.
+_REVIEW_UNAVAILABLE = ("not reviewed", "revised, not reviewed again")
 
 type ProposeFix = Callable[[FixRequest], FixResult]
 
@@ -43,8 +46,16 @@ class FixNotMadeError(ToolError):
     """The fixer found no fix, or the review did not accept it."""
 
 
+class FixUnavailableError(FixNotMadeError):
+    """The model failed, not the fix: the fixer or the review could not run."""
+
+
 class FixDeliveryError(ToolError):
     """A delivery step failed after the push was allowed; the message says what exists."""
+
+
+class FixPushedError(FixDeliveryError):
+    """The commit was pushed but no pull request opened; it counts against the limits."""
 
 
 class FixPulls(Protocol):
@@ -98,6 +109,8 @@ class FixService:
         self.pulls: list[OpenedPull] = []
         self.opened = 0
         self.tokens = 0
+        # An unattended run's time limit; a fix gets at most the time left until then.
+        self.deadline: datetime | None = None
 
     def kept(self, finding: Finding) -> Proposal:
         """The fix for the finding that was made but not pushed; KeyError if there is none."""
@@ -134,7 +147,12 @@ class FixService:
                 f"No pull request for #{finding.number}: the review {proposal.review}. "
                 "Ask for changes, or /fix N --fresh to start over. The diff:"
             )
-            raise FixNotMadeError(message, unified_diff(list(proposal.changes)))
+            error = (
+                FixUnavailableError
+                if proposal.review.startswith(_REVIEW_UNAVAILABLE)
+                else FixNotMadeError
+            )
+            raise error(message, unified_diff(list(proposal.changes)))
         return self._prepared(proposal)
 
     def adopt(self, pulls: list[OpenedPull]) -> None:
@@ -185,6 +203,11 @@ class FixService:
         self._proposals = {}
         self.pulls = []
 
+    def _seconds_left(self) -> float | None:
+        if self.deadline is None:
+            return None
+        return max(0.0, (self.deadline - self._now()).total_seconds())
+
     def _check_no_open_pull(self, repository: str, identity: str, number: int) -> None:
         marker = identity_marker(identity)
         for pull in self._pulls.open_pulls(repository):
@@ -206,11 +229,14 @@ class FixService:
                 finding=finding, evidence=target.evidence, verdict=target.verdict, commit=commit,
                 default_branch=base, check=lambda changes: change_errors(changes, limits),
                 earlier=earlier.changes if earlier else (), instructions=instructions,
+                max_seconds=self._seconds_left(),
             )
         )  # fmt: skip
         self.tokens += result.tokens
         if result.proposal is None:
             message = f"No fix for #{finding.number}: {result.detail or result.review}"
+            if result.status is FixStatus.MODEL_ERROR:
+                raise FixUnavailableError(message)
             raise FixNotMadeError(message)
         changes = list(result.changes)
         warnings = tuple(change_warnings(changes))
@@ -273,6 +299,12 @@ class FixService:
                 raise
             try:
                 outcome = self._deliver(proposal)
+            except PushedWithoutPullError as error:
+                # Counted like an opened pull request, so no run pushes it again and again.
+                self.opened += 1
+                self._proposals.pop(proposal.identity, None)
+                record(answer, f"pushed, no pull request: {error}")
+                raise FixPushedError(str(error)) from error
             except DeliveryError as error:
                 record(answer, f"failed: {error}")
                 raise FixDeliveryError(str(error)) from error

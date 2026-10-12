@@ -229,7 +229,9 @@ The fix branch has to show it passes where the default branch flakes:
    shows up within 10 minutes (branch, type or path filters can exclude the
    fix branch or the draft pull request), flakipype dispatches the workflow
    when it allows `workflow_dispatch` without required inputs; otherwise the
-   result is "cannot verify automatically". If the workflow runs on neither
+   result is "cannot verify automatically". A lookup that GitHub keeps
+   refusing (other than its rate limit) ends the wait the same way after 10
+   minutes, with GitHub's error as the reason. If the workflow runs on neither
    `push` nor `pull_request` but can be dispatched, flakipype dispatches it on
    the fix branch right away. Otherwise the result is "cannot verify
    automatically" right away, with the reason (no `workflow_dispatch`, or the

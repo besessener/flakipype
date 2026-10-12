@@ -18,6 +18,7 @@ from pydantic import (
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 DEFAULT_GITHUB_HOST = "github.com"
 MAX_WINDOW_DAYS = 400
+MAX_RUN_MINUTES = 720
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _GITHUB_LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
@@ -135,7 +136,7 @@ class RunSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    max_minutes: int = Field(default=120, ge=10, le=720)
+    max_minutes: int = Field(default=120, ge=10, le=MAX_RUN_MINUTES)
     max_prs_per_day: int = Field(default=3, ge=1, le=20)
     max_actions_per_day: int = Field(default=20, ge=1, le=200)
     max_tokens_per_day: int = Field(default=3_000_000, ge=10_000, le=50_000_000)

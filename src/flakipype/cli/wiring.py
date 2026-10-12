@@ -116,13 +116,12 @@ def build_daemon() -> Daemon:
 
 
 def unit_options(schedule: str, mode: Mode) -> UnitOptions:
-    """The units for the running flakipype command, stopped after the configured run time."""
-    settings = _ready_settings(_paths())
+    """The units for the running flakipype command; refused when a run could not read the config."""
+    _ready_settings(_paths())
     return UnitOptions(
         executable=installed_executable(sys.argv[0], shutil.which),
         schedule=schedule,
         mode=mode.value,
-        run_minutes=settings.run.max_minutes,
     )
 
 
@@ -310,6 +309,8 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
     """Raises RunLockedError while another run holds the lock, before anything else happens."""
     with run_lock(_paths().run_lock_file), _open_agentic() as agentic:
         settings, cache = agentic.settings, agentic.cache
+        request = request_for(settings)
+        _check_run_owner(request.owner, settings.github.owner)
         now = partial(datetime.now, UTC)
         since = (now() - DAY).isoformat()
         limits = run_limits(
@@ -323,7 +324,7 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
         fix = settings.fix.model_copy(update={"max_prs_per_session": limits.pull_requests})
         workspace = ChatWorkspace(
             agentic.service,
-            request_for(settings),
+            request,
             actions=actions,
             fixes=_fix_service(agentic, actions, now, fix=fix),
         )
@@ -331,3 +332,14 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
             workspace=workspace, gate=HeadlessGate(mode), cache=cache, limits=limits,
             clock=RunClock(now=now, sleep=time.sleep),
         )  # fmt: skip
+
+
+def _check_run_owner(owner: str, configured: str) -> None:
+    """A run fixes only the configured owner, so it never scans one it may not fix."""
+    if configured and owner.lower() == configured.lower():
+        return
+    message = (
+        f"A run fixes only the configured owner ({configured or 'none set'}), not {owner}. "
+        "`flakipype scan` and `flakipype investigate` read other owners."
+    )
+    raise NotReadyError(message)

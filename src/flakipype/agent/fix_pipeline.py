@@ -1,7 +1,7 @@
 """Propose a fix for one finding: fixer, code checks, reviewer, at most one revision."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from anthropic import Anthropic
 
@@ -50,6 +50,8 @@ class FixRequest:
     # An earlier proposal to start from, and what the user wants changed in it.
     earlier: tuple[FileChange, ...] = ()
     instructions: str = ""
+    # Less time than the configured limit, e.g. what an unattended run has left.
+    max_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -92,9 +94,10 @@ def review_task(task: str, proposal: FixProposal, changes: list[FileChange]) -> 
 
 
 def propose_fix(config: FixConfig, request: FixRequest) -> FixResult:
-    budget = InvestigationBudget(
-        config.limits, RunBudget(config.limits.tokens), config.clock, stop=config.stop
-    )
+    limits = config.limits
+    if request.max_seconds is not None:
+        limits = replace(limits, seconds=min(limits.seconds, request.max_seconds))
+    budget = InvestigationBudget(limits, RunBudget(limits.tokens), config.clock, stop=config.stop)
     copy = WorkingCopy(config.files, request.finding.key.repository, request.commit)
     copy.apply(list(request.earlier))
     finding_tools = FindingTools(
