@@ -253,9 +253,12 @@ that; flakipype does not run it.
 root:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
-sh install.sh
+tmp="$(mktemp -d)" && curl -fsSL -o "$tmp/install.sh" https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh && sh "$tmp/install.sh"; rm -rf "$tmp"
 ```
+
+The one line downloads the script into a fresh temporary directory, runs it
+and removes the directory again. It is downloaded completely before it runs,
+unlike `curl … | sh`, so a broken connection cannot run half a script.
 
 1. Checks Linux, `x86_64` or `aarch64`, glibc, and `curl`, `tar`,
    `sha256sum` and `git`; a missing one is named with the package to

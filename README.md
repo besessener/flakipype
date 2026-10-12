@@ -28,8 +28,7 @@ script installs [uv](https://docs.astral.sh/uv/) if you have none, checked
 against its published SHA-256, and then flakipype for your user:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
-sh install.sh
+tmp="$(mktemp -d)" && curl -fsSL -o "$tmp/install.sh" https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh && sh "$tmp/install.sh"; rm -rf "$tmp"
 ```
 
 With uv already installed: `uv tool install git+https://github.com/besessener/flakipype@v0.1.0`.
