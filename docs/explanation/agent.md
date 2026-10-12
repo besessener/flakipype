@@ -51,7 +51,9 @@ parallel (default 3).
 
 **Citation check.** Deterministic code, not a model: each evidence item must
 point to a tool result of this investigation, and its quote must appear in
-that result (whitespace is normalised). A verdict with invented evidence or an
+that result (whitespace is normalised; a quote of several lines may leave out
+the line numbers or `+mm:ss` offsets the tools put in front of each line). A
+verdict with invented evidence or an
 invalid shape goes back to the investigator with the list of problems, at
 most twice; then the investigation ends without a verdict.
 

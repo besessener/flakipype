@@ -234,6 +234,16 @@ def test_an_earlier_proposal_and_the_users_wishes_are_the_starting_point() -> No
     assert "sk-hidden-value" not in model.message_text(1, 0)
 
 
+def test_wishes_without_an_earlier_proposal_are_the_fix_to_make() -> None:
+    model = ScriptedModel([message(EDIT), submit("toolu_2"), review("accept")])
+
+    propose(model, instructions="Keep the assertion.")
+
+    task = model.message_text(0, 0)
+    assert "The user asked in the chat for this fix:\nKeep the assertion." in task
+    assert "earlier proposal" not in task
+
+
 def test_the_fixers_cache_breakpoint_follows_the_newest_message() -> None:
     model = ScriptedModel(
         [

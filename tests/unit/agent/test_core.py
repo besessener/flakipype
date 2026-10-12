@@ -220,6 +220,30 @@ def test_citations_must_match_their_tool_result() -> None:
 
 
 @pytest.mark.parametrize(
+    "result",
+    [
+        "    2   await page.waitForTimeout(500);\n    3   await expect(rows).toHaveCount(2);",
+        "+00:04  await page.waitForTimeout(500);\n+00:05  await expect(rows).toHaveCount(2);",
+        "        await page.waitForTimeout(500);\n        await expect(rows).toHaveCount(2);",
+    ],
+)
+def test_multi_line_quotes_match_without_the_line_gutter(result: str) -> None:
+    quote = "await page.waitForTimeout(500);\nawait expect(rows).toHaveCount(2);"
+    verdict = Verdict.model_validate(verdict_input(quote, "r1"))
+
+    assert citation_problems(verdict, {"r1": result}) == []
+
+
+def test_the_gutter_does_not_make_up_content() -> None:
+    verdict = Verdict.model_validate(verdict_input("await page.click();", "r1"))
+    result = "    2   await page.waitForTimeout(500);"
+
+    assert citation_problems(verdict, {"r1": result}) == [
+        "the quote for job 11 is not in the result of r1"
+    ]
+
+
+@pytest.mark.parametrize(
     ("review", "classification", "confidence"),
     [
         (Review(decision=Decision.ACCEPT, reason="ok"), "flaky_test", "high"),
