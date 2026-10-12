@@ -19,11 +19,12 @@ import keyring
 from flakipype.actions.service import ActionService, Origin
 from flakipype.agent.budget import Limits
 from flakipype.agent.fix_pipeline import FixConfig, propose_fix
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, workspace_tools
 from flakipype.agent.pipeline import AgentConfig, investigate_finding
 from flakipype.agent.tools import Confirmer, HeadlessGate, Mode, PolicyGate
+from flakipype.cli.readiness import NotReadyError, check_logged_in, check_run_owner
 from flakipype.config.paths import AppPaths, app_paths
 from flakipype.config.secrets import LLM_API_KEY, SecretStore, SecretStoreError, secret_store
 from flakipype.config.settings import (
@@ -37,7 +38,6 @@ from flakipype.fix.delivery import Delivery
 from flakipype.fix.service import FixService
 from flakipype.fix.verify import Verifier, VerifyGitHub
 from flakipype.github.actions import ActionsClient
-from flakipype.github.auth import NotAuthenticated, auth_status
 from flakipype.github.binary import GhInstaller
 from flakipype.github.contents import ContentsClient
 from flakipype.github.gh import GhCli
@@ -72,10 +72,6 @@ def check_llm_endpoint(endpoint: LlmEndpoint) -> ConnectionResult:
     except ClientSetupError as error:
         return ConnectionFailed(ConnectionProblem.ENVIRONMENT, str(error))
     return check_connection(client, endpoint.model)
-
-
-class NotReadyError(Exception):
-    """flakipype is not set up far enough for this command; the message says what to do."""
 
 
 def _paths() -> AppPaths:
@@ -316,8 +312,8 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
     with run_lock(_paths().run_lock_file), _open_agentic() as agentic:
         settings, cache = agentic.settings, agentic.cache
         request = request_for(settings)
-        _check_run_owner(request.owner, settings.github.owner)
-        _check_logged_in(agentic.gh, settings.github.host)
+        check_run_owner(request.owner, settings.github.owner)
+        check_logged_in(agentic.gh, settings.github.host)
         now = partial(datetime.now, UTC)
         since = (now() - DAY).isoformat()
         limits = run_limits(
@@ -339,22 +335,3 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
             workspace=workspace, gate=HeadlessGate(mode), cache=cache, limits=limits,
             clock=RunClock(now=now, sleep=time.sleep),
         )  # fmt: skip
-
-
-def _check_logged_in(gh: GhCli, host: str) -> None:
-    """A missing or expired login is a setup problem, not a failed run; other answers go on."""
-    status = auth_status(gh)
-    if isinstance(status, NotAuthenticated):
-        message = f"gh is not logged in to {host}, or its token expired. {RUN_SETUP}"
-        raise NotReadyError(message)
-
-
-def _check_run_owner(owner: str, configured: str) -> None:
-    """A run fixes only the configured owner, so it never scans one it may not fix."""
-    if configured and owner.lower() == configured.lower():
-        return
-    message = (
-        f"A run fixes only the configured owner ({configured or 'none set'}), not {owner}. "
-        "`flakipype scan` and `flakipype investigate` read other owners."
-    )
-    raise NotReadyError(message)

@@ -7,8 +7,9 @@ from anthropic import Anthropic
 
 from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.finding_tools import ContentsSource, FindingTools, LogSource
-from flakipype.agent.investigator import Investigator, ModelSettings, Outcome, Status
+from flakipype.agent.investigator import Investigator, Outcome, Status
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.prompts import data_block
 from flakipype.agent.reviewer import Reviewer, ReviewUnavailableError
 from flakipype.agent.tools import Mode, PolicyGate, deny_all

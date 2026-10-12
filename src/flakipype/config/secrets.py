@@ -6,7 +6,7 @@ from typing import Protocol
 
 from keyring.backend import KeyringBackend
 from keyring.backends import fail
-from keyring.errors import KeyringError, PasswordDeleteError
+from keyring.errors import KeyringError
 
 from flakipype.config.settings import SecretStoreChoice
 
@@ -25,8 +25,6 @@ class SecretStore(Protocol):
     def get(self, name: str) -> str | None: ...
 
     def put(self, name: str, value: str) -> None: ...
-
-    def delete(self, name: str) -> None: ...
 
 
 class KeyringSecretStore:
@@ -49,14 +47,6 @@ class KeyringSecretStore:
         except KeyringError as error:
             raise SecretStoreError(str(error)) from error
 
-    def delete(self, name: str) -> None:
-        try:
-            self._backend.delete_password(SERVICE_NAME, name)
-        except PasswordDeleteError:
-            return
-        except KeyringError as error:
-            raise SecretStoreError(str(error)) from error
-
 
 class FileSecretStore:
     """Fallback for machines without a keyring: a JSON file only the owner can read."""
@@ -75,11 +65,6 @@ class FileSecretStore:
         secrets = self._read()
         secrets[name] = value
         self._write(secrets)
-
-    def delete(self, name: str) -> None:
-        secrets = self._read()
-        if secrets.pop(name, None) is not None:
-            self._write(secrets)
 
     def _read(self) -> dict[str, str]:
         if not self._path.exists():

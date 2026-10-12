@@ -3,8 +3,9 @@ from typing import Any
 import pytest
 
 from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
-from flakipype.agent.investigator import ModelSettings, Status
+from flakipype.agent.investigator import Status
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.pipeline import AgentConfig, FindingResult, investigate_finding
 from flakipype.agent.reviewer import Reviewer, ReviewUnavailableError
 from flakipype.agent.verdict import Decision, Verdict

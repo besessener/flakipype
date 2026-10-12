@@ -9,8 +9,8 @@ from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.finding_tools import ContentsSource, FindingTools, LogSource
 from flakipype.agent.fix_tools import FixTools
 from flakipype.agent.fixer import FixDecision, Fixer, FixOutcome, FixProposal, FixReview, FixStatus
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.pipeline import finding_text
 from flakipype.agent.prompts import FIX_REVIEWER_SYSTEM, data_block
 from flakipype.agent.reviewer import Reviewer, ReviewKind, ReviewUnavailableError

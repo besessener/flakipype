@@ -85,12 +85,15 @@ cli                               Typer entry point, composition root (cli/wirin
   `Workspace` protocol that `investigate` implements. For fixes it has the
   fixer (`fixer.py`) with edit tools (`fix_tools.py`) on an in-memory
   working copy of one commit (`workcopy.py`), and `fix_pipeline.py` runs
-  fixer and reviewer with at most one revision ([fixes](fix.md)).
+  fixer and reviewer with at most one revision ([fixes](fix.md)). Investigator
+  and fixer share one tool loop (`tool_loop.py`): call, run tools, check the
+  submission, correct at most twice; each brings its submit tool and checks.
 - **`actions`** prepares the chat's reruns, dispatches and cancels for the
   policy gate: it checks the targets against the current scan's findings,
   reads the workflow file to check `workflow_dispatch`, enforces the session
   budget, records every request in the audit log, and watches started runs
-  (polling, finish notes, session state). Its GitHub collaborators are
+  (polling, finish notes, session state). Starting a confirmed rerun or
+  dispatch on GitHub lives in `starting.py`. Its GitHub collaborators are
   protocols that `github` implements ([actions](actions.md)).
 - **`fix`** turns a reviewed verdict into a draft pull request for the
   chat: it refuses findings that cannot be fixed, checks push access and
@@ -121,8 +124,10 @@ cli                               Typer entry point, composition root (cli/wirin
 - **`cli`** wires everything together: `cli/wiring.py` is the only place that
   reads flakipype's configuration from the environment and builds real
   collaborators. `GhCli` passes the process environment (with `PATH`
-  filtered) on to `gh`. Headless commands
-  bypass `tui` but not `setup` or `agent`.
+  filtered) on to `gh`. `cli/readiness.py` holds what a command needs before
+  it starts, and `cli/errors.py` the exit codes and error lines every headless
+  command prints on stderr. Headless commands bypass `tui` but not `setup` or
+  `agent`.
 
 ## Data flow
 

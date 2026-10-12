@@ -5,10 +5,10 @@ from rich.console import Console
 
 from flakipype.agent.tools import Mode
 from flakipype.cli import wiring
+from flakipype.cli.errors import command_errors, error_console, print_error
 from flakipype.setup.daemon import DaemonError, render_units
 
 EXIT_FAILED = 1
-EXIT_NOT_READY = 2
 
 daemon = typer.Typer(
     name="daemon",
@@ -16,10 +16,6 @@ daemon = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
-
-
-def _console() -> Console:
-    return Console(highlight=False)
 
 
 @daemon.command()
@@ -34,20 +30,18 @@ def install(
     ] = False,
 ) -> None:
     """Check flakipype in the timer's environment, then install and start the timer."""
-    console = _console()
+    console = Console(highlight=False)
     try:
-        options = wiring.unit_options(schedule, mode)
+        with command_errors(error_console()):
+            options = wiring.unit_options(schedule, mode)
         if print_only:
             for name, text in render_units(options).items():
                 typer.echo(f"# --- {name}\n{text}")
             return
         service = wiring.build_daemon()
         warnings = service.install(options)
-    except wiring.NotReadyError as error:
-        console.print(f"[red]Not ready:[/] {error}")
-        raise typer.Exit(EXIT_NOT_READY) from error
     except DaemonError as error:
-        console.print(f"[red]Not installed:[/] {error}")
+        print_error(error_console(), "Not installed", error)
         raise typer.Exit(EXIT_FAILED) from error
     console.print(f"Installed and started flakipype.timer ({schedule}) in {service.unit_dir}.")
     for warning in warnings:
@@ -57,13 +51,14 @@ def install(
 @daemon.command()
 def uninstall() -> None:
     """Stop the timer and remove the unit files flakipype wrote."""
-    console = _console()
     try:
         removed = wiring.build_daemon().uninstall()
     except DaemonError as error:
-        console.print(f"[red]Not removed:[/] {error}")
+        print_error(error_console(), "Not removed", error)
         raise typer.Exit(EXIT_FAILED) from error
-    console.print(f"Removed {', '.join(removed)}." if removed else "Nothing to remove.")
+    Console(highlight=False).print(
+        f"Removed {', '.join(removed)}." if removed else "Nothing to remove."
+    )
 
 
 @daemon.command()

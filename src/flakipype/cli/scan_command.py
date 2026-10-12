@@ -7,17 +7,14 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
 from flakipype.cli import wiring
+from flakipype.cli.errors import EXIT_INCOMPLETE, command_errors, error_console
 from flakipype.cli.scan_report import render_report
 from flakipype.config.settings import MAX_WINDOW_DAYS, Settings
-from flakipype.github.actions import GitHubApiError
 from flakipype.investigate.service import EventKind, InvestigationEvent
 from flakipype.scan import progress
 from flakipype.scan.export import report_as_json
 from flakipype.scan.service import ScanRequest
 from flakipype.setup.doctor import RUN_SETUP
-
-EXIT_INCOMPLETE = 1
-EXIT_NOT_READY = 2
 
 
 @dataclass(frozen=True)
@@ -118,7 +115,7 @@ def scan(  # noqa: PLR0913 - Typer maps every command line option to one paramet
 ) -> None:
     """Find flaky workflows, jobs and steps in the owner's GitHub Actions runs."""
     output = Console(highlight=False)
-    errors = Console(stderr=True, highlight=False)
+    errors = error_console()
     options = ScanOptions(
         owner=owner,
         days=days,
@@ -126,22 +123,12 @@ def scan(  # noqa: PLR0913 - Typer maps every command line option to one paramet
         min_runs=min_runs,
         repositories=tuple(repo or ()),
     )
-    try:
-        with (
-            wiring.open_scan() as (service, settings),
-            ProgressView(progress_display(errors)) as view,
-        ):
-            report = service.scan(options.request(settings), view.update)
-    except wiring.NotReadyError as error:
-        errors.print(f"[red]Not ready:[/] {error}")
-        raise typer.Exit(EXIT_NOT_READY) from error
-    except GitHubApiError as error:
-        errors.print(f"[red]GitHub:[/] {error}")
-        if error.is_authentication_problem:
-            errors.print(
-                "The GitHub login is no longer valid. Log in again with `flakipype setup`."
-            )
-        raise typer.Exit(EXIT_INCOMPLETE) from error
+    with (
+        command_errors(errors),
+        wiring.open_scan() as (service, settings),
+        ProgressView(progress_display(errors)) as view,
+    ):
+        report = service.scan(options.request(settings), view.update)
     if as_json:
         typer.echo(json.dumps(report_as_json(report), indent=2))
     else:

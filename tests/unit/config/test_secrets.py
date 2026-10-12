@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from keyring.backend import KeyringBackend
 from keyring.backends import fail
-from keyring.errors import KeyringError, PasswordDeleteError
+from keyring.errors import KeyringError
 
 from flakipype.config.secrets import (
     FileSecretStore,
@@ -34,11 +34,6 @@ class MemoryKeyring(KeyringBackend):
         self._fail_if_broken()
         self.passwords[service, username] = password
 
-    def delete_password(self, service: str, username: str) -> None:
-        self._fail_if_broken()
-        if self.passwords.pop((service, username), None) is None:
-            raise PasswordDeleteError(username)
-
     def _fail_if_broken(self) -> None:
         if self.failure is not None:
             raise self.failure
@@ -52,9 +47,6 @@ def test_keyring_store_round_trip() -> None:
 
     assert store.get("llm-api-key") == "value-1"
     assert backend.passwords == {("flakipype", "llm-api-key"): "value-1"}
-    store.delete("llm-api-key")
-    assert store.get("llm-api-key") is None
-    store.delete("llm-api-key")
     assert "system keyring" in store.location
 
 
@@ -65,8 +57,6 @@ def test_keyring_errors_become_secret_store_errors() -> None:
         store.get("name")
     with pytest.raises(SecretStoreError, match="locked"):
         store.put("name", "value")
-    with pytest.raises(SecretStoreError, match="locked"):
-        store.delete("name")
 
 
 def test_file_store_round_trip(tmp_path: Path) -> None:
@@ -76,11 +66,9 @@ def test_file_store_round_trip(tmp_path: Path) -> None:
     assert store.get("llm-api-key") is None
     store.put("llm-api-key", "value-1")
     store.put("other", "value-2")
-    store.delete("other")
-    store.delete("never-stored")
 
     assert FileSecretStore(path).get("llm-api-key") == "value-1"
-    assert FileSecretStore(path).get("other") is None
+    assert FileSecretStore(path).get("other") == "value-2"
     assert str(path) in store.location
 
 

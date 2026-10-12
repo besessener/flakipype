@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 import pytest
 
 from flakipype.agent.budget import Limits
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, ignore_steps, workspace_tools
 from flakipype.agent.prompts import CHAT_SYSTEM
 from flakipype.agent.tools import (

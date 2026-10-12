@@ -2,8 +2,9 @@ from pydantic import BaseModel
 
 from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget
 from flakipype.agent.finding_tools import FindingTools
-from flakipype.agent.investigator import Investigator, ModelSettings, Status
+from flakipype.agent.investigator import Investigator, Status
 from flakipype.agent.masking import Masker
+from flakipype.agent.messages import ModelSettings
 from flakipype.agent.pipeline import finding_text
 from flakipype.agent.tools import (
     ActionRequest,

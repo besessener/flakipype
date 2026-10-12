@@ -11,15 +11,16 @@ from anthropic.types.beta import BetaMessage, BetaTextBlock, BetaToolUseBlock
 from pydantic import BaseModel, Field
 
 from flakipype.agent.budget import BudgetExceededError, Limits, QuestionBudget, RunBudget, Stop
-from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.messages import (
     DECLINED,
+    ModelSettings,
     cached_messages,
     cached_system,
     cached_tools,
     content_blocks,
     declined,
+    tool_result,
 )
 from flakipype.agent.prompts import CHAT_SYSTEM, data_block
 from flakipype.agent.tools import (
@@ -261,13 +262,12 @@ class ChatAgent:
         return [tool.definition() for tool in self._tools.values()]
 
     def _call(self) -> BetaMessage:
-        request: dict[str, Any] = {
-            "model": self._settings.model.model,
-            "max_tokens": self._settings.model.max_tokens,
-            "system": cached_system(CHAT_SYSTEM),
-            "tools": cached_tools(self._definitions()),
-            "messages": cached_messages(self._messages),
-            **self._settings.model.thinking_parameter(),
+        request = {
+            **self._settings.model.request(
+                system=cached_system(CHAT_SYSTEM),
+                tools=cached_tools(self._definitions()),
+                messages=cached_messages(self._messages),
+            ),
             # The API clears old tool results itself; deleting them here would break thinking.
             "betas": [_CONTEXT_MANAGEMENT],
             "context_management": {"edits": [_CLEAR_OLD_TOOL_RESULTS]},
@@ -276,31 +276,28 @@ class ChatAgent:
 
     def _run(self, use: BetaToolUseBlock, on_step: StepListener) -> dict[str, Any]:
         tool = self._tools.get(use.name)
-        result: dict[str, Any] = {"type": "tool_result", "tool_use_id": use.id}
         if tool is None:
-            return {**result, "content": f"{use.name} is not available.", "is_error": True}
+            return tool_result(use.id, f"{use.name} is not available.", failed=True)
         if self._declined and tool.risk is not RiskLevel.READ:
             declined = "The user declined an action in this turn; do not ask for another one."
-            return {**result, "content": declined, "is_error": True}
+            return tool_result(use.id, declined, failed=True)
         on_step(use.name)
         started = self._clock()
         try:
             text = tool.invoke(dict(use.input), self._gate)
         except ToolDeclinedError as error:
             self._declined = True
-            return {**result, "content": str(error), "is_error": True}
+            return tool_result(use.id, str(error), failed=True)
         except ToolError as error:
             data = f"\n{data_block('tool-data', error.data, tool=use.name)}" if error.data else ""
-            return {**result, "content": self._masker.mask(f"{error}{data}"), "is_error": True}
+            return tool_result(use.id, self._masker.mask(f"{error}{data}"), failed=True)
         except GitHubApiError as error:
             failure = f"GitHub failed:\n{data_block('tool-data', str(error), tool=use.name)}"
-            return {**result, "content": self._masker.mask(failure), "is_error": True}
+            return tool_result(use.id, self._masker.mask(failure), failed=True)
         finally:
             self._tool_seconds += self._clock() - started
-        return {
-            **result,
-            "content": self._masker.mask(data_block("tool-result", text, tool=use.name)),
-        }
+        masked = self._masker.mask(data_block("tool-result", text, tool=use.name))
+        return tool_result(use.id, masked, failed=False)
 
 
 _LIMIT_HINT = "Ask in smaller steps, start over with /new, or raise the [agent] limits."

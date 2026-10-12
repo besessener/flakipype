@@ -11,7 +11,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from flakipype.agent.tools import Mode
-from flakipype.cli import app, run_command, wiring
+from flakipype.cli import app, errors, wiring
 from flakipype.cli.run_report import render_run
 from flakipype.config.settings import GitHubSettings, Settings
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
@@ -188,7 +188,7 @@ def test_progress_goes_to_a_terminal_on_stderr(
         assert stderr
         return Console(file=terminal, force_terminal=True, highlight=highlight, width=100)
 
-    monkeypatch.setattr(run_command, "Console", console)
+    monkeypatch.setattr(errors, "Console", console)
 
     result = runner.invoke(app, ["run"])
 
@@ -217,7 +217,7 @@ def test_progress_shows_job_names_as_text_not_markup(
     terminal = io.StringIO()
     monkeypatch.setattr(wiring, "open_run", open_run)
     monkeypatch.setattr(
-        run_command, "Console", lambda **_: Console(file=terminal, force_terminal=True, width=100)
+        errors, "Console", lambda **_: Console(file=terminal, force_terminal=True, width=100)
     )
 
     result = runner.invoke(app, ["run"])

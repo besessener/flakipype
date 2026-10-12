@@ -7,13 +7,11 @@ from rich.text import Text
 
 from flakipype.agent.tools import Mode
 from flakipype.cli import wiring
+from flakipype.cli.errors import EXIT_INCOMPLETE, command_errors, error_console
 from flakipype.cli.run_report import render_run, run_as_json
 from flakipype.cli.scan_command import ScanOptions
-from flakipype.github.actions import GitHubApiError
 from flakipype.store.lock import RunLockedError
 
-EXIT_INCOMPLETE = 1
-EXIT_NOT_READY = 2
 EXIT_LOCKED = 3
 
 
@@ -38,24 +36,18 @@ def run(  # noqa: PLR0913 - Typer maps every command line option to one paramete
 
     Opens draft pull requests only, within the per-run and daily limits.
     """
-    errors = Console(stderr=True, highlight=False)
+    errors = error_console()
     options = ScanOptions(
         owner=owner, days=days, max_logs=None, min_runs=None, repositories=tuple(repo or ())
     )
     try:
-        with wiring.open_run(mode, options.request) as service:
+        with command_errors(errors), wiring.open_run(mode, options.request) as service:
             if errors.is_terminal:
                 service.show_activity(lambda text: _show(errors, text))
             report = service.run()
     except RunLockedError as error:
-        errors.print(f"[yellow]Not started:[/] {error}.")
+        errors.print(Text.assemble(("Not started:", "yellow"), f" {error}."))
         raise typer.Exit(EXIT_LOCKED) from error
-    except wiring.NotReadyError as error:
-        errors.print(f"[red]Not ready:[/] {error}")
-        raise typer.Exit(EXIT_NOT_READY) from error
-    except GitHubApiError as error:
-        errors.print(f"[red]GitHub:[/] {error}")
-        raise typer.Exit(EXIT_INCOMPLETE) from error
     if as_json:
         typer.echo(json.dumps(run_as_json(report), indent=2))
     else:

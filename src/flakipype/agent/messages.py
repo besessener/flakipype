@@ -1,11 +1,45 @@
 """Building blocks of Messages API conversations shared by the agent's tool loops."""
 
+from dataclasses import dataclass
 from typing import Any
 
 from anthropic.types import Message
 from anthropic.types.beta import BetaMessage
 
 _THINKING = frozenset({"thinking", "redacted_thinking"})
+
+
+@dataclass(frozen=True)
+class ModelSettings:
+    model: str
+    max_tokens: int = 16_000
+    # "adaptive", "enabled" (with thinking_budget) or "off".
+    thinking: str = "adaptive"
+    thinking_budget: int = 8_000
+
+    def thinking_parameter(self) -> dict[str, Any]:
+        if self.thinking == "adaptive":
+            return {"thinking": {"type": "adaptive"}}
+        if self.thinking == "enabled":
+            return {"thinking": {"type": "enabled", "budget_tokens": self.thinking_budget}}
+        return {}
+
+    def request(
+        self,
+        *,
+        system: str | list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        messages: list[Any],
+    ) -> dict[str, Any]:
+        """A Messages API request with this model, its token cap and its thinking."""
+        return {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "system": system,
+            "tools": tools,
+            "messages": messages,
+            **self.thinking_parameter(),
+        }
 
 
 def content_blocks(response: Message | BetaMessage) -> list[dict[str, Any]]:

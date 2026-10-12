@@ -56,6 +56,7 @@ def test_a_failed_install_says_why(systemd: FakeRunner) -> None:
 
     assert result.exit_code == 1
     assert "Not installed: `flakipype doctor` failed in the environment" in output_of(result)
+    assert result.stdout == ""
     assert "No API key stored." in output_of(result)
 
 
@@ -69,7 +70,8 @@ def test_install_needs_a_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["daemon", "install"])
 
     assert result.exit_code == 2
-    assert "Not ready: Cannot read config.toml" in output_of(result)
+    assert "Not ready: Cannot read config.toml" in click.unstyle(result.stderr)
+    assert result.stdout == ""
 
 
 def test_uninstall_and_status(systemd: FakeRunner) -> None:
@@ -84,7 +86,7 @@ def test_uninstall_and_status(systemd: FakeRunner) -> None:
 
     assert output_of(nothing) == "Nothing to remove."
     assert "Last run: flakipype run · octo-org · auto" in output_of(status)
-    assert refused.exit_code == 1
+    assert (refused.exit_code, refused.stdout) == (1, "")
     assert "Not removed: `systemctl --user disable --now flakipype.timer` failed" in (
         output_of(refused)
     )
