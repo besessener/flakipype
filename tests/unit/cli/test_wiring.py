@@ -17,6 +17,7 @@ from flakipype.cli.wiring import (
     open_investigation,
     open_run,
     open_scan,
+    require_configuration,
     unit_options,
 )
 from flakipype.config.secrets import LLM_API_KEY, FileSecretStore
@@ -187,10 +188,11 @@ def test_the_daemon_and_its_units_come_from_the_environment(
     assert build_daemon().unit_dir == isolated_home / "config" / "systemd" / "user"
 
 
-@pytest.mark.usefixtures("isolated_home")
-def test_units_need_a_configuration() -> None:
+def test_installing_units_needs_a_configuration(isolated_home: Path) -> None:
     with pytest.raises(NotReadyError, match=r"No configuration at .*config\.toml\. Run"):
-        unit_options("daily", Mode.AUTO)
+        require_configuration()
+    write_config(isolated_home, '[github]\nowner = "octo-org"\n')
+    require_configuration()
 
 
 def test_llm_check_against_a_closed_local_port() -> None:

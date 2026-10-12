@@ -23,6 +23,7 @@ def systemd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
         return UnitOptions(Path("/home/me/.local/bin/flakipype"), schedule, mode.value)
 
     monkeypatch.setattr(wiring, "unit_options", unit_options)
+    monkeypatch.setattr(wiring, "require_configuration", lambda: None)
     return fake
 
 
@@ -72,6 +73,24 @@ def test_install_needs_a_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 2
     assert "Not ready: Cannot read config.toml" in click.unstyle(result.stderr)
     assert result.stdout == ""
+
+
+def test_install_without_a_configuration_is_not_ready(
+    systemd: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def missing() -> None:
+        message = "No configuration at config.toml. Run `flakipype setup`."
+        raise wiring.NotReadyError(message)
+
+    monkeypatch.setattr(wiring, "require_configuration", missing)
+
+    result = runner.invoke(app, ["daemon", "install"])
+    preview = runner.invoke(app, ["daemon", "install", "--print"])
+
+    assert (result.exit_code, result.stdout) == (2, "")
+    assert "Not ready: No configuration at config.toml" in click.unstyle(result.stderr)
+    assert preview.exit_code == 0
+    assert systemd.calls == []
 
 
 def test_uninstall_and_status(systemd: FakeRunner) -> None:

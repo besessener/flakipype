@@ -63,7 +63,8 @@ failed), 2 not set up or another `--owner`, 3 another `flakipype run` is running
 
 `install` and `uninstall` exit with 1 when systemd refuses, `install` with 2
 when flakipype is not set up (no configuration file, or one it cannot read)
-and with 1 when `doctor` fails in the timer's environment. Guide: [run on a schedule](../how-to/run-on-a-schedule.md).
+and with 1 when `doctor` fails in the timer's environment. `install --print`
+needs no configuration. Guide: [run on a schedule](../how-to/run-on-a-schedule.md).
 
 ### `flakipype scan`
 

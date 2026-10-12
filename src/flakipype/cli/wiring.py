@@ -114,16 +114,20 @@ def build_daemon() -> Daemon:
 
 def unit_options(schedule: str, mode: Mode) -> UnitOptions:
     """The units for the running flakipype command; refused when a run could not read the config."""
-    paths = _paths()
-    if not paths.config_file.exists():
-        message = f"No configuration at {paths.config_file}. {RUN_SETUP}"
-        raise NotReadyError(message)
-    _ready_settings(paths)
+    _ready_settings(_paths())
     return UnitOptions(
         executable=installed_executable(sys.argv[0], shutil.which),
         schedule=schedule,
         mode=mode.value,
     )
+
+
+def require_configuration() -> None:
+    """The timer only runs a set-up flakipype; previewing its units needs no configuration."""
+    config_file = _paths().config_file
+    if not config_file.exists():
+        message = f"No configuration at {config_file}. {RUN_SETUP}"
+        raise NotReadyError(message)
 
 
 def _ready_settings(paths: AppPaths) -> Settings:

@@ -38,6 +38,8 @@ def install(
             for name, text in render_units(options).items():
                 typer.echo(f"# --- {name}\n{text}")
             return
+        with command_errors(error_console()):
+            wiring.require_configuration()
         service = wiring.build_daemon()
         warnings = service.install(options)
     except DaemonError as error:
