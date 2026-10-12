@@ -8,6 +8,10 @@ from flakipype.llm.connection import ConnectionFailed
 from flakipype.setup.service import InvalidSetupError, SetupDraft, SetupService
 
 RUN_SETUP = "Run `flakipype setup`."
+KEY_IN_A_FILE = (
+    "Where no desktop session unlocks the system keyring (a server, a systemd timer), keep the "
+    "key in a file: `flakipype setup --non-interactive --secret-store file --api-key-stdin`."
+)
 
 
 class CheckStatus(StrEnum):

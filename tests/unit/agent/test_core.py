@@ -9,6 +9,7 @@ from flakipype.agent.tools import (
     ActionRequest,
     Answer,
     Confirmer,
+    HeadlessGate,
     Mode,
     PolicyGate,
     PreparedAction,
@@ -141,6 +142,17 @@ def test_auto_mode_runs_actions_but_never_one_that_needs_a_person() -> None:
     with pytest.raises(ToolDeclinedError, match=r"not run in auto mode because the diff changes"):
         guarded.invoke({"word": "hi"}, gate)
     assert events == ["ran auto", "not run in auto mode"]
+
+
+def test_without_a_window_ask_only_reports_and_auto_runs_as_usual() -> None:
+    events: list[str] = []
+    shout = Tool("shout", "Shout a word.", RiskLevel.CRITICAL, Echo, Shout(events))
+
+    with pytest.raises(ToolDeclinedError, match="ask mode only reports what it would do"):
+        shout.invoke({"word": "hi"}, HeadlessGate(Mode.ASK))
+    assert shout.invoke({"word": "hi"}, HeadlessGate(Mode.AUTO)) == "HI"
+    assert HeadlessGate(Mode.ASK).answer(RiskLevel.READ, REQUEST) is Answer.AUTO
+    assert events == ["report only", "ran auto"]
 
 
 def test_a_writing_tool_must_prepare_a_request() -> None:

@@ -1,3 +1,5 @@
+import shutil
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -8,18 +10,26 @@ from keyring.backends import fail
 from flakipype.agent.tools import ActionRequest, Mode, ToolError
 from flakipype.cli.wiring import (
     NotReadyError,
+    build_daemon,
     build_setup_service,
     check_llm_endpoint,
     open_chat,
     open_investigation,
+    open_run,
     open_scan,
+    unit_options,
 )
 from flakipype.config.secrets import LLM_API_KEY, FileSecretStore
+from flakipype.config.settings import SecretStoreChoice, Settings
 from flakipype.fix.service import FixTarget
 from flakipype.github.binary import GhBinary
 from flakipype.github.provider import ManagedGh
 from flakipype.llm.client import LlmEndpoint
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
+from flakipype.scan.service import ScanRequest
+from flakipype.setup.daemon import UnitOptions
+from flakipype.store.lock import RunLockedError
+from flakipype.unattended.service import RunService
 
 from support.fake_fix import verdict
 from support.fake_runs import e2e_evidence, e2e_finding
@@ -48,6 +58,68 @@ def test_service_uses_xdg_dirs_and_the_file_fallback(isolated_home: Path) -> Non
     assert service.paths.config_dir == isolated_home / "config" / "flakipype"
     assert service.secret_location.startswith("file ")
     assert service.find_gh() is None
+
+
+@pytest.mark.parametrize(
+    ("config", "choice", "location"),
+    [
+        ('[secrets]\nstore = "keyring"\n', None, "system keyring"),
+        ('[secrets]\nstore = "keyring"\n', SecretStoreChoice.FILE, "file "),
+        ("broken = = toml", None, "file "),
+    ],
+)
+def test_the_setup_service_uses_the_chosen_or_saved_store(
+    isolated_home: Path, config: str, choice: SecretStoreChoice | None, location: str
+) -> None:
+    write_config(isolated_home, config)
+
+    assert build_setup_service(choice).secret_location.startswith(location)
+
+
+def test_an_unreadable_keyring_is_not_ready(isolated_home: Path) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[secrets]\nstore = "keyring"\n')
+
+    with (
+        pytest.raises(NotReadyError, match=r"Cannot read the API key from the system keyring"),
+        open_investigation(),
+    ):
+        pass
+
+
+def test_a_run_holds_the_lock_and_is_wired_with_the_mode(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n')
+    store_api_key(isolated_home)
+    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
+    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+    requests: list[str] = []
+
+    def request_for(settings: Settings) -> ScanRequest:
+        requests.append(settings.github.owner)
+        return ScanRequest("octo-org", "github.com", 30, 50)
+
+    with open_run(Mode.ASK, request_for) as service:
+        assert isinstance(service, RunService)
+        with pytest.raises(RunLockedError), open_run(Mode.AUTO, request_for):
+            pass
+
+    assert requests == ["octo-org"]
+    assert (isolated_home / "data" / "flakipype" / "run.lock").exists()
+
+
+def test_the_daemon_and_its_units_come_from_the_environment(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(isolated_home, "[run]\nmax_minutes = 30\n")
+    command = isolated_home / "bin" / "flakipype"
+    monkeypatch.setattr(sys, "argv", [str(command), "daemon", "install"])
+    monkeypatch.setattr(shutil, "which", lambda _: str(command))
+
+    options = unit_options("weekly", Mode.AUTO)
+
+    assert options == UnitOptions(command, "weekly", "auto", 30)
+    assert build_daemon().unit_dir == isolated_home / "config" / "systemd" / "user"
 
 
 def test_llm_check_against_a_closed_local_port() -> None:

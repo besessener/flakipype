@@ -14,6 +14,7 @@ Organised by [Diátaxis](https://diataxis.fr/).
 - [Use the chat](how-to/chat.md) – ask questions, scan and investigate interactively, sessions.
 - [Connect a model](how-to/connect-a-model.md) – Anthropic API, Azure AI Foundry or a proxy.
 - [Set up a headless machine](how-to/set-up-headless.md) – servers, containers, SSH.
+- [Run on a schedule](how-to/run-on-a-schedule.md) – `flakipype run` and the systemd user timer.
 - [Run CI locally with act](how-to/run-ci-locally.md) – the Linux gate on Windows.
 
 ## Reference
@@ -30,6 +31,6 @@ Organised by [Diátaxis](https://diataxis.fr/).
 - [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts, budgets and the chat.
 - [Actions](explanation/actions.md) – reruns, dispatches, confirmation and the live run view.
 - [Fixes](explanation/fix.md) – fixer agent, diff checks, draft pull requests and verification.
-- [Unattended runs and release](explanation/unattended.md) – `flakipype run`, the systemd timer, the install script and smoke tests (M6 design).
+- [Unattended runs and release](explanation/unattended.md) – `flakipype run`, the systemd timer, the install script and smoke tests.
 - [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
 - [Roadmap](explanation/roadmap.md) – scope and milestones.

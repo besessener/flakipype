@@ -6,7 +6,9 @@ import typer
 
 from flakipype import __version__
 from flakipype.cli.chat_command import open_chat_window
+from flakipype.cli.daemon_commands import daemon
 from flakipype.cli.investigate_command import investigate
+from flakipype.cli.run_command import run
 from flakipype.cli.scan_command import scan
 from flakipype.cli.setup_commands import doctor, setup
 
@@ -19,6 +21,8 @@ app.command()(setup)
 app.command()(doctor)
 app.command()(scan)
 app.command()(investigate)
+app.command()(run)
+app.add_typer(daemon)
 
 
 def _print_version(requested: bool) -> None:  # noqa: FBT001 - signature dictated by Typer callbacks

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from flakipype.config.secrets import LLM_API_KEY
-from flakipype.config.settings import load_settings
+from flakipype.config.settings import SecretStoreChoice, load_settings
 from flakipype.github.auth import AuthCheckFailed, Authenticated
 from flakipype.github.binary import GhInstallError
 from flakipype.llm.client import LlmEndpoint
@@ -46,14 +46,29 @@ def test_save_writes_settings_and_keeps_the_key_out_of_the_file(
     assert world.service.load().has_api_key
 
 
-def test_save_keeps_existing_scan_settings(tmp_path: Path, fake_gh: FakeGh) -> None:
+def test_save_keeps_every_section_setup_does_not_edit(tmp_path: Path, fake_gh: FakeGh) -> None:
     world = setup_world(tmp_path, fake_gh)
     world.paths.config_dir.mkdir(parents=True)
-    world.paths.config_file.write_text("[scan]\nwindow_days = 7\n", encoding="utf-8")
+    world.paths.config_file.write_text(
+        "[scan]\nwindow_days = 7\n\n[actions]\nmax_per_session = 4\n\n[fix]\nverify_runs = 2\n\n"
+        '[run]\nmax_minutes = 30\n\n[secrets]\nstore = "file"\n',
+        encoding="utf-8",
+    )
 
     world.service.save(complete_draft())
 
-    assert load_settings(world.paths.config_file).scan.window_days == 7
+    saved = load_settings(world.paths.config_file)
+    assert (saved.scan.window_days, saved.actions.max_per_session) == (7, 4)
+    assert (saved.fix.verify_runs, saved.run.max_minutes) == (2, 30)
+    assert saved.secrets.store is SecretStoreChoice.FILE
+
+
+def test_save_records_a_new_secret_store(tmp_path: Path, fake_gh: FakeGh) -> None:
+    world = setup_world(tmp_path, fake_gh)
+
+    world.service.save(replace(complete_draft(), secret_store=SecretStoreChoice.KEYRING))
+
+    assert load_settings(world.paths.config_file).secrets.store is SecretStoreChoice.KEYRING
 
 
 def test_empty_key_keeps_the_stored_key(tmp_path: Path, fake_gh: FakeGh) -> None:

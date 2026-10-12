@@ -8,12 +8,12 @@ on the same layer do not import each other.
 ```text
 cli                               Typer entry point, composition root (cli/wiring.py)
  ├─ tui                           Textual: setup wizard, chat window, confirmation dialog
- └─ unattended                    flakipype run: steps in code, daily limits, summary (M6)
+ └─ unattended                    flakipype run: steps in code, daily limits, report
      └─ investigate               scan and investigate findings; verdict cache; the chat's workspace and commands
          └─ fix                   fixes: diff checks, delivery, pull request texts, verification, session state
              └─ actions           reruns, dispatches, cancels: targets, budget, audit, watched runs
                  ├─ agent         investigator, fixer, reviewer, chat orchestrator, working copy, tools, gate, budgets, masking
-                 ├─ setup         setup and health checks (wizard, headless, doctor); systemd units (M6)
+                 ├─ setup         setup and health checks (wizard, headless, doctor); systemd units
                  └─ scan          scan an owner: fetch, cache, detect, rank
                      ├─ llm       Anthropic Messages API client
                      ├─ github    gh CLI wrapper; Actions, runs, commits, files, branches, pull requests; downloads gh
@@ -67,9 +67,12 @@ cli                               Typer entry point, composition root (cli/wirin
   finished attempts and log results, which never change. Schema migrations
   are append-only (`PRAGMA user_version`); cached signatures carry the
   signature algorithm's version and are recomputed when it changes. Run lists
-  are not cached: listing them is cheap and they change constantly. Chat
+  are   not cached: listing them is cheap and they change constantly. Chat and run
   sessions are stored there too, as one JSON document per session, and so is
-  the append-only audit log of action requests (`audit.py`).
+  the append-only audit log of action requests (`audit.py`). The database
+  uses SQLite's WAL journal, so the chat and a run can share it; `lock.py`
+  keeps a second `flakipype run` out through SQLite's own file lock, which
+  the OS releases if a run dies.
 - **`agent`** investigates one finding: an investigator tool loop over the
   Messages API, a deterministic citation check, a reviewer pass and at most one
   revision ([the agent](agent.md)). Every tool declares a risk level and runs
@@ -106,12 +109,13 @@ cli                               Typer entry point, composition root (cli/wirin
   answers the gate's confirmation requests with a dialog (with the model's
   text and the diff for a fix), shows the mode in its status line, and polls
   started runs and fix verifications in the background.
-- **`unattended`** (M6, on the layer of `tui` and independent of it) runs
+- **`unattended`** (on the layer of `tui` and independent of it) runs
   `flakipype run` without a window: scan, investigate, fix and verify in
-  fixed steps, with a confirmation function that answers for the mode,
-  daily limits across runs and a summary
-  ([unattended runs](unattended.md)). The systemd units are rendered and
-  installed by `setup` (`daemon.py`).
+  fixed steps on the chat's workspace, every action through the
+  `HeadlessGate`, with daily limits across runs (`limits.py`), the pull
+  requests carried over from the last run (`carry.py`) and a report the CLI
+  prints ([unattended runs](unattended.md)). The systemd units are rendered
+  and installed by `setup` (`daemon.py`).
 - **`cli`** wires everything together: `cli/wiring.py` is the only place that
   reads the environment and builds real collaborators. Headless commands
   bypass `tui` but not `setup` or `agent`.

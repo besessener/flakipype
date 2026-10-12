@@ -1,4 +1,6 @@
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Annotated
 
 import typer
@@ -6,8 +8,10 @@ from rich.console import Console
 
 from flakipype.cli import wiring
 from flakipype.cli.report import print_checks
+from flakipype.config.secrets import SecretStoreError
+from flakipype.config.settings import SecretStoreChoice
 from flakipype.github.binary import GhInstallError
-from flakipype.setup.doctor import run_checks
+from flakipype.setup.doctor import KEY_IN_A_FILE, run_checks
 from flakipype.setup.service import InvalidSetupError, SetupDraft, SetupService
 from flakipype.tui.setup_wizard import SetupWizard
 
@@ -37,21 +41,36 @@ def setup(  # noqa: PLR0913 - Typer maps every command line option to one parame
         bool,
         typer.Option("--api-key-stdin", help="Read the API key from standard input."),
     ] = False,
+    secret_store: Annotated[
+        SecretStoreChoice | None,
+        typer.Option(help="Where the API key is kept (default: the saved choice, else auto)."),
+    ] = None,
 ) -> None:
     """Connect flakipype to a model endpoint and GitHub."""
-    service = wiring.build_setup_service()
-    if not non_interactive:
-        _run_wizard(service)
-        return
-    state = service.load()
-    draft = SetupDraft(
-        base_url=base_url or state.settings.llm.base_url,
-        model=model or state.settings.llm.model,
-        host=host or state.settings.github.host,
-        owner=owner or state.settings.github.owner,
-        api_key=sys.stdin.read().strip() if api_key_stdin else "",
-    )
-    _run_headless(service, draft)
+    with _secret_store_errors():
+        service = wiring.build_setup_service(secret_store)
+        if not non_interactive:
+            _run_wizard(service)
+            return
+        state = service.load()
+        draft = SetupDraft(
+            base_url=base_url or state.settings.llm.base_url,
+            model=model or state.settings.llm.model,
+            host=host or state.settings.github.host,
+            owner=owner or state.settings.github.owner,
+            api_key=sys.stdin.read().strip() if api_key_stdin else "",
+            secret_store=secret_store,
+        )
+        _run_headless(service, draft)
+
+
+@contextmanager
+def _secret_store_errors() -> Iterator[None]:
+    try:
+        yield
+    except SecretStoreError as error:
+        _console().print(f"[red]Secret store:[/] {error}\n{KEY_IN_A_FILE}")
+        raise typer.Exit(EXIT_USAGE) from error
 
 
 def _run_wizard(service: SetupService) -> None:
@@ -88,4 +107,5 @@ def _report(service: SetupService) -> None:
 
 def doctor() -> None:
     """Check configuration, model connection, gh and the GitHub login."""
-    _report(wiring.build_setup_service())
+    with _secret_store_errors():
+        _report(wiring.build_setup_service())

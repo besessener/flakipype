@@ -9,10 +9,10 @@ class AuditEntry:
     time: str
     session: str
     action: str
-    # "model" or "command": who asked for it.
+    # "model", "command" or "run": who asked for it.
     origin: str
     request: str
-    # "confirmed" or "declined".
+    # The gate's answer, e.g. "confirmed", "declined", "auto"; or what covered the action.
     answer: str
     outcome: str
     run_id: int | None = None
@@ -38,5 +38,14 @@ class AuditLog:
             "SELECT time, session, action, origin, request, answer, outcome, run_id "
             "FROM action_log WHERE session = ? ORDER BY id",
             (session,),
+        ).fetchall()
+        return [AuditEntry(*row) for row in rows]
+
+    def since(self, time: str) -> list[AuditEntry]:
+        """Every entry at or after `time` (ISO time), oldest first."""
+        rows = self._db.execute(
+            "SELECT time, session, action, origin, request, answer, outcome, run_id "
+            "FROM action_log WHERE time >= ? ORDER BY id",
+            (time,),
         ).fetchall()
         return [AuditEntry(*row) for row in rows]

@@ -69,3 +69,44 @@ jobs:
             echo
             uv run coverage report --format=markdown
           } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: smoke (${{ matrix.distribution }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distribution: Ubuntu 24.04
+            image: ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+          - distribution: Debian 12
+            image: debian:12@sha256:2c037a04925515fdd6ea85ea14a682d0e79931f5e9f5d07b6dbfc6ba12f9e858
+          - distribution: Fedora
+            image: fedora:latest@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+          - distribution: Arch Linux
+            image: archlinux:latest@sha256:4e77cf2ea5f410e6f8be5abf93ccf17ce2436e87a138c167208356711a405dbd
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Install what install.sh and the test need
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get update
+            apt-get install -y --no-install-recommends ca-certificates curl git systemd
+          elif command -v dnf >/dev/null; then
+            dnf install -y curl git systemd tar
+          else
+            pacman -Syu --noconfirm curl git systemd
+          fi
+          useradd --create-home smoke
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install with install.sh and start flakipype as a user
+        run: |
+          cp -r "$GITHUB_WORKSPACE" /home/smoke/flakipype
+          chown -R smoke /home/smoke/flakipype
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)"
+          su smoke --shell /bin/sh --command "sh /home/smoke/flakipype/tests/smoke/smoke.sh /home/smoke/flakipype $version"

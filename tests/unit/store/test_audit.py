@@ -18,3 +18,4 @@ def test_entries_are_kept_per_session_in_order(cache: ScanCache) -> None:
 
     assert log.entries("s1") == [first, declined]
     assert log.entries("s3") == []
+    assert log.since("2026-10-09T10:01:00+00:00") == [declined, other]

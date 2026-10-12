@@ -1,5 +1,6 @@
 import re
 import tomllib
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -113,6 +114,30 @@ class FixSettings(BaseModel):
     max_seconds: int = Field(default=600, ge=60, le=3_600)
 
 
+class RunSettings(BaseModel):
+    """Hard limits for `flakipype run`: per run, and across all runs of the last 24 hours."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_minutes: int = Field(default=120, ge=10, le=720)
+    max_prs_per_day: int = Field(default=3, ge=1, le=20)
+    max_actions_per_day: int = Field(default=20, ge=1, le=200)
+    max_tokens_per_day: int = Field(default=3_000_000, ge=10_000, le=50_000_000)
+
+
+class SecretStoreChoice(StrEnum):
+    # The system keyring if there is one, else the 0600 file.
+    AUTO = "auto"
+    KEYRING = "keyring"
+    FILE = "file"
+
+
+class SecretSettings(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    store: SecretStoreChoice = SecretStoreChoice.AUTO
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -122,6 +147,8 @@ class Settings(BaseModel):
     agent: AgentSettings = AgentSettings()
     actions: ActionSettings = ActionSettings()
     fix: FixSettings = FixSettings()
+    run: RunSettings = RunSettings()
+    secrets: SecretSettings = SecretSettings()
 
 
 def load_settings(path: Path) -> Settings:

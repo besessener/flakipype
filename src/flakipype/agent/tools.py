@@ -26,9 +26,10 @@ class Answer(StrEnum):
     AUTO = "auto"
     DECLINED = "declined"
     NEEDS_PERSON = "not run in auto mode"
+    REPORT_ONLY = "report only"
 
 
-_REFUSALS = frozenset({Answer.DECLINED, Answer.NEEDS_PERSON})
+_REFUSALS = frozenset({Answer.DECLINED, Answer.NEEDS_PERSON, Answer.REPORT_ONLY})
 
 
 class ToolError(Exception):
@@ -108,6 +109,8 @@ def _refusal(name: str, answer: Answer, request: ActionRequest) -> str:
             f"{name}: not run in auto mode because {request.needs_person}. "
             "The user can review it after switching to /mode ask."
         )
+    if answer is Answer.REPORT_ONLY:
+        return f"{name}: not run; without a window, ask mode only reports what it would do."
     return f"{name}: the user declined. Do not ask for it again in this turn."
 
 
@@ -131,6 +134,17 @@ class PolicyGate:
         if self.mode is Mode.AUTO:
             return Answer.NEEDS_PERSON if request.needs_person else Answer.AUTO
         return Answer.CONFIRMED if self._confirm(request) else Answer.DECLINED
+
+
+class HeadlessGate(PolicyGate):
+    """Without a window nobody can confirm: auto runs as usual, ask only reports."""
+
+    def __init__(self, mode: Mode) -> None:
+        super().__init__(mode, deny_all)
+
+    def answer(self, risk: RiskLevel, request: ActionRequest) -> Answer:
+        answer = super().answer(risk, request)
+        return Answer.REPORT_ONLY if answer is Answer.DECLINED else answer
 
 
 class Confirmer:

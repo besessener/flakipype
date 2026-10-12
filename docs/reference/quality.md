@@ -10,6 +10,7 @@
 | Architecture | import-linter | Layer contract, see [architecture](../explanation/architecture.md) |
 | Dependencies | deptry | No unused, missing or misplaced dependencies |
 | Dead code | vulture | No unused code |
+| Shell scripts | ShellCheck (`shellcheck-py`) | `install.sh` and the smoke test |
 | Tests | pytest, warnings are errors | Behaviour, not implementation |
 | Coverage | coverage.py, branch coverage | `fail_under` in `pyproject.toml`, only ever raised |
 | Hygiene | prek: gitleaks, zizmor, pre-commit-hooks | No secrets, safe workflows, clean files |
@@ -42,6 +43,10 @@ Tests never reach real GitHub or a real model.
   each kind and an agent stand-in).
 - **Setup world**: `tests/support/fake_setup.py` builds a `SetupService` with a
   temporary config dir, file secret store, fake `gh` provider and fake model.
+- **Unattended runs**: `tests/support/fake_run.py` builds a `RunService` over
+  the investigation world with a settable clock (sleeping moves it on), and
+  `tests/support/fake_daemon.py` answers `systemctl`, `systemd-run` and
+  `loginctl` from a table.
 - **TUI**: Textual Pilot tests drive the app (`tests/tui/`); each view has an
   SVG snapshot in `tests/tui/__snapshots__/`. After an intended UI change,
   update it with `uv run pytest tests/tui --snapshot-update` and review the SVG
@@ -62,6 +67,7 @@ Evaluations against a real model live in `tests/eval`, are not part of
 | --- | --- | --- |
 | `ci.yml` → `hygiene` | gitleaks over the full history (checksum-verified binary), all prek hooks | PR, push to `main` |
 | `ci.yml` → `test` | `uv sync --locked` and `poe check` on Python 3.12 and 3.14; coverage table in the job summary | PR, push to `main` |
+| `ci.yml` → `smoke` | In Ubuntu 24.04, Debian 12, Fedora and Arch containers (pinned by digest), as a user without root: `install.sh` from the checkout (with the verified `uv` download), `flakipype --version`, `doctor` without a configuration, and the unit files through `systemd-analyze verify` (`tests/smoke/smoke.sh`) | PR, push to `main` |
 | `codeql.yml` | CodeQL `security-extended` for Python and Actions | PR, push to `main`, weekly |
 | `dependabot.yml` | Updates for Actions, uv dependencies and hook revisions, 7-day cooldown | weekly |
 

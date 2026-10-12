@@ -23,11 +23,14 @@ from flakipype.github.runs import RunState
 from flakipype.store.audit import AuditEntry, AuditLog
 
 _WATCHING = "It is watched; a note follows when it finishes."
+# The audit answer of a verification run: the confirmation of the fix's push covers it.
+COVERED_BY_PUSH = "covered by the push"
 
 
 class Origin(StrEnum):
     MODEL = "model"
     COMMAND = "command"
+    RUN = "run"
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,7 @@ class ActionService:
         settings: ActionSettings,
         owner: str,
         now: Callable[[], datetime],
+        origin: Origin = Origin.MODEL,
     ) -> None:
         self._runs = runs
         self._files = files
@@ -62,7 +66,8 @@ class ActionService:
         self._owner = owner
         self._now = now
         self._watch = RunWatch(runs, watch_time=timedelta(hours=settings.watch_hours), now=now)
-        self._origin = Origin.MODEL
+        self._base_origin = origin
+        self._origin = origin
         self.session = uuid4().hex
         self.used = 0
 
@@ -95,12 +100,14 @@ class ActionService:
             return None
         self._runs.rerun(run.repository, run.run_id)
         self.used += 1
-        return self._watch.add(
+        started = self._watch.add(
             replace(
                 run, number=0, label=label, started=self._now(), attempt=run.attempt + 1,
                 before=run.conclusion, status="queued", conclusion=None, detail="", done=False,
             )
         )  # fmt: skip
+        self._record_covered("verify_rerun", started)
+        return started
 
     def dispatch_authorised(self, template: WatchedRun) -> WatchedRun | None:
         """Dispatch for a confirmed fix; None if the budget is used up."""
@@ -108,7 +115,13 @@ class ActionService:
             return None
         run_id = self._runs.dispatch(template.repository, template.workflow_path, template.ref)
         self.used += 1
-        return self._watch.add(replace(template, run_id=run_id, started=self._now()))
+        started = self._watch.add(replace(template, run_id=run_id, started=self._now()))
+        self._record_covered("verify_dispatch", started)
+        return started
+
+    def adopt(self, runs: list[WatchedRun]) -> None:
+        """Keep watching runs an earlier session started, under their numbers; costs no budget."""
+        self._watch.runs.extend(runs)
 
     @contextmanager
     def commanded(self) -> Iterator[None]:
@@ -117,7 +130,7 @@ class ActionService:
         try:
             yield
         finally:
-            self._origin = Origin.MODEL
+            self._origin = self._base_origin
 
     def rerun_failed(
         self, finding: Finding, evidence: Evidence, *, run_id: int | None
@@ -322,6 +335,15 @@ class ActionService:
                 "wait for some to finish or cancel one."
             )
             raise ToolError(message)
+
+    def _record_covered(self, action: str, run: WatchedRun) -> None:
+        self._audit.record(
+            AuditEntry(
+                time=self._now().isoformat(), session=self.session, action=action,
+                origin=self._origin, request=f"{run.title} on {run.ref} @ {run.commit[:7]}",
+                answer=COVERED_BY_PUSH, outcome=f"Started R{run.number}.", run_id=run.run_id,
+            )
+        )  # fmt: skip
 
     def _budget_line(self, count: int) -> str:
         return f"Actions this session: {self.used + count} of {self._settings.max_per_session}"

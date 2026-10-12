@@ -42,8 +42,8 @@ starts until you press Enter, because investigations cost tokens.
 | `/actions` | The actions (reruns, dispatches, cancels, fixes) requested in this session |
 | `/mode ask\|auto` | Confirm every action (`ask`, the default), or let them run within the budgets (`auto`); `/mode` shows the mode |
 | `/budget` | Tokens used in this session |
-| `/sessions` | The ten most recent sessions |
-| `/resume N` | Continue session N; the next action scans again |
+| `/sessions` | The ten most recent sessions; those of [unattended runs](run-on-a-schedule.md) end with `· run` |
+| `/resume N` | Continue session N; the next action scans again. A run's session opens as a new chat session with its scan, verdicts and fixes not pushed; its pull requests stay with the timer |
 | `/new` | Start a new session |
 | `/help` | The list of commands |
 | `/quit`, `/exit`, Ctrl+Q | Leave |

@@ -1,8 +1,10 @@
 """Composition root: the only place that builds real collaborators from the environment."""
 
+import getpass
 import os
 import platform
 import shutil
+import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -14,17 +16,23 @@ from pathlib import Path
 import httpx2
 import keyring
 
-from flakipype.actions.service import ActionService
+from flakipype.actions.service import ActionService, Origin
 from flakipype.agent.budget import Limits
 from flakipype.agent.fix_pipeline import FixConfig, propose_fix
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, workspace_tools
 from flakipype.agent.pipeline import AgentConfig, investigate_finding
-from flakipype.agent.tools import Confirmer, Mode, PolicyGate
+from flakipype.agent.tools import Confirmer, HeadlessGate, Mode, PolicyGate
 from flakipype.config.paths import AppPaths, app_paths
-from flakipype.config.secrets import LLM_API_KEY, default_secret_store
-from flakipype.config.settings import Settings, SettingsError, load_settings
+from flakipype.config.secrets import LLM_API_KEY, SecretStore, SecretStoreError, secret_store
+from flakipype.config.settings import (
+    FixSettings,
+    SecretStoreChoice,
+    Settings,
+    SettingsError,
+    load_settings,
+)
 from flakipype.fix.delivery import Delivery
 from flakipype.fix.service import FixService
 from flakipype.fix.verify import Verifier, VerifyGitHub
@@ -41,9 +49,13 @@ from flakipype.investigate.workspace import ChatWorkspace
 from flakipype.llm.client import LlmEndpoint, create_client
 from flakipype.llm.connection import ConnectionResult, check_connection
 from flakipype.scan.service import ScanRequest, ScanService
-from flakipype.setup.doctor import RUN_SETUP
+from flakipype.setup.daemon import Daemon, UnitOptions, installed_executable, run_command
+from flakipype.setup.doctor import KEY_IN_A_FILE, RUN_SETUP
 from flakipype.setup.service import SetupService
 from flakipype.store.database import ScanCache
+from flakipype.store.lock import run_lock
+from flakipype.unattended.limits import DAY, day_usage, run_limits
+from flakipype.unattended.service import RunClock, RunService
 
 _DOWNLOAD_TIMEOUT_SECONDS = 120
 
@@ -70,13 +82,38 @@ def _managed_gh(paths: AppPaths) -> ManagedGh:
     )
 
 
-def build_setup_service() -> SetupService:
+def _secret_store(paths: AppPaths, choice: SecretStoreChoice) -> SecretStore:
+    return secret_store(choice, keyring.get_keyring(), paths.secrets_file)
+
+
+def build_setup_service(choice: SecretStoreChoice | None = None) -> SetupService:
+    """The store `choice` names, else the saved one (auto when the configuration is unreadable)."""
     paths = _paths()
+    if choice is None:
+        try:
+            choice = load_settings(paths.config_file).secrets.store
+        except SettingsError:
+            choice = SecretStoreChoice.AUTO
     return SetupService(
         paths=paths,
-        secrets=default_secret_store(keyring.get_keyring(), paths.secrets_file),
+        secrets=_secret_store(paths, choice),
         gh=_managed_gh(paths),
         check_llm=check_llm_endpoint,
+    )
+
+
+def build_daemon() -> Daemon:
+    return Daemon(unit_dir=_paths().systemd_unit_dir, run=run_command, user=getpass.getuser())
+
+
+def unit_options(schedule: str, mode: Mode) -> UnitOptions:
+    """The units for the running flakipype command, stopped after the configured run time."""
+    settings = _ready_settings(_paths())
+    return UnitOptions(
+        executable=installed_executable(sys.argv[0], shutil.which),
+        schedule=schedule,
+        mode=mode.value,
+        run_minutes=settings.run.max_minutes,
     )
 
 
@@ -150,8 +187,12 @@ def _open_agentic() -> Iterator[_Agentic]:
     if not settings.llm.model:
         message = f"No model configured. {RUN_SETUP}"
         raise NotReadyError(message)
-    secrets = default_secret_store(keyring.get_keyring(), paths.secrets_file)
-    api_key = secrets.get(LLM_API_KEY)
+    secrets = _secret_store(paths, settings.secrets.store)
+    try:
+        api_key = secrets.get(LLM_API_KEY)
+    except SecretStoreError as error:
+        message = f"Cannot read the API key from the {secrets.location}: {error}. {KEY_IN_A_FILE}"
+        raise NotReadyError(message) from error
     if not api_key:
         message = f"No API key stored. {RUN_SETUP}"
         raise NotReadyError(message)
@@ -175,9 +216,9 @@ def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
 
 
 def _fix_service(
-    agentic: _Agentic, actions: ActionService, now: Callable[[], datetime]
+    agentic: _Agentic, actions: ActionService, now: Callable[[], datetime], *, fix: FixSettings
 ) -> FixService:
-    fix, config, pulls = agentic.settings.fix, agentic.config, PullRequests(agentic.gh)
+    config, pulls = agentic.config, PullRequests(agentic.gh)
     verifier = Verifier(
         github=VerifyGitHub(
             runs=RunControl(agentic.gh), logs=ActionsClient(agentic.gh), comments=pulls
@@ -219,7 +260,10 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
             now=now,
         )
         workspace = ChatWorkspace(
-            agentic.service, request, actions=actions, fixes=_fix_service(agentic, actions, now)
+            agentic.service,
+            request,
+            actions=actions,
+            fixes=_fix_service(agentic, actions, now, fix=settings.fix),
         )
         confirmer = Confirmer()
         gate = PolicyGate(Mode.ASK, confirmer)
@@ -244,3 +288,31 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
             now=now,
         )
         yield chat, settings
+
+
+@contextmanager
+def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Iterator[RunService]:
+    """Raises RunLockedError while another run holds the lock, before anything else happens."""
+    with run_lock(_paths().run_lock_file), _open_agentic() as agentic:
+        settings, cache = agentic.settings, agentic.cache
+        now = partial(datetime.now, UTC)
+        since = (now() - DAY).isoformat()
+        limits = run_limits(
+            settings, day_usage(cache.audit.since(since), cache.sessions.run_tokens_since(since))
+        )
+        actions = ActionService(
+            runs=RunControl(agentic.gh), files=ContentsClient(agentic.gh), audit=cache.audit,
+            settings=settings.actions.model_copy(update={"max_per_session": limits.actions}),
+            owner=settings.github.owner, now=now, origin=Origin.RUN,
+        )  # fmt: skip
+        fix = settings.fix.model_copy(update={"max_prs_per_session": limits.pull_requests})
+        workspace = ChatWorkspace(
+            agentic.service,
+            request_for(settings),
+            actions=actions,
+            fixes=_fix_service(agentic, actions, now, fix=fix),
+        )
+        yield RunService(
+            workspace=workspace, gate=HeadlessGate(mode), cache=cache, limits=limits,
+            clock=RunClock(now=now, sleep=time.sleep),
+        )  # fmt: skip

@@ -7,6 +7,8 @@ from keyring.backend import KeyringBackend
 from keyring.backends import fail
 from keyring.errors import KeyringError, PasswordDeleteError
 
+from flakipype.config.settings import SecretStoreChoice
+
 SERVICE_NAME = "flakipype"
 LLM_API_KEY = "llm-api-key"
 
@@ -100,7 +102,9 @@ class FileSecretStore:
         self._path.chmod(0o600)
 
 
-def default_secret_store(backend: KeyringBackend, fallback_file: Path) -> SecretStore:
-    if isinstance(backend, fail.Keyring):
-        return FileSecretStore(fallback_file)
+def secret_store(choice: SecretStoreChoice, backend: KeyringBackend, file: Path) -> SecretStore:
+    """The store `secrets.store` names; "auto" uses the file only where no keyring exists."""
+    no_keyring = isinstance(backend, fail.Keyring)
+    if choice is SecretStoreChoice.FILE or (choice is SecretStoreChoice.AUTO and no_keyring):
+        return FileSecretStore(file)
     return KeyringSecretStore(backend)
