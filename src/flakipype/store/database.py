@@ -62,6 +62,12 @@ MIGRATIONS = (
         outcome TEXT NOT NULL, PRIMARY KEY (host, identity)
     );
     """,
+    """
+    CREATE TABLE no_verdicts (
+        host TEXT NOT NULL, identity TEXT NOT NULL, last_seen TEXT NOT NULL,
+        detail TEXT NOT NULL, PRIMARY KEY (host, identity)
+    );
+    """,
 )
 # The chat and a run may write at the same time; a writer waits this long for the other.
 _BUSY_SECONDS = 30
@@ -219,6 +225,21 @@ class ScanCache:
             self._db.execute(
                 "INSERT OR REPLACE INTO fix_attempts VALUES (?, ?, ?, ?)",
                 (host, identity, last_seen, outcome),
+            )
+
+    def no_verdict(self, host: str, identity: str, last_seen: str) -> str | None:
+        """Why a run's investigation had no verdict, if the finding has not failed since."""
+        row = self._db.execute(
+            "SELECT detail FROM no_verdicts WHERE host = ? AND identity = ? AND last_seen = ?",
+            (host, identity, last_seen),
+        ).fetchone()
+        return str(row[0]) if row else None
+
+    def save_no_verdict(self, host: str, identity: str, *, last_seen: str, detail: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO no_verdicts VALUES (?, ?, ?, ?)",
+                (host, identity, last_seen, detail),
             )
 
 

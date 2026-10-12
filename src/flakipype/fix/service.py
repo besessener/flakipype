@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from flakipype.actions.service import ActionService
 from flakipype.actions.targets import check_owner
 from flakipype.agent.fix_pipeline import FixRequest, FixResult
+from flakipype.agent.pipeline import reviewed
 from flakipype.agent.tools import ActionRequest, Answer, PreparedAction, ToolError
 from flakipype.agent.verdict import Classification, Verdict
 from flakipype.agent.workcopy import unified_diff
@@ -33,7 +34,6 @@ from flakipype.store.audit import AuditEntry, AuditLog
 FIXABLE = frozenset(
     {Classification.FLAKY_TEST, Classification.FLAKY_INFRASTRUCTURE, Classification.CONFIGURATION}
 )
-_UNREVIEWED = ("not reviewed", "revised, second review unavailable")
 _PATHS_SHOWN = 3
 
 type ProposeFix = Callable[[FixRequest], FixResult]
@@ -321,10 +321,6 @@ class FixService:
             f"Opened draft pull request #{verification.pull_number}: {opened.url} "
             f"(branch {opened.branch}).\n{status}"
         )
-
-
-def reviewed(review: str) -> bool:
-    return bool(review) and not review.startswith(_UNREVIEWED)
 
 
 def _check_fixable(target: FixTarget) -> None:

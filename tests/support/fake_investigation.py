@@ -52,6 +52,7 @@ class FakeAgent:
     calls: list[int] = field(default_factory=list)
     status: Status = Status.COMPLETED
     tokens: int = 1_000
+    review: str = "accepted: ok"
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __call__(
@@ -64,5 +65,5 @@ class FakeAgent:
         verdict = Verdict.model_validate(verdict_input("quote", "finding"))
         good = self.status is Status.COMPLETED
         return FindingResult(
-            self.status, verdict if good else None, "accepted: ok", "", self.tokens, 2
+            self.status, verdict if good else None, self.review, "", self.tokens, 2
         )

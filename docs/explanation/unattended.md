@@ -38,7 +38,10 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
 3. **Scan** the configured owner, as `flakipype scan` does.
 4. **Investigate** the flaky and recurring findings, as `flakipype
    investigate` does: cached verdicts are reused until a finding has a newer
-   failure.
+   failure. A finding whose investigation in an earlier run ended without a
+   verdict (`no_verdict` or a loop, in either mode) is not investigated again
+   until it has a newer failure; running out of tokens or a model error is
+   tried again next time.
 5. **Fix** findings with a reviewed verdict classified `flaky_test`,
    `flaky_infrastructure` or `configuration`, highest ranked first, through
    the same `fix` tool and policy gate as the chat ([fixes](fix.md)).
@@ -79,14 +82,19 @@ flakipype run · octo-org · auto · 2026-10-12 06:02–06:41
 Scan: 42 repositories, 1,204 runs, 5 flaky, 2 recurring error
 Investigated: 2 (1 flaky_test, 1 real_bug), 3 verdicts from the cache
 Fixes: #1 octo-org/app › E2E › e2e: Opened draft pull request #57: https://github.com/octo-org/app/pull/57 (branch flakipype/fix-e2e-7c41d0).
+       #2 octo-org/app › CI › lint: not fixed: real bug, which flakipype does not fix
        #4 octo-org/api › CI › test: not pushed: the diff has warnings: changes .github/: .github/workflows/ci.yml (kept for the chat)
+       #6 octo-org/api › CodeQL › analyze: not investigated again: an earlier run ended without a verdict (no_verdict: …), and it has not failed since
 Verification: octo-org/app#51: flakipype verification: E2E passed 3 of 3 runs on this branch.
               octo-org/app#57: 1 of 3 runs, continues in the next run
 Budget: pull requests today 1 of 3 · actions today 4 of 20 · tokens 412,000 of 1,000,000 (today 412,000 of 3,000,000)
 ```
 
-Further lines name the limits that stopped a step (`Stopped by:`) and the
-errors (`Problems:`). `--json` prints the same as one object with
+`Fixes` has a line for every flaky finding and recurring error: the pull
+request, or why there is none (no verdict, a classification flakipype does
+not fix, a verdict whose review could not run, a limit, a fix that was not
+pushed). Further lines name the limits that stopped a step (`Stopped by:`)
+and the errors (`Problems:`). `--json` prints the same as one object with
 `schema_version` 1, including the diff of every fix that was not pushed.
 
 | Code | Meaning |
@@ -307,7 +315,8 @@ is tested in the `test` job with in-memory GitHub fakes and a fake model.
 - **`setup`**: `daemon.py` renders the units (pure text) and installs them
   through a command runner it is given.
 - **`store`**: the run lock (`lock.py`), WAL, run sessions, the fixes a run
-  did not push, and audit entries since a time.
+  did not push, the investigations that ended without a verdict, and audit
+  entries since a time.
 - **`config`**: `[run]`, `[secrets]` and the store choice.
 - **`fix`** and **`actions`**: the origin `run`, audited verification runs,
   taking over pull requests and runs, the check for an open pull request
@@ -324,6 +333,8 @@ is tested in the `test` job with in-memory GitHub fakes and a fake model.
   is not tried again (and is in a dry run), every limit, the time limit with
   verifications left over and finished by the next `auto` run, a failed
   delivery, the session it leaves for the chat.
+- A line for every finding that was not fixed, and investigations without a
+  verdict that the next run skips until a newer failure.
 - Daily usage from audit entries and the per-run limits it leaves.
 - The run lock held twice; WAL on a cache file.
 - `/resume` of a run session: a new session with the run's fixes not pushed,

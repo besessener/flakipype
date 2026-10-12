@@ -47,6 +47,9 @@ class ClassifyingAgent:
     flaky: frozenset[int] = frozenset({1})
     status: Status = Status.COMPLETED
     tokens: int = 1_000
+    detail: str = ""
+    # The review per finding number; "accepted: ok" for the others.
+    reviews: dict[int, str] = field(default_factory=dict)
     calls: list[int] = field(default_factory=list)
 
     def __call__(
@@ -60,8 +63,9 @@ class ClassifyingAgent:
             verdict_input("quote", "finding", classification=classification)
         )
         good = self.status is Status.COMPLETED
+        review = self.reviews.get(finding.number, "accepted: ok") if good else ""
         return FindingResult(
-            self.status, verdict if good else None, "accepted: ok", "", self.tokens, 2
+            self.status, verdict if good else None, review, self.detail, self.tokens, 2
         )
 
 
