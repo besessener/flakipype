@@ -12,6 +12,7 @@ from flakipype.investigate.chat import ChatService, EntryKind
 from flakipype.store.database import ScanCache
 from flakipype.store.sessions import SessionKind
 
+from support.fake_actions import FakeActions
 from support.fake_anthropic import ScriptedModel, call, message, text
 from support.fake_chat import NOW, FixFakes, chat_service
 from support.fake_fix import (
@@ -24,8 +25,8 @@ from support.fake_fix import (
     no_fix,
     verification,
 )
-from support.fake_investigation import FakeAgent
-from support.fake_runs import FakeRuns, state
+from support.fake_investigation import FakeAgent, world
+from support.fake_runs import FakeRuns, passed_job, state
 
 CI = ".github/workflows/ci.yml"
 WARNED = (CHANGE, FileChange(CI, "on: push\njobs: {}\n", "on: [push]\njobs: {}\n"))
@@ -39,6 +40,7 @@ def chat_with(
     runs: FakeRuns | None = None,
     model: ScriptedModel | None = None,
     agent: FakeAgent | None = None,
+    actions: FakeActions | None = None,
 ) -> tuple[ChatService, list[ActionRequest]]:
     asked: list[ActionRequest] = []
 
@@ -49,8 +51,8 @@ def chat_with(
     confirmer = Confirmer()
     confirmer.ask = confirm
     chat = chat_service(
-        cache, model or ScriptedModel([]), agent=agent, runs=runs, fixes=fakes or FixFakes(),
-        confirmer=confirmer,
+        cache, model or ScriptedModel([]), agent=agent, actions=actions, runs=runs,
+        fixes=fakes or FixFakes(), confirmer=confirmer,
     )  # fmt: skip
     return chat, asked
 
@@ -164,7 +166,9 @@ def test_verification_notes_come_with_the_run_notes(cache: ScanCache) -> None:
     fakes = FixFakes(settings=FixSettings(verify_runs=1))
     fakes.github.files[CI] = b"on: pull_request\njobs: {}\n"
     runs = FakeRuns(states={91: [state(91, name="CI", conclusion="success")]})
-    chat, _ = chat_with(cache, fakes, runs=runs)
+    source = world()
+    source.jobs_by_attempt[91, 1] = [passed_job(91, name="test")]
+    chat, _ = chat_with(cache, fakes, runs=runs, actions=source)
     before = chat.unfinished
     chat.handle("/fix 1")
     waiting = chat.unfinished

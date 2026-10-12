@@ -226,19 +226,27 @@ The fix branch has to show it passes where the default branch flakes:
 1. If the workflow (as on the fix commit) runs on `push` or
    `pull_request`, opening the pull request starts its own run: flakipype
    waits for a run of the finding's workflow on the fix commit. If no run
-   shows up within 10 minutes, the result is "cannot verify automatically".
-   If the workflow runs on neither but allows `workflow_dispatch`, flakipype
-   dispatches it on the fix branch instead. Otherwise the result is "cannot
-   verify automatically" right away.
+   shows up within 10 minutes (branch, type or path filters can exclude the
+   fix branch or the draft pull request), flakipype dispatches the workflow
+   when it allows `workflow_dispatch` without required inputs; otherwise the
+   result is "cannot verify automatically". If the workflow runs on neither
+   `push` nor `pull_request` but can be dispatched, flakipype dispatches it on
+   the fix branch right away. Otherwise the result is "cannot verify
+   automatically" right away, with the reason (no `workflow_dispatch`, or the
+   inputs it requires).
 2. When the run finishes, it reruns the whole run until the workflow has
    run `fix.verify_runs` times (default 3) on the fix commit. The runs show
    in the Runs list as in [actions](actions.md) and count against the same
    action budget; the push confirmation already covers them. Watching a run
    flakipype did not start (the pull request's own) costs no budget.
-3. Verification stops early when a run ends neither passed nor failed (for
-   example cancelled), does not finish within `actions.watch_hours`, GitHub
-   refuses a rerun, or the action budget is used up; the comment says after
-   how many runs and why.
+3. A run counts as passed only when the finding's job ran and passed in it.
+   A successful run that skipped the job (an `if:` on draft pull requests,
+   for example) stops verification, since a rerun replays the same event.
+   Verification also stops early when a run ends neither passed nor failed
+   (for example cancelled), does not finish within `actions.watch_hours`,
+   GitHub refuses a rerun, or the action budget is used up; the comment says
+   after how many runs and why. A rate limit only pauses it until the next
+   poll.
 4. The result is posted as a comment on the pull request, written by code:
 
 ```text
@@ -252,7 +260,8 @@ finding's error signature says the fix did not hold, one with another
 signature is reported with its message, a failure in another job names that
 job, and an unreadable log says so. The rate is the finding's job failing
 at least once per run on the default branch in the scan, or on all branches
-when the scan has no runs on the default branch. The chance shown is
+when the scan has no runs on the default branch; like the scan, it counts
+only runs that passed or failed, not cancelled or skipped ones. The chance shown is
 `(1 − rate)^runs`, only when every run passed. Verification is polled while
 the chat is open, and its note appears in the chat; a resumed session
 continues it. A pull request an [unattended run](unattended.md) opened is

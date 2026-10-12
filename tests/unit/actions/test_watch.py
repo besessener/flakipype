@@ -1,6 +1,8 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+import pytest
+
 from flakipype.actions.watch import RunKind, RunWatch, WatchedRun, finish_note
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.runs import JobState, RunState
@@ -122,13 +124,38 @@ def test_a_dispatched_run_not_shown_yet_stays_queued() -> None:
     assert (watcher.runs[0].run_id, watcher.runs[0].state) == (None, "queued")
 
 
-def test_runs_are_watched_for_a_limited_time() -> None:
+@pytest.mark.parametrize(
+    "last", [state(4, attempt=1), state(4, status="in_progress", conclusion=None, attempt=2)]
+)
+def test_runs_are_watched_for_a_limited_time(last: RunState) -> None:
     clock = Clock()
-    watcher = watch(FakeRuns(states={4: [state(4, attempt=1)]}), clock)
+    watcher = watch(FakeRuns(states={4: [last]}), clock)
     watcher.add(rerun())
     clock.now = START + SIX_HOURS + timedelta(seconds=1)
 
     assert watcher.poll() == ["R1: stopped watching app · E2E #4/2 after 6 h; it had not finished."]
+    assert watcher.runs[0].state == "no longer watched"
+
+
+def test_a_run_first_polled_after_its_watch_time_keeps_its_result() -> None:
+    clock = Clock()
+    watcher = watch(FakeRuns(states={4: [state(4, conclusion="success", attempt=2)]}), clock)
+    watcher.add(rerun())
+    clock.now = START + timedelta(hours=24)
+
+    assert watcher.poll() == [
+        "R1: E2E passed on attempt 2 (failed on attempt 1): a proven flaky event."
+    ]
+
+
+def test_a_run_never_found_is_watched_for_a_limited_time() -> None:
+    clock = Clock()
+    watcher = watch(FakeRuns(), clock)
+    watcher.add(dispatch(None, "dispatch"))
+    clock.now = START + SIX_HOURS + timedelta(seconds=1)
+
+    watcher.poll()
+
     assert watcher.runs[0].state == "no longer watched"
 
 

@@ -6,13 +6,13 @@ from flakipype.config.settings import ActionSettings
 from flakipype.fix.verify import Stage, Verification
 from flakipype.flaky.model import JobResult
 from flakipype.flaky.signature import signature_from_log
-from flakipype.github.actions import GitHubApiError
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.runs import CommitRun
 from flakipype.store.database import ScanCache
 
 from support.builders import job
 from support.fake_fix import FIX_COMMIT, FixWorld, verification
-from support.fake_runs import DISPATCHABLE, FakeRuns, state
+from support.fake_runs import DISPATCHABLE, FakeRuns, passed_job, state
 
 STAMP = "2026-10-07T09:27:35.3592891Z "
 SAME_LOG = f"{STAMP}##[error]Process completed with exit code 1.\n"
@@ -47,6 +47,22 @@ def test_a_pull_request_run_is_waited_for(cache: ScanCache) -> None:
 
     assert begun == verification()
     assert setup.github.calls == []
+
+
+def test_a_filtered_push_workflow_is_dispatched_when_no_run_starts(cache: ScanCache) -> None:
+    setup = Setup(cache, runs=FakeRuns(dispatch_ids=[80]))
+    workflow = "on:\n  push:\n    branches: [main]\n  workflow_dispatch:\njobs: {}\n"
+    waiting = setup.verifier.begin(verification(), workflow)
+
+    setup.clock.advance(minutes=10, seconds=1)
+    dispatched = setup.verifier.poll(waiting)
+
+    assert dispatched.stage is Stage.WATCHING
+    assert f"dispatch octo-org/app .github/workflows/e2e.yml {verification().branch}" in (
+        setup.runs.calls
+    )
+    assert setup.actions.watched[0].run_id == 80
+    assert setup.github.comments == []
 
 
 def test_the_run_on_the_fix_commit_is_found_and_watched(cache: ScanCache) -> None:
@@ -89,13 +105,23 @@ def test_a_dispatch_only_workflow_is_dispatched_on_the_fix_branch(cache: ScanCac
     assert setup.actions.watched[0].run_id == 80
 
 
-def test_a_workflow_without_a_trigger_cannot_be_verified(cache: ScanCache) -> None:
+@pytest.mark.parametrize(
+    ("workflow", "reason"),
+    [
+        ("on: schedule\njobs: {}\n", "the workflow does not declare workflow_dispatch"),
+        ("on:\n  workflow_dispatch:\n    inputs:\n      environment: {required: true}\n",
+         "the workflow needs inputs flakipype does not send: environment"),
+    ],
+)  # fmt: skip
+def test_a_workflow_that_nothing_starts_cannot_be_verified(
+    cache: ScanCache, workflow: str, reason: str
+) -> None:
     setup = Setup(cache)
 
-    begun = setup.verifier.begin(verification(), "on: schedule\njobs: {}\n")
+    begun = setup.verifier.begin(verification(), workflow)
 
     assert begun.outcome == (
-        f"{CANNOT}the workflow runs neither on push, pull_request nor workflow_dispatch."
+        f"{CANNOT}the workflow runs on neither push nor pull_request, and {reason}."
     )
 
 
@@ -114,6 +140,8 @@ def test_three_passes_are_rerun_and_reported(cache: ScanCache) -> None:
         states={91: [state(91, conclusion="success", attempt=attempt) for attempt in (1, 2, 3)]}
     )
     setup = Setup(cache, runs=runs)
+    for attempt in (1, 2, 3):
+        setup.logs.jobs_by_attempt[91, attempt] = [passed_job(91, attempt=attempt)]
     current = setup.watching(verification())
 
     for _ in range(2):
@@ -187,6 +215,36 @@ def test_failures_are_classified(
     assert "by chance" not in done.outcome
 
 
+def test_a_success_without_the_findings_job_is_no_pass(cache: ScanCache) -> None:
+    setup = Setup(cache, runs=FakeRuns(states={91: [state(91, conclusion="success")]}))
+    setup.logs.jobs_by_attempt[91, 1] = [
+        passed_job(91, name="lint"),
+        job(7, run_id=91, name="e2e", conclusion="skipped"),
+    ]
+    current = setup.watching(verification())
+
+    done = setup.step(current)
+
+    assert done.results == ("passed, but e2e did not run",)
+    assert "passed 0 of 1 runs" in done.outcome
+    assert (
+        "Stopped after 1 of 3 runs: a rerun replays the same event, so e2e would not run either."
+    ) in done.outcome
+    assert "by chance" not in done.outcome
+    assert "rerun octo-org/app 91" not in setup.runs.calls
+
+
+def test_a_success_whose_jobs_cannot_be_read_is_no_pass(cache: ScanCache) -> None:
+    setup = Setup(cache, runs=FakeRuns(states={91: [state(91, conclusion="success")]}))
+    setup.logs.jobs_by_attempt[91, 1] = SERVER_ERROR
+    current = setup.watching(verification(wanted=1))
+
+    done = setup.step(current)
+
+    assert done.results == ("passed, but whether e2e ran could not be read",)
+    assert "by chance" not in done.outcome
+
+
 def test_a_cancelled_run_stops_the_verification(cache: ScanCache) -> None:
     setup = Setup(cache, runs=FakeRuns(states={91: [state(91, conclusion="cancelled")]}))
     current = setup.watching(verification())
@@ -219,6 +277,7 @@ def test_a_rerun_that_cannot_start_stops_the_verification(
     cache: ScanCache, used: int, error: Exception | None, stopped: str
 ) -> None:
     setup = Setup(cache, runs=FakeRuns(states={91: [state(91, conclusion="success")]}))
+    setup.logs.jobs_by_attempt[91, 1] = [passed_job(91)]
     if error is not None:
         setup.runs.errors["rerun"] = error
     current = setup.watching(verification())
@@ -228,6 +287,19 @@ def test_a_rerun_that_cannot_start_stops_the_verification(
 
     assert done.results == ("passed",)
     assert f"Stopped after 1 of 3 runs: {stopped}." in done.outcome
+
+
+def test_a_rate_limited_rerun_pauses_the_verification(cache: ScanCache) -> None:
+    setup = Setup(cache, runs=FakeRuns(states={91: [state(91, conclusion="success")]}))
+    setup.logs.jobs_by_attempt[91, 1] = [passed_job(91)]
+    setup.runs.errors["rerun"] = ApiRateLimitError("API rate limit exceeded", 403)
+    current = setup.watching(verification())
+    setup.actions.poll()
+
+    with pytest.raises(ApiRateLimitError):
+        setup.verifier.poll(current)
+
+    assert setup.github.comments == []
 
 
 def test_a_comment_that_cannot_be_posted_is_reported(cache: ScanCache) -> None:
@@ -246,3 +318,10 @@ def test_a_verification_survives_a_resume(cache: ScanCache) -> None:
     current = setup.step(setup.watching(verification(fingerprints=("abc",))))
 
     assert Verification.from_dict(current.to_dict()) == current
+
+
+def test_a_verification_stored_before_dispatchable_existed_loads() -> None:
+    stored = verification().to_dict()
+    del stored["dispatchable"]
+
+    assert Verification.from_dict(stored) == verification()

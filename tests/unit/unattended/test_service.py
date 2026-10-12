@@ -15,7 +15,7 @@ from flakipype.unattended.service import FixOutcomeKind, RunReport
 
 from support.fake_fix import CHANGE, FIX_COMMIT, Clock, FakeFixer, fixed
 from support.fake_run import NOW, ClassifyingAgent, RunWorld, limits
-from support.fake_runs import state
+from support.fake_runs import passed_job, state
 
 CI = ".github/workflows/ci.yml"
 WARNED = (CHANGE, FileChange(CI, "on: push\njobs: {}\n", "on: [push]\njobs: {}\n"))
@@ -279,6 +279,7 @@ def test_verifications_left_at_the_time_limit_continue_in_the_next_auto_run(
     third_world = verifying_world(cache)
     opened_meanwhile(first_world, third_world)
     third_world.runs.states[91] = [state(91, name="CI", conclusion="success")]
+    third_world.source.jobs_by_attempt[91, 1] = [passed_job(91, name="test")]
     third = run_once(third_world)
 
     assert first.stops == ("the time limit of 10 minutes; verifications continue in the next run",)

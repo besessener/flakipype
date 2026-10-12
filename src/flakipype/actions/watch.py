@@ -148,21 +148,28 @@ class RunWatch:
         return notes
 
     def _poll(self, run: WatchedRun) -> WatchedRun:
-        if self._now() - run.started > self._watch_time:
-            return replace(run, done=True, detail="")
+        # A run first polled after its watch time (adopted by a later session) may have finished.
         run_id = run.run_id if run.run_id is not None else self._locate(run)
         if run_id is None:
-            return run
+            return self._unfinished(run)
         state = self._api.run_state(run.repository, run_id)
         if state.attempt < run.attempt:
-            return replace(run, run_id=run_id, status="queued", detail="")
+            return self._unfinished(replace(run, run_id=run_id, status="queued", detail=""))
         if state.completed:
             return replace(
                 run, run_id=run_id, status=state.status, conclusion=state.conclusion,
                 attempt=state.attempt, detail="", done=True,
             )  # fmt: skip
+        if self._expired(run):
+            return replace(run, run_id=run_id, done=True, detail="")
         jobs = self._api.job_states(run.repository, run_id, state.attempt)
         return replace(run, run_id=run_id, status=state.status, detail=job_detail(jobs))
+
+    def _expired(self, run: WatchedRun) -> bool:
+        return self._now() - run.started > self._watch_time
+
+    def _unfinished(self, run: WatchedRun) -> WatchedRun:
+        return replace(run, done=True, detail="") if self._expired(run) else run
 
     def _locate(self, run: WatchedRun) -> int | None:
         taken = {other.run_id for other in self.runs}

@@ -26,7 +26,7 @@ from support.fake_fix import (
     no_fix,
     verdict,
 )
-from support.fake_runs import E2E, e2e_evidence, e2e_finding, state
+from support.fake_runs import E2E, e2e_evidence, e2e_finding, passed_job, state
 
 FORBIDDEN = GitHubApiError("Resource not accessible by integration (HTTP 403)", 403)
 SERVER_ERROR = GitHubApiError("Server Error (HTTP 500)", 500)
@@ -233,8 +233,10 @@ def test_a_fix_whose_verification_ends_at_once_says_so(cache: ScanCache) -> None
 
     outcome = world.fixes.prepare(target()).run(Answer.AUTO)
 
-    assert outcome.endswith("cannot verify automatically: the workflow runs neither on push, "
-                            "pull_request nor workflow_dispatch.")  # fmt: skip
+    assert outcome.endswith(
+        "cannot verify automatically: the workflow runs on neither push nor pull_request, "
+        "and the workflow does not declare workflow_dispatch."
+    )
     (entry,) = cache.audit.entries(world.actions.session)
     assert entry.answer == "auto"
 
@@ -274,6 +276,7 @@ def test_poll_moves_verifications_and_notes_finished_ones(cache: ScanCache) -> N
     opened_fix(world)
     world.github.runs_by_commit[FIX_COMMIT] = [CommitRun(91, "pull_request")]
     world.runs.states[91] = [state(91, conclusion="success")]
+    world.logs.jobs_by_attempt[91, 1] = [passed_job(91)]
 
     assert world.fixes.poll() == []
     world.actions.poll()

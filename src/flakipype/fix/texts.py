@@ -55,7 +55,7 @@ def failure_rate(finding: Finding, evidence: Evidence, branch: str) -> Rate:
         for run in evidence.runs
         if run.repository == key.repository
         and run.workflow_path == key.workflow_path
-        and run.conclusion is not None
+        and (run.succeeded or run.failed)
     ]
     failed = {run.run_id for run in finding_runs(finding, evidence)}
     on_branch = [run for run in finished if run.head_branch == branch]

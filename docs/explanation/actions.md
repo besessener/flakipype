@@ -131,7 +131,9 @@ R3 app · E2E dispatch 2/3
 
 - Unfinished runs are polled every 10 seconds in the background, through the
   same serial `gh` queue as everything else. A run is polled until it
-  finishes or its watch time is over.
+  finishes or its watch time is over. A run first polled after its watch
+  time (one a later session took over) is still read once, so a run that
+  finished meanwhile keeps its result.
 - **Finding the run.** A rerun keeps its run id and waits for the next
   attempt number. A dispatch gets the new run's id from GitHub. On GitHub
   Enterprise Server versions that do not return it, flakipype looks for
