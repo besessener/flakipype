@@ -126,6 +126,30 @@ def test_processes_opening_a_new_cache_together_all_succeed(tmp_path: Path) -> N
     assert schema_version(path) == len(MIGRATIONS)
 
 
+def test_opening_waits_for_another_writer_before_switching_to_wal(tmp_path: Path) -> None:
+    path = tmp_path / "cache.sqlite3"
+    with closing(sqlite3.connect(path, isolation_level=None, check_same_thread=False)) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        threading.Timer(0.1, writer.execute, ["COMMIT"]).start()
+
+        ScanCache.open(path).close()
+
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+
+
+def test_opening_gives_up_when_another_writer_keeps_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "cache.sqlite3"
+    monkeypatch.setattr(database, "_BUSY_SECONDS", 0)
+    with closing(sqlite3.connect(path, isolation_level=None)) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            ScanCache.open(path)
+
+
 def test_a_failing_migration_leaves_the_cache_as_it_was(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

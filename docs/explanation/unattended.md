@@ -174,6 +174,8 @@ limit. The summary names the limit.
   nothing.
 - **Database.** The cache database uses SQLite's WAL journal with a busy
   timeout, so the chat and a run can read and write it at the same time.
+  SQLite does not apply that timeout to the switch to WAL, so opening the
+  cache retries the switch itself, up to the same timeout.
 - **Duplicate pull requests.** The chat and a run may fix the same finding
   at the same time. Delivery looks for an open flakipype pull request for
   the finding again right before it creates the branch, and links that one
