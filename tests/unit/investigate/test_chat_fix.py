@@ -26,6 +26,7 @@ from support.fake_fix import (
     verification,
 )
 from support.fake_investigation import FakeAgent, world
+from support.fake_run import RunWorld
 from support.fake_runs import FakeRuns, passed_job, state
 
 CI = ".github/workflows/ci.yml"
@@ -241,6 +242,21 @@ def test_a_run_session_resumes_as_a_copy_without_its_pull_requests(cache: ScanCa
     kept = json.loads(cache.sessions.load(run) or "{}")["fix"]["pulls"]
     assert [OpenedPull.from_dict(pull) for pull in kept] == [opened]
     assert cache.sessions.recent(1)[0].kind is SessionKind.CHAT
+
+
+def test_a_session_written_by_a_run_resumes_in_the_chat(cache: ScanCache) -> None:
+    run = RunWorld(cache, mode=Mode.ASK)
+    run.service().run()
+    (summary,) = cache.sessions.recent(1)
+    fakes = FixFakes()
+    chat, asked = chat_with(cache, fakes, answer=False)
+
+    (resumed,) = chat.handle(f"/resume {summary.session_id}")
+    chat.handle("/fix 1")
+
+    assert resumed.text.startswith(f"New session from run {summary.session_id}, with its scan")
+    assert asked[0].model_text.startswith(TITLE)
+    assert fakes.fixer.requests == []
 
 
 @pytest.mark.parametrize(
