@@ -125,7 +125,9 @@ def test_a_changed_workflow_is_verified_from_the_diff(cache: ScanCache) -> None:
 
     assert not [call for call in world.github.calls if call.startswith("file_bytes")]
     assert opened.verification.stage is Stage.DONE
-    assert "cannot verify automatically: the workflow runs neither" in (opened.verification.outcome)
+    assert "cannot verify automatically: the workflow runs on neither push nor" in (
+        opened.verification.outcome
+    )
 
 
 def test_a_missing_workflow_file_cannot_be_verified(cache: ScanCache) -> None:

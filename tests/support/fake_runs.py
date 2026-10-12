@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from flakipype.flaky.findings import Evidence, Finding, FindingKind
+from flakipype.flaky.model import JobResult
 from flakipype.flaky.scoring import FlakyKey
 from flakipype.github.runs import JobState, RunState
 
@@ -27,6 +28,12 @@ def state(
         attempt=attempt, head_sha="3f2a9c1" + "0" * 33, head_branch="main",
         url=f"https://github.com/{APP}/actions/runs/{run_id}",
     )  # fmt: skip
+
+
+def passed_job(run_id: int, *, name: str = "e2e", attempt: int = 1) -> JobResult:
+    """The finding's job, run and passed: a successful run counts only with it."""
+    return job(run_id * 10 + attempt, run_id=run_id, attempt=attempt, name=name,
+               conclusion="success")  # fmt: skip
 
 
 @dataclass

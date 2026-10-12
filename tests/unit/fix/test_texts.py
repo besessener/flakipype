@@ -55,6 +55,17 @@ def test_the_failure_rate_on_the_default_branch() -> None:
     assert failure_rate(e2e_finding(), e2e_evidence(), "main") == Rate(2, 3, "main")
 
 
+def test_the_failure_rate_counts_only_passed_and_failed_runs() -> None:
+    evidence = e2e_evidence()
+    others = [
+        run(run_id, conclusion=conclusion, workflow=E2E, name="E2E")
+        for run_id, conclusion in ((6, "cancelled"), (7, "skipped"), (8, "timed_out"))
+    ]
+    evidence = Evidence([*evidence.runs, *others], evidence.jobs)
+
+    assert failure_rate(e2e_finding(), evidence, "main") == Rate(2, 4, "main")
+
+
 def test_the_failure_rate_falls_back_to_all_branches() -> None:
     evidence = e2e_evidence()
     unfinished = run(6, conclusion=None, workflow=E2E, name="E2E")

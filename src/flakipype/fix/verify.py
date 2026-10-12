@@ -12,7 +12,7 @@ from flakipype.actions.watch import RunKind, WatchedRun
 from flakipype.fix.texts import Rate, VerificationFacts, verification_text
 from flakipype.flaky.model import FAILED_CONCLUSIONS, JobResult
 from flakipype.flaky.signature import signature_from_log
-from flakipype.github.actions import GitHubApiError
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.runs import CommitRun
 
 WAIT_FOR_RUN = timedelta(minutes=10)
@@ -45,6 +45,8 @@ class Verification:
     watched: tuple[int, ...] = ()
     results: tuple[str, ...] = ()
     outcome: str = ""
+    # Whether flakipype may dispatch the workflow when no push or pull_request run starts.
+    dispatchable: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "started": self.started.isoformat()}
@@ -91,13 +93,16 @@ class Verifier:
 
     def begin(self, verification: Verification, workflow_text: str) -> Verification:
         """Waits for the pull request's run, or dispatches when nothing else starts one."""
+        problem = dispatch_problem(workflow_text)
         if triggers(workflow_text) & _STARTED_BY_PUSH:
-            return verification
-        if dispatch_problem(workflow_text) is not None:
+            return replace(verification, dispatchable=problem is None)
+        if problem is not None:
             return self._finish(
-                verification,
-                "the workflow runs neither on push, pull_request nor workflow_dispatch",
+                verification, f"the workflow runs on neither push nor pull_request, and {problem}"
             )
+        return self._dispatch(verification)
+
+    def _dispatch(self, verification: Verification) -> Verification:
         dispatched = self._actions.dispatch_authorised(self._run(verification, run_id=None))
         if dispatched is None:
             return self._finish(verification, "the action budget of this session is used up")
@@ -118,13 +123,15 @@ class Verifier:
         if runs:
             watched = self._actions.watch(self._run(verification, run_id=runs[0].run_id))
             return replace(verification, stage=Stage.WATCHING, watched=(watched.number,))
-        if self._now() - verification.started > WAIT_FOR_RUN:
-            minutes = int(WAIT_FOR_RUN.total_seconds() // 60)
-            return self._finish(
-                verification,
-                f"no run of the workflow started on the fix branch in {minutes} minutes",
-            )
-        return verification
+        if self._now() - verification.started <= WAIT_FOR_RUN:
+            return verification
+        # Branch, type or path filters may keep push and pull_request from starting a run.
+        if verification.dispatchable:
+            return self._dispatch(verification)
+        minutes = int(WAIT_FOR_RUN.total_seconds() // 60)
+        return self._finish(
+            verification, f"no run of the workflow started on the fix branch in {minutes} minutes"
+        )
 
     def _follow(self, verification: Verification) -> Verification:
         run = self._actions.find(verification.watched[-1])
@@ -132,11 +139,15 @@ class Verifier:
             return verification
         if run.conclusion is None:
             return self._finish(verification, "a run did not finish while it was watched")
-        updated = replace(
-            verification, results=(*verification.results, self._result(verification, run))
-        )
+        result = self._result(verification, run)
+        updated = replace(verification, results=(*verification.results, result))
         if len(updated.results) >= updated.wanted:
             return self._finish(updated)
+        if result == _did_not_run(verification.job):
+            return self._finish(
+                updated,
+                f"a rerun replays the same event, so {verification.job} would not run either",
+            )
         return self._rerun(updated, run)
 
     def _rerun(self, verification: Verification, run: WatchedRun) -> Verification:
@@ -145,6 +156,8 @@ class Verifier:
         label = f"verify {len(verification.results) + 1}/{verification.wanted}"
         try:
             rerun = self._actions.rerun_authorised(run, label)
+        except ApiRateLimitError:
+            raise
         except GitHubApiError as error:
             return self._finish(verification, f"GitHub refused the rerun: {error}")
         if rerun is None:
@@ -152,11 +165,21 @@ class Verifier:
         return replace(verification, watched=(*verification.watched, rerun.number))
 
     def _result(self, verification: Verification, run: WatchedRun) -> str:
-        if run.conclusion == "success":
-            return "passed"
-        if run.conclusion not in FAILED_CONCLUSIONS or run.run_id is None:
+        if run.run_id is None or run.conclusion not in {"success", *FAILED_CONCLUSIONS}:
             return str(run.conclusion).replace("_", " ")
+        if run.conclusion == "success":
+            return self._classify_success(verification, run, run.run_id)
         return self._classify_failure(verification, run, run.run_id)
+
+    def _classify_success(self, verification: Verification, run: WatchedRun, run_id: int) -> str:
+        # An `if:` can skip the finding's job, on a draft pull request for example.
+        try:
+            jobs = self._github.logs.attempt_jobs(run.repository, run_id, run.attempt)
+        except GitHubApiError:
+            return f"passed, but whether {verification.job} ran could not be read"
+        if any(job.name == verification.job and job.conclusion == "success" for job in jobs):
+            return "passed"
+        return _did_not_run(verification.job)
 
     def _classify_failure(self, verification: Verification, run: WatchedRun, run_id: int) -> str:
         try:
@@ -195,6 +218,10 @@ class Verifier:
         except GitHubApiError as error:
             text += f"\n(The comment could not be posted on the pull request: {error})"
         return replace(verification, stage=Stage.DONE, outcome=text)
+
+
+def _did_not_run(job: str) -> str:
+    return f"passed, but {job} did not run"
 
 
 def _signature_result(fingerprints: tuple[str, ...], log: str | None) -> str:
