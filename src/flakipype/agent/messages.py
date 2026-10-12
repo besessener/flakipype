@@ -24,3 +24,16 @@ def cached_tools(definitions: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def cached_system(text: str) -> list[dict[str, Any]]:
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
+def cached_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The conversation with one cache breakpoint on the newest message's last block.
+
+    The stored history stays unmarked, so the breakpoint moves each turn instead of piling up;
+    the API allows four, and the system prompt and tools take two.
+    """
+    *earlier, newest = messages
+    content = newest["content"]
+    blocks = [{"type": "text", "text": content}] if isinstance(content, str) else list(content)
+    marked = [*blocks[:-1], {**blocks[-1], "cache_control": {"type": "ephemeral"}}]
+    return [*earlier, {**newest, "content": marked}]

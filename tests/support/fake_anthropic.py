@@ -68,7 +68,35 @@ class ScriptedModel:
     def tool_results(self, request_index: int) -> dict[str, dict[str, Any]]:
         """tool_result blocks of the last user message of one request, by tool_use_id."""
         last = self.requests[request_index]["messages"][-1]["content"]
-        return {block["tool_use_id"]: block for block in last if block.get("type") == "tool_result"}
+        return {
+            block["tool_use_id"]: {
+                key: value for key, value in block.items() if key != "cache_control"
+            }
+            for block in last
+            if block.get("type") == "tool_result"
+        }
+
+    def message_text(self, request_index: int, message_index: int) -> str:
+        """The text of one message of one request, whether sent as a string or as blocks."""
+        content = self.requests[request_index]["messages"][message_index]["content"]
+        if isinstance(content, str):
+            return content
+        return "".join(block.get("text", "") for block in content)
+
+    def breakpoints(self, request_index: int) -> list[str]:
+        """Where one request set cache breakpoints: "tools", "system" or "message <index>"."""
+        request = self.requests[request_index]
+        found = [
+            name
+            for name in ("tools", "system")
+            for block in request.get(name, [])
+            if "cache_control" in block
+        ]
+        for index, entry in enumerate(request["messages"]):
+            content = entry["content"]
+            blocks = [] if isinstance(content, str) else content
+            found += [f"message {index}" for block in blocks if "cache_control" in block]
+        return found
 
 
 def verdict_input(

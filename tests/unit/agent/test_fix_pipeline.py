@@ -77,10 +77,10 @@ def test_an_accepted_fix() -> None:
     fixer_tools = {tool["name"] for tool in model.requests[0]["tools"]}
     assert {"replace_in_file", "show_diff", "failure_excerpt", "submit_fix"} <= fixer_tools
     assert "compare_commits" in fixer_tools
-    review_text = model.requests[2]["messages"][0]["content"]
+    review_text = model.message_text(2, 0)
     assert "+  await page.x();" in review_text
     assert "Wait for the rows" in review_text
-    task = model.requests[0]["messages"][0]["content"]
+    task = model.message_text(0, 0)
     assert f"at commit {COMMIT[:12]} of main" in task
     assert "<verdict" in task
 
@@ -189,7 +189,7 @@ def test_a_fixer_that_gives_up_says_why() -> None:
     assert result.status is FixStatus.NO_FIX
     assert result.detail == "The fixer stopped without a fix: It is upstream."
     assert propose(silent).detail == "The fixer stopped."
-    assert model.requests[1]["messages"][-1]["content"].startswith("Continue and finish")
+    assert model.message_text(1, -1).startswith("Continue and finish")
 
 
 def test_limits_loops_and_model_errors_end_the_fix() -> None:
@@ -229,6 +229,29 @@ def test_an_earlier_proposal_and_the_users_wishes_are_the_starting_point() -> No
     result = propose(model, earlier=(earlier,), instructions="Keep the assertion.")
 
     assert result.changes == (earlier,)
-    task = model.requests[0]["messages"][0]["content"]
+    task = model.message_text(0, 0)
     assert "asked in the chat for these changes to it:\nKeep the assertion." in task
-    assert "sk-hidden-value" not in model.requests[1]["messages"][0]["content"]
+    assert "sk-hidden-value" not in model.message_text(1, 0)
+
+
+def test_the_fixers_cache_breakpoint_follows_the_newest_message() -> None:
+    model = ScriptedModel(
+        [
+            message(EDIT),
+            submit("toolu_2"),
+            submit("toolu_3"),
+            review("revise", points=["keep the assertion"]),
+            submit("toolu_4"),
+            review("accept"),
+        ]
+    )
+
+    result = propose(model, check=[["the test still waits"]])
+
+    assert result.accepted
+    fixer_requests = [0, 1, 2, 4]
+    for index in fixer_requests:
+        newest = len(model.requests[index]["messages"]) - 1
+        assert model.breakpoints(index) == ["tools", "system", f"message {newest}"]
+    assert "Rejected" in model.tool_results(2)["toolu_2"]["content"]
+    assert "keep the assertion" in model.tool_results(4)["toolu_3"]["content"]
