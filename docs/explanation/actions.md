@@ -14,7 +14,8 @@ shows them live while they run.
   run, dispatching a workflow (`workflow_dispatch`) on an existing branch or
   tag, and cancelling runs flakipype started. A live list shows them, an
   audit log records them, and a budget limits them.
-- **Out**: headless actions (`flakipype run --auto`, M6). Changing code,
+- **Out**: headless actions; unattended runs (M6) only rerun flakipype's
+  own fix branches, see [unattended runs](unattended.md). Changing code,
   branches or pull requests and `/mode auto` in the chat came with M5, see
   [fixes](fix.md); in `auto` mode these actions run without a dialog within
   the budget.

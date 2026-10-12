@@ -14,7 +14,8 @@ Merging stays your decision.
   confirmation for push, pull request and verification; a branch plus one
   signed commit through GitHub's API; a draft pull request; verification
   reruns with a result comment; `/mode ask|auto` in the chat.
-- **Out**: headless fixes (`flakipype run --auto`, M6); forks (a fix needs
+- **Out**: headless fixes (`flakipype run`, M6, see
+  [unattended runs](unattended.md)); forks (a fix needs
   push access to the repository); deleting files; updating a pull request
   after it was opened; merging, ever.
 

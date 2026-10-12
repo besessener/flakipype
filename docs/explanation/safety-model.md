@@ -19,9 +19,11 @@ configured away.
 
 Switch in the chat with `/mode ask|auto` (the chat always starts in `ask`,
 and `/new` and `/resume` switch back to it), or on the command line with
-`--mode` (M6; until then only
-`investigate`, which only reads, runs headless). Every flakipype pull
-request is a draft, in both modes.
+`flakipype run --mode auto|ask` (M6). Without a window nobody can confirm,
+so `ask` there is a dry run: every `write` and `critical` request is
+answered `report only` and nothing is pushed
+([unattended runs](unattended.md)). Every flakipype pull request is a draft,
+in both modes.
 
 In `auto` mode, a fix whose diff touches `.github/`, adds something that
 could hide a failure or reaches out to the network or secrets is not pushed:
@@ -79,7 +81,10 @@ keyring, or a `0600` file where no keyring exists; the GitHub token stays in
 Each run has hard, configurable limits with safe defaults: reruns and
 dispatches (10 per chat session, `actions.max_per_session`), runs watched at
 once, pull requests (3 per chat session, `fix.max_prs_per_session`),
-files and lines per fix, tokens and wall-clock time, plus loop detection. Reaching a limit
+files and lines per fix, tokens and wall-clock time, plus loop detection.
+Unattended runs (M6) also have daily limits across runs for pull requests,
+actions and tokens, so a short timer interval cannot multiply the per-run
+limits ([unattended runs](unattended.md#budgets)). Reaching a limit
 ends the run with a summary of what was done and what is left — never a
 half-finished state without explanation. No limit is unlimited by default.
 

@@ -30,5 +30,6 @@ Organised by [Diátaxis](https://diataxis.fr/).
 - [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts, budgets and the chat.
 - [Actions](explanation/actions.md) – reruns, dispatches, confirmation and the live run view.
 - [Fixes](explanation/fix.md) – fixer agent, diff checks, draft pull requests and verification.
+- [Unattended runs and release](explanation/unattended.md) – `flakipype run`, the systemd timer, the install script and smoke tests (M6 design).
 - [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
 - [Roadmap](explanation/roadmap.md) – scope and milestones.
