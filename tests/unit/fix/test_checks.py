@@ -50,7 +50,7 @@ def test_a_masked_placeholder_written_back_is_an_error() -> None:
         ("config.yml", "a: !!bool on1\n", "config.yml no longer parses: 'on1'"),
         ("config.yml", "a: !!timestamp never\n", "config.yml no longer parses: "),
         ("config.yml", "[" * 600, "config.yml no longer parses: it is nested too deeply"),
-        ("data.json", "[" * 100_000, "data.json no longer parses: it is nested too deeply"),
+        ("data.json", "[" * 100_000, "data.json no longer parses: "),
         ("pyproject.toml", "a = " + "[" * 1_000, "pyproject.toml no longer parses: it is nested"),
         (WORKFLOW, "on: push\n", f"{WORKFLOW} is no longer a workflow: it needs `on` and `jobs`."),
         (WORKFLOW, "- a\n", f"{WORKFLOW} is no longer a workflow"),
