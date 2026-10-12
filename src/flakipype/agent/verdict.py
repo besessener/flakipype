@@ -7,6 +7,8 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 _WHITESPACE = re.compile(r"\s+")
+# Tool results number their lines ("   12 text") or stamp them ("+01:05  text"); quotes may omit it.
+_LINE_GUTTER = re.compile(r"^(?: *\d+ |\+\d{2,}:\d{2}  )", re.MULTILINE)
 # The finding itself can be cited under this id.
 FINDING_REFERENCE = "finding"
 _MIN_QUOTE = 3
@@ -96,7 +98,9 @@ def citation_problems(verdict: Verdict, results: Mapping[str, str]) -> list[str]
             )
         elif len(quote) < _MIN_QUOTE:
             problems.append(f"the quote for {item.location} is too short to check")
-        elif quote not in _normalise(result):
+        elif quote not in _normalise(result) and quote not in _normalise(
+            _LINE_GUTTER.sub("", result)
+        ):
             problems.append(
                 f"the quote for {item.location} is not in the result of {item.tool_call_id}"
             )

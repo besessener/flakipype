@@ -51,7 +51,9 @@ parallel (default 3).
 
 **Citation check.** Deterministic code, not a model: each evidence item must
 point to a tool result of this investigation, and its quote must appear in
-that result (whitespace is normalised). A verdict with invented evidence or an
+that result (whitespace is normalised; a quote of several lines may leave out
+the line numbers or `+mm:ss` offsets the tools put in front of each line). A
+verdict with invented evidence or an
 invalid shape goes back to the investigator with the list of problems, at
 most twice; then the investigation ends without a verdict.
 
@@ -196,12 +198,17 @@ with a summary of what was done and what is missing:
 | Limit | Default |
 | --- | --- |
 | Tool rounds per investigation | 12 |
-| Tokens per investigation (input + output, incl. thinking) | 200,000 |
+| Tokens per investigation (input incl. cache, output incl. thinking) | 200,000 |
 | Wall-clock time per investigation | 5 minutes |
 | Reviewer round trips | 1 |
 | Parallel investigations | 3 |
 | Tokens per `investigate` run, and per investigation call in the chat | 1,000,000 |
 | Rounds, tokens and time of the chat model per question | as per investigation (12, 200,000, 5 minutes) |
+
+Token limits count every token a model call reports: fresh input, output
+(with thinking), cache writes and cache reads. Cache reads cost about a tenth
+of fresh input, but count in full, so a limit means the same number of tokens
+whether or not the cache was hit.
 
 Loop detection: the same tool with the same arguments twice in a row ends the
 investigation as `unclear`. Token usage is shown per investigation and in total
@@ -225,7 +232,11 @@ are kept.
   (with a token budget) and `off` exist for older models; newer ones, like
   the one flakipype was first run against, only accept `adaptive`.
 - Prompt caching for the system prompt and tool definitions, which are the
-  same for every investigation.
+  same for every investigation, and for the conversation of the investigator,
+  the fixer and the chat: each request moves one breakpoint to the last block
+  of the newest message, so the next request reads every earlier turn from the
+  cache instead of sending it again. That is three of the four breakpoints the
+  API allows; the stored history (and a saved chat session) carries none.
 
 ## Caching verdicts
 

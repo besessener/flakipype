@@ -63,8 +63,8 @@ def test_tool_calls_then_a_cited_verdict() -> None:
     assert first["thinking"] == {"type": "adaptive"}
     assert first["tools"][-1]["name"] == "submit_verdict"
     assert first["tools"][-1]["cache_control"] == {"type": "ephemeral"}
-    assert "super-secret-value" not in first["messages"][0]["content"]
-    assert "[masked: configured secret]" in first["messages"][0]["content"]
+    assert "super-secret-value" not in model.message_text(0, 0)
+    assert "[masked: configured secret]" in model.message_text(0, 0)
     assert second["messages"][1]["content"][0]["type"] == "thinking"
     assert QUOTE in model.tool_results(1)["toolu_1"]["content"]
     assert set(agent.results) == {"finding", "toolu_1", "r1"}
@@ -136,7 +136,7 @@ def test_a_model_that_stops_talking_is_nudged_once() -> None:
     outcome = investigator(model).start("finding")
 
     assert outcome.status is Status.NO_VERDICT
-    assert model.requests[1]["messages"][-1]["content"].startswith("Continue the investigation")
+    assert model.message_text(1, -1).startswith("Continue the investigation")
 
 
 def test_the_same_call_twice_in_a_row_stops_the_loop() -> None:
@@ -217,3 +217,23 @@ def test_thinking_can_be_switched_off() -> None:
     )
 
     assert "thinking" not in model.requests[0]
+
+
+def test_the_cache_breakpoint_follows_the_newest_message() -> None:
+    model = ScriptedModel(
+        [
+            message(EXCERPT),
+            message(submit("toolu_2", "an invented line")),
+            message(submit("toolu_3")),
+            message(submit("toolu_4")),
+        ]
+    )
+    agent = investigator(model)
+    agent.start("finding")
+
+    agent.revise(["Which commit changed the test?"])
+
+    for index, request in enumerate(model.requests):
+        newest = len(request["messages"]) - 1
+        assert model.breakpoints(index) == ["tools", "system", f"message {newest}"]
+    assert "Which commit" in model.tool_results(3)["toolu_3"]["content"]

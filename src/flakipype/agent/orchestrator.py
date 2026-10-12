@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Limits, RunBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
-from flakipype.agent.messages import cached_system, cached_tools, content_blocks
+from flakipype.agent.messages import cached_messages, cached_system, cached_tools, content_blocks
 from flakipype.agent.prompts import CHAT_SYSTEM, data_block
 from flakipype.agent.tools import (
     PolicyGate,
@@ -215,7 +215,7 @@ class ChatAgent:
             "max_tokens": self._settings.model.max_tokens,
             "system": cached_system(CHAT_SYSTEM),
             "tools": cached_tools(definitions),
-            "messages": self._messages,
+            "messages": cached_messages(self._messages),
             **self._settings.model.thinking_parameter(),
         }
         response: Message = self._client.messages.create(**request)

@@ -70,11 +70,13 @@ def fix_task(request: FixRequest) -> str:
         data_block("verdict", request.verdict.model_dump_json(indent=2)),
         f"The working copy is {where}.",
     ]
-    if request.instructions:
+    if request.instructions and request.earlier:
         parts.append(
             "The working copy already holds an earlier proposal. The user asked in the chat for "
             f"these changes to it:\n{request.instructions}"
         )
+    elif request.instructions:
+        parts.append(f"The user asked in the chat for this fix:\n{request.instructions}")
     parts.append("Fix the cause and submit with submit_fix.")
     return "\n\n".join(parts)
 

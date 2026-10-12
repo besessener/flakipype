@@ -13,7 +13,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
-from flakipype.agent.messages import cached_system, cached_tools, content_blocks, tool_result
+from flakipype.agent.messages import (
+    cached_messages,
+    cached_system,
+    cached_tools,
+    content_blocks,
+    tool_result,
+)
 from flakipype.agent.prompts import FIXER_SYSTEM
 from flakipype.agent.tools import Mode, PolicyGate, Tool, ToolError, deny_all
 
@@ -156,7 +162,7 @@ class Fixer:
             "max_tokens": self._settings.max_tokens,
             "system": cached_system(FIXER_SYSTEM),
             "tools": cached_tools(definitions),
-            "messages": self._messages,
+            "messages": cached_messages(self._messages),
             **self._settings.thinking_parameter(),
         }
         response: Message = self._client.messages.create(**request)

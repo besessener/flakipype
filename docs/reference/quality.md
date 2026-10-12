@@ -57,6 +57,12 @@ Tests never reach real GitHub or a real model.
 - **Real data**: before a scan change is merged, `flakipype scan` runs once
   against a real account in WSL or Linux. It only reads; never print or pass
   tokens on a command line while doing so.
+- **End to end**: investigations, fixes, draft pull requests, verification
+  and the timer are tried against the sandbox
+  [besessener/flakipype-test](https://github.com/besessener/flakipype-test),
+  never against real projects. Each of its workflows is flaky or broken in a
+  known way, and its README lists the expected verdict per case, which is the
+  checklist for evaluations against a real model.
 
 Evaluations against a real model live in `tests/eval`, are not part of
 `poe check` or CI, and run only when asked.

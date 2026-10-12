@@ -126,7 +126,7 @@ def test_tools_run_and_the_answer_is_kept_in_the_history() -> None:
     first = model.requests[0]
     assert first["system"][0]["text"] == CHAT_SYSTEM
     assert first["tools"][-1]["cache_control"] == {"type": "ephemeral"}
-    assert SECRET not in first["messages"][0]["content"]
+    assert SECRET not in model.message_text(0, 0)
     scanned = model.tool_results(1)["t1"]["content"]
     assert "Scanned." in scanned
     assert SECRET not in scanned
@@ -313,3 +313,18 @@ def test_commands_pass_the_same_gate() -> None:
     with pytest.raises(ToolDeclinedError):
         agent.run_tool("cancel", {"run": 1})
     assert workspace.calls == [("watched_runs",), ("declined", "cancel", 1)]
+
+
+def test_the_cache_breakpoint_moves_and_stays_out_of_the_history() -> None:
+    model = ScriptedModel(
+        [message(call("t1", "list_findings", {})), message(text("One.")), message(text("Ok."))]
+    )
+    agent = chat_agent(model, FakeWorkspace())
+
+    agent.ask("What failed?")
+    agent.ask("And now?")
+
+    assert model.breakpoints(0) == ["tools", "system", "message 0"]
+    assert model.breakpoints(1) == ["tools", "system", "message 2"]
+    assert model.breakpoints(2) == ["tools", "system", "message 4"]
+    assert "cache_control" not in str(agent.history)

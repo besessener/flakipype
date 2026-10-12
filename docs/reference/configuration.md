@@ -74,7 +74,7 @@ store = "auto"
 | `scan.max_log_downloads` | `50` | 0–1000; hard limit of job logs read per scan. Read logs are cached, so later scans continue |
 | `scan.min_flaky_runs` | `2` | 1–100; runs with proven flaky events before a job counts as flaky (and before an error counts as recurring). With `1` every single event counts |
 | `agent.max_rounds` | `12` | 1–50 model calls per investigation |
-| `agent.max_tokens_per_investigation` | `200000` | 10k–2M tokens (input, output, cache, thinking) per investigation |
+| `agent.max_tokens_per_investigation` | `200000` | 10k–2M tokens (input, output, cache writes and reads at full weight, thinking) per investigation |
 | `agent.max_seconds_per_investigation` | `300` | 30–3600 |
 | `agent.max_tokens_per_run` | `1000000` | 10k–20M for all investigations of one `investigate` run; reaching it stops starting new ones |
 | `agent.parallel` | `3` | 1–8 investigations at once (GitHub calls still go one at a time) |
