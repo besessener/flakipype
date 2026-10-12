@@ -128,19 +128,23 @@ class RunWatch:
     def poll(self) -> list[str]:
         """Read every unfinished run once; returns a note for each run that finished."""
         notes: list[str] = []
-        for index, run in enumerate(self.runs):
+        # /new and /resume replace the list while a poll waits on gh; never write into the new one.
+        runs = self.runs
+        for index, run in enumerate(runs):
             if run.done:
                 continue
             try:
                 updated = self._poll(run)
             except ApiRateLimitError:
-                self._wait_for_rate_limit()
+                self._wait_for_rate_limit(runs)
                 return notes
             except GitHubApiError as error:
                 updated = replace(run, detail=f"cannot read it: {error}")
-            self.runs[index] = updated
+            if self.runs is not runs:
+                return []
+            runs[index] = updated
             if updated.done:
-                notes.extend(self._notes(updated))
+                notes.extend(self._notes(updated, runs))
         return notes
 
     def _poll(self, run: WatchedRun) -> WatchedRun:
@@ -167,16 +171,16 @@ class RunWatch:
         )
         return next((run_id for run_id in found if run_id not in taken), None)
 
-    def _wait_for_rate_limit(self) -> None:
-        for index, run in enumerate(self.runs):
+    def _wait_for_rate_limit(self, runs: list[WatchedRun]) -> None:
+        for index, run in enumerate(runs):
             if not run.done:
-                self.runs[index] = replace(run, detail="waiting for GitHub's rate limit")
+                runs[index] = replace(run, detail="waiting for GitHub's rate limit")
 
-    def _notes(self, run: WatchedRun) -> list[str]:
+    def _notes(self, run: WatchedRun, runs: list[WatchedRun]) -> list[str]:
         notes = [finish_note(run, self._watch_time)]
         if run.group is None:
             return notes
-        group = [other for other in self.runs if other.group == run.group]
+        group = [other for other in runs if other.group == run.group]
         if len(group) > 1 and all(other.done for other in group):
             notes.append(group_note(group))
         return notes

@@ -250,3 +250,5 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
         target = FixTarget(e2e_finding(), e2e_evidence(), verdict(), "accepted: ok")
         with pytest.raises(ToolError, match="Pull request budget used up: 2 of 2"):
             fixes.prepare(target)
+        chat.close()
+        assert chat.handle("Hi")[1].text.startswith("Stopped at the request to stop.")

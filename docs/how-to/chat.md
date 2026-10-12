@@ -41,27 +41,37 @@ starts until you press Enter, because investigations cost tokens.
 | `/cancel R` | Cancel run R (`R1`, `R2`, …) started in this session |
 | `/actions` | The actions (reruns, dispatches, cancels, fixes) requested in this session |
 | `/mode ask\|auto` | Confirm every action (`ask`, the default), or let them run within the budgets (`auto`); `/mode` shows the mode |
-| `/budget` | Tokens used in this session |
+| `/budget` | Tokens used in this session: the chat, its investigations and its fixes |
 | `/sessions` | The ten most recent sessions; those of [unattended runs](run-on-a-schedule.md) end with `· run` |
-| `/resume N` | Continue session N; the next action scans again. A run's session opens as a new chat session with its scan, verdicts and fixes not pushed; its pull requests stay with the timer |
-| `/new` | Start a new session |
+| `/resume N` | Continue session N; the next action scans again, with the session's window and repositories on the configured owner and host. A run's session opens as a new chat session with its scan, verdicts and fixes not pushed; its pull requests stay with the timer |
+| `/new` | Start a new session: the configured scan, no findings, a new token count |
 | `/help` | The list of commands |
-| `/quit`, `/exit`, Ctrl+Q | Leave |
+| `/quit`, `/exit`, Ctrl+Q | Leave; work still running stops at its next model call |
 
 ## Sessions
 
 Every message is saved: the conversation, the model's history, the scan
 options, the findings list, the started runs, the action budget, fixes
 that were shown but not pushed, and opened pull requests with their
-verification. The mode is not saved. Sessions live in the cache database next to
-the scan cache (see [configuration](../reference/configuration.md)).
+verification. The mode is not saved, and neither is a question still being
+answered: a session closed in the middle of one resumes before it. Sessions
+live in the cache database next to the scan cache (see
+[configuration](../reference/configuration.md)).
+
+A session saved for another owner or host resumes on the configured ones and
+says so. A session saved by an older flakipype version, or under another
+model, resumes without the model's earlier reasoning; the conversation itself
+stays.
 
 ## Limits
 
 Each question to the chat model has the per-investigation limits (12 rounds,
 200,000 tokens, 5 minutes of model time); every investigation it starts has
-its own. When a limit is reached, the chat says so and you can ask again.
-Limits are in the `[agent]` section of the configuration. How it works:
+its own. A question's token limit counts only what the question adds to the
+conversation, not the earlier history that each request sends again, so long
+and resumed sessions keep answering. When a limit is reached, the chat says
+so: ask in smaller steps, start over with `/new`, or raise the limits in the
+`[agent]` section of the configuration. How it works:
 [the agent](../explanation/agent.md).
 
 ## Reruns and dispatches

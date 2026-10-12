@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget
+from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.investigator import ModelSettings, Status
 from flakipype.agent.masking import Masker
 from flakipype.agent.pipeline import AgentConfig, FindingResult, investigate_finding
@@ -31,7 +31,9 @@ def review(decision: str, **extra: object) -> dict[str, object]:
     return message(call("toolu_r", "submit_review", review_input(decision, **extra)))
 
 
-def investigate(model: ScriptedModel, limits: Limits | None = None) -> FindingResult:
+def investigate(
+    model: ScriptedModel, limits: Limits | None = None, stop: Stop | None = None
+) -> FindingResult:
     config = AgentConfig(
         client=model.client(),
         settings=ModelSettings(model="m-1"),
@@ -40,6 +42,7 @@ def investigate(model: ScriptedModel, limits: Limits | None = None) -> FindingRe
         logs=FakeLogs(),
         contents=FakeContents(),
         clock=lambda: 0.0,
+        stop=stop or Stop(),
     )
     return investigate_finding(config, finding(), evidence=evidence(), run_budget=RunBudget(10**7))
 
@@ -139,6 +142,17 @@ def test_unavailable_reviews_leave_the_verdict_unreviewed() -> None:
     assert second.verdict is not None
 
 
+def test_a_requested_stop_ends_the_investigation_before_the_model_is_asked() -> None:
+    model = ScriptedModel([])
+    stop = Stop()
+    stop.request()
+
+    result = investigate(model, stop=stop)
+
+    assert (result.status, result.detail) == (Status.BUDGET, "Stopped at the request to stop.")
+    assert model.requests == []
+
+
 def test_failed_investigation_is_not_reviewed() -> None:
     result = investigate(ScriptedModel([message(text("no idea")), message(text("still none"))]))
 
@@ -165,7 +179,10 @@ def test_a_reviewer_answering_in_prose_is_nudged_once() -> None:
     [
         [message(text("Looks fine to me.")), message(text("Really fine."))],
         [message(call("toolu_r", "submit_review", {"decision": "approve"}))],
+        [{**message(), "stop_reason": "refusal"}],
+        [message()],
     ],
+    ids=["prose", "invalid", "refusal", "empty"],
 )
 def test_unusable_reviews_raise(answers: list[dict[str, Any] | int]) -> None:
     model = ScriptedModel(answers)

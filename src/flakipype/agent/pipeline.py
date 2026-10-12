@@ -1,11 +1,11 @@
 """Investigate one finding: investigator, citation check, reviewer, at most one revision."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from anthropic import Anthropic
 
-from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget
+from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.finding_tools import ContentsSource, FindingTools, LogSource
 from flakipype.agent.investigator import Investigator, ModelSettings, Outcome, Status
 from flakipype.agent.masking import Masker
@@ -34,6 +34,7 @@ class AgentConfig:
     contents: ContentsSource
     clock: Callable[[], float]
     excerpt_lines: int = 120
+    stop: Stop = field(default_factory=Stop)
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,7 @@ def describe_review(review: Review, *, revised: bool) -> str:
 def investigate_finding(
     config: AgentConfig, finding: Finding, *, evidence: Evidence, run_budget: RunBudget
 ) -> FindingResult:
-    budget = InvestigationBudget(config.limits, run_budget, config.clock)
+    budget = InvestigationBudget(config.limits, run_budget, config.clock, stop=config.stop)
     tools = FindingTools(finding, evidence, config.logs, config.contents, config.excerpt_lines)
     investigator = Investigator(
         client=config.client,

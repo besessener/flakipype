@@ -205,12 +205,18 @@ with a summary of what was done and what is missing:
 | Reviewer round trips | 1 |
 | Parallel investigations | 3 |
 | Tokens per `investigate` run, and per investigation call in the chat | 1,000,000 |
-| Rounds, tokens and time of the chat model per question | as per investigation (12, 200,000, 5 minutes) |
+| Rounds, tokens and time of the chat model per question | as per investigation (12, 200,000, 5 minutes); tokens count only what the question adds |
 
 Token limits count every token a model call reports: fresh input, output
 (with thinking), cache writes and cache reads. Cache reads cost about a tenth
 of fresh input, but count in full, so a limit means the same number of tokens
 whether or not the cache was hit.
+
+A chat question is the exception. Every request sends the whole conversation
+again, so counting it each round would stop every question of a long session.
+Its limits count each round's output plus how much the prompt grew since the
+question's first request; the session's total in `/budget` still counts every
+token billed.
 
 Loop detection: the same tool with the same arguments twice in a row ends the
 investigation as `unclear`. Token usage is shown per investigation and in total
@@ -220,7 +226,12 @@ In the chat, time spent inside a tool (a scan, investigations) does not count
 against the question's time limit, because those have their own limits. When
 a limit or a model error ends a question, the chat says so and the unfinished
 question is dropped from the model's conversation; verdicts found on the way
-are kept.
+are kept. The same happens when the model declines or answers with nothing
+(an empty answer in the conversation would make every later request fail),
+and when a tool fails unexpectedly. A GitHub error inside a tool goes back to
+the model as an error result, marked as data, so it can say what failed.
+Closing the window stops the question and the investigations and fixes it
+started at their next model call.
 
 ## Model use
 
@@ -239,6 +250,16 @@ are kept.
   of the newest message, so the next request reads every earlier turn from the
   cache instead of sending it again. That is three of the four breakpoints the
   API allows; the stored history (and a saved chat session) carries none.
+- Context editing in the chat: the API clears old tool results once the
+  prompt is large (`clear_tool_uses`, a beta on api.anthropic.com and Azure AI
+  Foundry). flakipype keeps the full history itself, because thinking blocks
+  are bound to the conversation that produced them: changing or deleting an
+  earlier turn would make the API reject them.
+- A saved chat session stores a fingerprint of the system prompt, the tools
+  and the model. When it differs on resume, after an upgrade or a model
+  change, every thinking block is removed from the restored history, which
+  the API allows; the conversation stays, the model's earlier reasoning does
+  not.
 
 ## Caching verdicts
 

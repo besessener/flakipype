@@ -140,6 +140,28 @@ async def test_blank_lines_are_ignored_and_quit_leaves(cache: ScanCache) -> None
     assert app.return_code == 0
 
 
+async def test_closing_the_window_stops_work_still_running(cache: ScanCache) -> None:
+    model = ScriptedModel([message(text("Hello."))])
+    app, chat = app_for(cache, model)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("ctrl+q")
+    (_, answer) = chat.handle("Investigate everything")
+
+    assert answer.text.startswith("Stopped at the request to stop.")
+    assert model.requests == []
+
+
+async def test_progress_from_a_worker_after_closing_is_ignored(cache: ScanCache) -> None:
+    app, chat = app_for(cache)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await send(pilot, "/help")
+        await pilot.press("ctrl+q")
+
+    chat.workspace.on_activity("Investigating #1 test")
+
+
 def test_chat_snapshot(cache: ScanCache, snap_compare: Callable[..., bool]) -> None:
     app, _ = app_for(cache)
 

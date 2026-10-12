@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from flakipype.actions.watch import RunKind, RunWatch, WatchedRun, finish_note
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
-from flakipype.github.runs import JobState
+from flakipype.github.runs import JobState, RunState
 
 from support.builders import START
 from support.fake_runs import APP, E2E, FakeRuns, state
@@ -156,3 +156,37 @@ def test_watched_runs_survive_a_round_trip() -> None:
 
     assert WatchedRun.from_dict(run.to_dict()) == run
     assert watch(FakeRuns()).find(1) is None
+
+
+class StartOverDuringPoll(FakeRuns):
+    """Replaces the watched runs while a poll waits on gh, as /new and /resume do."""
+
+    replacement: list[WatchedRun] | None = None
+    watcher: RunWatch | None = None
+
+    def run_state(self, repository: str, run_id: int) -> RunState:
+        answer = super().run_state(repository, run_id)
+        if self.watcher is not None and self.replacement is not None:
+            self.watcher.runs = self.replacement
+        return answer
+
+
+def test_a_poll_never_writes_into_runs_replaced_meanwhile() -> None:
+    runs = StartOverDuringPoll(states={4: [state(4, conclusion="success", attempt=2)]})
+    watcher = watch(runs)
+    watcher.add(rerun(4))
+    resumed = [replace(rerun(6), number=1)]
+    runs.watcher, runs.replacement = watcher, resumed
+
+    assert watcher.poll() == []
+    assert watcher.runs == resumed
+
+
+def test_a_poll_after_start_over_with_no_runs_does_not_fail() -> None:
+    runs = StartOverDuringPoll(states={4: [state(4, conclusion="success", attempt=2)]})
+    watcher = watch(runs)
+    watcher.add(rerun(4))
+    runs.watcher, runs.replacement = watcher, []
+
+    assert watcher.poll() == []
+    assert watcher.runs == []

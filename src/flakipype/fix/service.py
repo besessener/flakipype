@@ -144,7 +144,9 @@ class FixService:
     def poll(self) -> list[str]:
         """Moves every unfinished verification one step; a note for each one that finished."""
         notes: list[str] = []
-        for index, pull in enumerate(self.pulls):
+        # /new and /resume replace the list while a poll waits on gh; never write into the new one.
+        pulls = self.pulls
+        for index, pull in enumerate(pulls):
             if pull.verification.stage is Stage.DONE:
                 continue
             try:
@@ -153,7 +155,9 @@ class FixService:
                 return notes
             except GitHubApiError:
                 continue
-            self.pulls[index] = replace(pull, verification=verification)
+            if self.pulls is not pulls:
+                return []
+            pulls[index] = replace(pull, verification=verification)
             if verification.stage is Stage.DONE:
                 notes.append(f"Pull request #{verification.pull_number}: {verification.outcome}")
         return notes

@@ -73,6 +73,7 @@ class ChatApp(App[None]):
         self._service = service
         self.sub_title = subtitle
         self._polling = False
+        self._closed = False
         self._answers: queue.SimpleQueue[bool] = queue.SimpleQueue()
 
     def compose(self) -> ComposeResult:
@@ -132,7 +133,9 @@ class ChatApp(App[None]):
         return self._answers.get()
 
     def on_unmount(self) -> None:
-        # A worker waiting for an answer would keep the process from ending.
+        # A worker still running would keep the process from ending.
+        self._closed = True
+        self._service.close()
         self._answers.put(item=False)
 
     @on(Input.Submitted, "#prompt")
@@ -167,6 +170,8 @@ class ChatApp(App[None]):
         self.call_from_thread(self._show_entries, entries)
 
     def _activity_from_worker(self, text: str) -> None:
+        if self._closed:
+            return
         self.call_from_thread(self._show_activity, text or "Thinking…")
 
     def _show_activity(self, text: str) -> None:

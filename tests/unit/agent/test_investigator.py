@@ -139,6 +139,16 @@ def test_a_model_that_stops_talking_is_nudged_once() -> None:
     assert model.message_text(1, -1).startswith("Continue the investigation")
 
 
+def test_a_refusal_ends_without_a_verdict_and_is_not_nudged() -> None:
+    model = ScriptedModel([{**message(), "stop_reason": "refusal"}])
+
+    outcome = investigator(model).start("finding")
+
+    assert outcome.status is Status.NO_VERDICT
+    assert outcome.detail == "The model declined to answer or gave an empty answer."
+    assert len(model.requests) == 1
+
+
 def test_the_same_call_twice_in_a_row_stops_the_loop() -> None:
     model = ScriptedModel(
         [message(EXCERPT), message(call("toolu_2", "failure_excerpt", {"job_id": 11}))]

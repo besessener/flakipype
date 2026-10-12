@@ -3,7 +3,13 @@ from dataclasses import dataclass
 import pytest
 from pydantic import BaseModel
 
-from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Limits, RunBudget
+from flakipype.agent.budget import (
+    BudgetExceededError,
+    InvestigationBudget,
+    Limits,
+    RunBudget,
+    Stop,
+)
 from flakipype.agent.prompts import data_block
 from flakipype.agent.tools import (
     ActionRequest,
@@ -199,6 +205,17 @@ def test_budget_limits(
     clock.now = seconds
 
     with pytest.raises(BudgetExceededError, match=reason):
+        budget.check()
+
+
+def test_a_requested_stop_ends_the_budget_like_a_limit() -> None:
+    stop = Stop()
+    budget = InvestigationBudget(Limits(), RunBudget(10_000), Clock(), stop=stop)
+    budget.check()
+
+    stop.request()
+
+    with pytest.raises(BudgetExceededError, match="the request to stop"):
         budget.check()
 
 
