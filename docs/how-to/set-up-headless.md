@@ -34,8 +34,14 @@ printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive \
 - The key is read from standard input so it never appears in the process
   list or shell history. Without `--api-key-stdin` the stored key is kept.
 - On machines without a system keyring the key goes to
-  `~/.config/flakipype/secrets.json` with mode `0600`.
+  `~/.config/flakipype/secrets.json` with mode `0600`. Add
+  `--secret-store file` to keep it there even where a keyring exists, e.g.
+  for a [timer](run-on-a-schedule.md) that runs without a desktop session.
 - If no suitable `gh` is found, setup downloads and verifies it.
 
 Setup finishes with the same checks as `flakipype doctor` and exits with code
-1 if one fails, or 2 if the input was invalid.
+1 if one fails, or 2 if the input was invalid or the keyring cannot be read.
+
+## 3. Run it unattended
+
+[Run flakipype on a schedule](run-on-a-schedule.md) with a systemd user timer.

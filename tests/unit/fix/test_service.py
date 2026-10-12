@@ -5,7 +5,7 @@ import pytest
 from flakipype.agent.tools import Answer, ToolError
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings
-from flakipype.fix.service import FixTarget
+from flakipype.fix.service import FixDeliveryError, FixNotMadeError, FixTarget
 from flakipype.fix.texts import finding_marker
 from flakipype.fix.verify import Stage
 from flakipype.flaky.findings import Finding
@@ -296,3 +296,61 @@ def test_the_session_state_survives_a_resume(cache: ScanCache) -> None:
     assert len(resumed.fixer.requests) == 0
     resumed.fixes.reset()
     assert resumed.fixes.state() == {"opened": 0, "proposals": [], "pulls": []}
+
+
+def test_a_copy_takes_only_the_fixes_not_pushed(cache: ScanCache) -> None:
+    world = FixWorld(cache)
+    opened_fix(world)
+    world.fixes.prepare(target(e2e_finding(number=3, repository="octo-org/app")))
+
+    copy = FixWorld(cache)
+    copy.fixes.restore_proposals(world.fixes.state())
+
+    assert (copy.fixes.opened, copy.fixes.pulls) == (0, [])
+    assert copy.fixes.state()["proposals"] == world.fixes.state()["proposals"]
+    assert copy.fixes.kept(e2e_finding()).title == TITLE
+    with pytest.raises(KeyError):
+        FixWorld(cache).fixes.kept(e2e_finding())
+
+
+def test_adopted_pull_requests_are_verified_without_counting(cache: ScanCache) -> None:
+    world = FixWorld(cache)
+    opened_fix(world)
+
+    later = FixWorld(cache)
+    later.fixes.adopt(list(world.fixes.pulls))
+
+    assert later.fixes.pulls == world.fixes.pulls
+    assert later.fixes.opened == 0
+
+
+def test_a_pull_request_opened_meanwhile_stops_the_push(cache: ScanCache) -> None:
+    world = FixWorld(cache)
+    prepared = world.fixes.prepare(target())
+    world.github.open = [
+        PullRequest(
+            9, "https://github.com/octo-org/app/pull/9", "flakipype/fix-e2e-2",
+            finding_marker(e2e_finding()),
+        )
+    ]  # fmt: skip
+
+    with pytest.raises(ToolError, match="An open flakipype pull request for #2 exists"):
+        prepared.run(Answer.AUTO)
+
+    assert world.github.drafts == []
+    (entry,) = cache.audit.entries(world.actions.session)
+    assert entry.outcome.startswith("not pushed: An open flakipype pull request")
+
+
+def test_fixes_that_were_not_made_and_failed_deliveries_have_their_own_errors(
+    cache: ScanCache,
+) -> None:
+    rejected = FixWorld(cache, fixer=FakeFixer([fixed(accepted=False, review="rejected: no")]))
+    failing = FixWorld(cache)
+    failing.github.errors["open_draft"] = SERVER_ERROR
+    prepared = failing.fixes.prepare(target())
+
+    with pytest.raises(FixNotMadeError):
+        rejected.fixes.prepare(target())
+    with pytest.raises(FixDeliveryError, match="opening the pull request failed"):
+        prepared.run(Answer.AUTO)

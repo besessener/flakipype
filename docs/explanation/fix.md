@@ -14,7 +14,7 @@ Merging stays your decision.
   confirmation for push, pull request and verification; a branch plus one
   signed commit through GitHub's API; a draft pull request; verification
   reruns with a result comment; `/mode ask|auto` in the chat.
-- **Out**: headless fixes (`flakipype run`, M6, see
+- **Out**: headless fixes, which came with `flakipype run` in M6 (see
   [unattended runs](unattended.md)); forks (a fix needs
   push access to the repository); deleting files; updating a pull request
   after it was opened; merging, ever.
@@ -154,7 +154,10 @@ decline in the same turn, and an audit log entry for every request.
 
 ## Delivery
 
-All through `gh api`, against the configured owner and host only:
+All through `gh api`, against the configured owner and host only. Right
+before the branch, flakipype looks for an open flakipype pull request for the
+finding once more, since the chat or a run may have opened one while the
+fixer worked; if there is one, nothing is pushed and the message links it.
 
 1. **Branch.** `POST /repos/{o}/{r}/git/refs` creates
    `refs/heads/flakipype/fix-<workflow>-<hash>` at the pinned commit (the
@@ -239,7 +242,8 @@ at least once per run on the default branch in the scan, or on all branches
 when the scan has no runs on the default branch. The chance shown is
 `(1 − rate)^runs`, only when every run passed. Verification is polled while
 the chat is open, and its note appears in the chat; a resumed session
-continues it.
+continues it. A pull request an [unattended run](unattended.md) opened is
+polled by that run and, if it is not done in time, by the next one.
 
 ## Modes
 

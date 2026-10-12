@@ -54,7 +54,17 @@ MIGRATIONS = (
     );
     CREATE INDEX action_log_by_session ON action_log (session);
     """,
+    """
+    ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat';
+    CREATE INDEX action_log_by_time ON action_log (time);
+    CREATE TABLE fix_attempts (
+        host TEXT NOT NULL, identity TEXT NOT NULL, last_seen TEXT NOT NULL,
+        outcome TEXT NOT NULL, PRIMARY KEY (host, identity)
+    );
+    """,
 )
+# The chat and a run may write at the same time; a writer waits this long for the other.
+_BUSY_SECONDS = 30
 
 
 class LogState(StrEnum):
@@ -89,7 +99,9 @@ class ScanCache:
     @classmethod
     def open(cls, path: Path) -> "ScanCache":
         path.parent.mkdir(parents=True, exist_ok=True)
-        return cls(sqlite3.connect(path, check_same_thread=False))
+        connection = sqlite3.connect(path, timeout=_BUSY_SECONDS, check_same_thread=False)
+        connection.execute("PRAGMA journal_mode = WAL")
+        return cls(connection)
 
     @classmethod
     def in_memory(cls) -> "ScanCache":
@@ -192,6 +204,21 @@ class ScanCache:
             self._db.execute(
                 "INSERT OR REPLACE INTO verdicts VALUES (?, ?, ?, ?)",
                 (host, identity, last_seen, result),
+            )
+
+    def unpushed_fix(self, host: str, identity: str, last_seen: str) -> str | None:
+        """Why a run did not push a fix for the finding, if it had no newer failure since."""
+        row = self._db.execute(
+            "SELECT outcome FROM fix_attempts WHERE host = ? AND identity = ? AND last_seen = ?",
+            (host, identity, last_seen),
+        ).fetchone()
+        return str(row[0]) if row else None
+
+    def save_unpushed_fix(self, host: str, identity: str, *, last_seen: str, outcome: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO fix_attempts VALUES (?, ?, ?, ?)",
+                (host, identity, last_seen, outcome),
             )
 
 

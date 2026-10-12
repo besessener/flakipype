@@ -58,12 +58,20 @@ class ChatWorkspace:
     def findings(self) -> str:
         return findings_text(self._report().findings)
 
+    def scan_report(self) -> ScanReport:
+        """The current scan; scans first if there is none."""
+        return self._report()
+
     def finding_list(self) -> list[Finding]:
         return self.report.findings if self.report else []
 
-    def investigate(self, numbers: tuple[int, ...], *, fresh: bool) -> str:
+    def investigate(
+        self, numbers: tuple[int, ...], *, fresh: bool, max_tokens: int | None = None
+    ) -> str:
         report = self._report()
-        request = InvestigationRequest(self.request, Selection(numbers=numbers), fresh=fresh)
+        request = InvestigationRequest(
+            self.request, Selection(numbers=numbers), fresh=fresh, max_tokens=max_tokens
+        )
         outcome = self._service.investigate(report, request, self._investigation_progress)
         self.on_activity("")
         self.tokens += outcome.tokens

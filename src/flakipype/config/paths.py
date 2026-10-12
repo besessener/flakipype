@@ -26,6 +26,15 @@ class AppPaths:
     def cache_file(self) -> Path:
         return self.data_dir / "cache.sqlite3"
 
+    @property
+    def run_lock_file(self) -> Path:
+        return self.data_dir / "run.lock"
+
+    @property
+    def systemd_unit_dir(self) -> Path:
+        # $XDG_CONFIG_HOME/systemd/user, where systemd looks for a user's own units.
+        return self.config_dir.parent / "systemd" / "user"
+
 
 def _xdg_base(environment: Mapping[str, str], variable: str, fallback: Path) -> Path:
     # The XDG spec says relative values are invalid and must be ignored.

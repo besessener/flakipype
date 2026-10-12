@@ -1,6 +1,6 @@
 # Unattended runs and release
 
-> Status: design for M6.
+> Status: implemented in M6. Setup: [run on a schedule](../how-to/run-on-a-schedule.md).
 
 The chat needs you at the keyboard. M6 lets flakipype work on a schedule:
 `flakipype run` scans, investigates and opens draft pull requests for
@@ -33,8 +33,8 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
 
 1. **Lock.** A second `flakipype run` while one is running exits with code 3
    at once (below).
-2. **Continue.** Unfinished verifications of earlier runs are polled again
-   ([verifications](#verifications-across-runs)).
+2. **Continue.** The pull requests the last run left unverified are taken
+   over ([verifications](#verifications-across-runs)).
 3. **Scan** the configured owner, as `flakipype scan` does.
 4. **Investigate** the flaky and recurring findings, as `flakipype
    investigate` does: cached verdicts are reused until a finding has a newer
@@ -42,12 +42,12 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
 5. **Fix** findings with a reviewed verdict classified `flaky_test`,
    `flaky_infrastructure` or `configuration`, highest ranked first, through
    the same `fix` tool and policy gate as the chat ([fixes](fix.md)).
-   Skipped: findings with an open flakipype pull request, and findings whose
-   fix an earlier run did not push (warnings, rejected by the reviewer,
-   failed checks), until they have a newer failure, so a run does not pay
-   for the same rejected fix every day.
-6. **Poll** started verifications every 10 seconds until all are done or
-   `run.max_minutes` is reached.
+   Skipped: findings with an open flakipype pull request or without push
+   access, and findings whose fix an earlier `auto` run did not push
+   (warnings, no fix, rejected by the reviewer), until they have a newer
+   failure, so a run does not pay for the same rejected fix every day.
+6. **Poll** (`auto` only) started verifications every 10 seconds until all
+   are done or `run.max_minutes` is reached.
 7. **Summary** on standard output, which systemd sends to the journal.
 
 Options: `--mode auto|ask` (default `auto`), `--json`, and `--owner`,
@@ -60,29 +60,34 @@ on a terminal.
 | --- | --- | --- |
 | Scan, investigate, fixer and reviewer | run | run |
 | Push and draft pull request (`critical`) | run within the budgets, if the diff has no warning | not run: reported with its diff |
-| Verification reruns of the run's own fix branches (`write`) | run within the budgets | none (nothing was pushed) |
+| Verification reruns of the run's own fix branches (`write`) | run within the budgets | none: earlier runs' pull requests wait for the next `auto` run |
 | Fix with a warning (hides failures, reaches out, `.github/`) | not pushed, kept | kept |
+| A fix that was not pushed | remembered until the finding fails again | not remembered |
 | Draft pull request | always | – |
 
 `ask` without a window is a dry run that still goes through the gate: the
-gate's confirmation function answers every request with `report only`, and
-the audit log records it so. A fix that was not pushed is kept in the run's
-session for the chat (below). A headless run never starts a rerun or dispatch
-on anything but its own fix branches; the scan's runs are only read.
+`HeadlessGate` answers every `write` and `critical` request with `report
+only`, and the audit log records it so. A fix that was not pushed is kept in
+the run's session for the chat (below). A headless run never starts a rerun
+or dispatch on anything but its own fix branches; the scan's runs are only
+read.
 
 ### Summary and exit codes
 
 ```text
 flakipype run · octo-org · auto · 2026-10-12 06:02–06:41
-Scan: 42 repositories, 1,204 runs, 5 flaky findings
+Scan: 42 repositories, 1,204 runs, 5 flaky, 2 recurring error
 Investigated: 2 (1 flaky_test, 1 real_bug), 3 verdicts from the cache
-Fixes: draft pull request octo-org/app#57 opened
-       octo-org/api e2e not pushed: the diff changes .github/ (kept for the chat)
-Verification: octo-org/app#51 passed 3 of 3 · octo-org/app#57 1 of 3, continues next run
-Budget: pull requests today 1 of 3 · actions today 4 of 20 · tokens 412k of 1M (today 412k of 3M)
+Fixes: #1 octo-org/app › E2E › e2e: Opened draft pull request #57: https://github.com/octo-org/app/pull/57 (branch flakipype/fix-e2e-7c41d0).
+       #4 octo-org/api › CI › test: not pushed: the diff has warnings: changes .github/: .github/workflows/ci.yml (kept for the chat)
+Verification: octo-org/app#51: flakipype verification: E2E passed 3 of 3 runs on this branch.
+              octo-org/app#57: 1 of 3 runs, continues in the next run
+Budget: pull requests today 1 of 3 · actions today 4 of 20 · tokens 412,000 of 1,000,000 (today 412,000 of 3,000,000)
 ```
 
-`--json` prints the same as one object with `schema_version` 1.
+Further lines name the limits that stopped a step (`Stopped by:`) and the
+errors (`Problems:`). `--json` prints the same as one object with
+`schema_version` 1, including the diff of every fix that was not pushed.
 
 | Code | Meaning |
 | --- | --- |
@@ -97,10 +102,13 @@ A fix branch is verified by up to `fix.verify_runs` runs, which can take
 longer than one run may last. Each run is stored as a session, like a chat
 session, with its scan, verdicts, kept fixes, started runs and opened pull
 requests. When a run reaches `run.max_minutes`, unfinished verifications
-stay in its session, and the next run polls them first, until they finish or
-their watch time (`actions.watch_hours`) is over; the pull request comment
-then says after how many runs and why, as in the chat. Reruns started for an
-earlier run's verification count against today's action limit.
+stay in its session. The next run takes over the pull requests the last run
+left unverified, with the runs they follow under their numbers, and an `auto`
+run polls them until they finish or their watch time
+(`actions.watch_hours`) is over; the pull request comment then says after how
+many runs and why, as in the chat. An `ask` run only keeps them for the next
+`auto` run. Reruns started for an earlier run's verification count against
+the action limits of the run that starts them.
 
 **In the chat**, `/sessions` lists run sessions marked `run`. `/resume` on a
 run session starts a new chat session with a copy of the run's scan,
@@ -129,44 +137,47 @@ Pull requests and actions in 24 hours are counted from the audit log
 (entries with origin `run` that ran); tokens from the run sessions. The chat
 does not count against the daily limits, and runs do not count against the
 chat's. Reaching a limit stops what it limits: no further fixes after the
-pull request limit, no further investigations or fixes after a token limit;
-polling verifications continues within the action limit. The summary names
-the limit.
+pull request limit, no investigation after today's tokens are used up and
+no further fix after a token limit (a fix already running still ends at its
+own `fix.max_tokens`); polling verifications continues within the action
+limit. The summary names the limit.
 
 ## Running next to the chat
 
-- **Run lock.** `run` holds an exclusive `flock` on
-  `$XDG_DATA_HOME/flakipype/run.lock` for its whole duration; the kernel
+- **Run lock.** `run` holds an exclusive SQLite lock on
+  `$XDG_DATA_HOME/flakipype/run.lock` for its whole duration; the OS
   releases it if the process dies. A second run exits with code 3 and touches
   nothing.
-- **Database.** The cache database switches to SQLite's WAL journal with a
-  busy timeout, so the chat and a run can read and write it at the same time.
+- **Database.** The cache database uses SQLite's WAL journal with a busy
+  timeout, so the chat and a run can read and write it at the same time.
 - **Duplicate pull requests.** The chat and a run may fix the same finding
   at the same time. Delivery looks for an open flakipype pull request for
   the finding again right before it creates the branch, and links that one
   instead.
 - **Audit.** Entries from runs have the origin `run`, next to `model` and
-  `command`.
+  `command`. Verification reruns and dispatches are recorded too, as
+  `verify_rerun` and `verify_dispatch` with the answer `covered by the push`;
+  the daily action limit counts them.
 
 ## Secrets under systemd
 
 A user timer often runs without a desktop session. Then the system keyring
 is missing (keyring falls back to the `0600` file, which is empty if setup
-stored the key in the keyring) or locked (today an uncaught error with a
-traceback). M6 changes this:
+stored the key in the keyring) or locked. So:
 
-- New setting `secrets.store`: `auto` (default, today's behaviour),
-  `keyring` or `file`. `flakipype setup --secret-store file` stores the key
-  in `~/.config/flakipype/secrets.json` (mode `0600`), which a timer can read
+- The setting `secrets.store` is `auto` (the keyring where there is one,
+  else the file), `keyring` or `file`. `flakipype setup --non-interactive
+  --secret-store file --api-key-stdin` stores the key in
+  `~/.config/flakipype/secrets.json` (mode `0600`), which a timer can read
   without a session.
-- A locked or unreachable keyring is a typed error: exit code 2 and the next
-  step ("run `flakipype setup --secret-store file`"), never a traceback.
+- A locked or unreachable keyring is a typed error: exit code 2 and that
+  next step, never a traceback.
 - `doctor` says which store holds the key.
 - `daemon install` checks before it installs anything (below).
 
 The GitHub token stays `gh`'s login. If `gh` keeps it in the keyring, the
 same applies to `gh`; `gh auth login --insecure-storage` keeps it in `gh`'s
-own config file instead, which the how-to will show.
+own config file instead ([run on a schedule](../how-to/run-on-a-schedule.md)).
 
 ## `flakipype daemon`
 
@@ -175,7 +186,7 @@ own config file instead, which the how-to will show.
 | `daemon install [--schedule S] [--mode auto\|ask]` | Checks, writes the units, `systemctl --user daemon-reload`, enables and starts the timer |
 | `daemon install --print` | Prints the units and changes nothing |
 | `daemon uninstall` | Disables the timer and removes the units flakipype wrote |
-| `daemon status` | The timer's next and last start, the last run's exit code and summary |
+| `daemon status` | The timer's next and last start, the last result and exit status, and the last run's summary from the journal |
 
 `--schedule` takes a systemd calendar expression, checked with
 `systemd-analyze calendar`; default `daily`. The units go to
@@ -216,10 +227,14 @@ WantedBy=timers.target
 - Unit files flakipype did not write (no `generated by flakipype` line) are
   never overwritten or removed.
 
-**Checks before installing.** `daemon install` runs
+**Checks before installing.** `daemon install` checks the schedule with
+`systemd-analyze calendar` and runs
 `systemd-run --user --wait --pipe --collect <flakipype> doctor`, so `doctor`
-runs in the same environment as the timer will. If it fails, nothing is
-installed and the output says why, typically the keyring. Without lingering
+runs in the same environment as the timer will. If either fails, nothing is
+written and the output says why, typically the keyring. The executable path
+and the schedule must not contain characters that could add lines to a unit
+file. If systemd refuses after the files are written, the message says where
+they are and that `daemon uninstall` removes them. Without lingering
 (`loginctl show-user` reports `Linger=no`), a warning says that the timer
 only runs while you are logged in and that `loginctl enable-linger` changes
 that; flakipype does not run it.
@@ -241,9 +256,10 @@ sh install.sh
    release pinned in the script from `github.com/astral-sh/uv/releases`,
    verifies the tarball against the release's published `.sha256` file and
    installs `uv` to `~/.local/bin`. A mismatch aborts and installs nothing.
-3. Runs `uv tool install --python 3.12
+3. Runs `uv tool install --force
    git+https://github.com/besessener/flakipype@v0.1.0`. The tag is the one
-   the script was released with. uv verifies the Python it downloads itself.
+   the script was released with. uv takes a Python 3.12 or newer from the
+   system or downloads one, which it verifies itself.
 4. Prints the next step (`flakipype setup`) and a hint if `~/.local/bin` is
    not on `PATH`.
 
@@ -260,53 +276,63 @@ release workflow and no PyPI package.
 
 ## Smoke tests
 
-A new job `smoke` in `.github/workflows/ci.yml`, on pull requests and pushes
+The job `smoke` in `.github/workflows/ci.yml`, on pull requests and pushes
 to `main`, and runnable with `act pull_request -j smoke`. A matrix of
 containers, images pinned by digest: `ubuntu:24.04`, `debian:12`,
-`fedora:latest` and `archlinux:latest`. Each one, as a non-root user:
+`fedora:latest` and `archlinux:latest`. Each one installs `curl`, `git` and
+`systemd` (and `ca-certificates` or `tar` where the image lacks them) as root,
+then runs `tests/smoke/smoke.sh` as a new user without root, which:
 
-1. installs `curl`, `git`, `ca-certificates` and `systemd` with the
-   distribution's package manager;
-2. runs `install.sh` with `FLAKIPYPE_SOURCE` set to the checkout, which also
-   exercises the verified `uv` download, since no image has `uv`;
-3. checks `flakipype --version` against `pyproject.toml`;
-4. checks that `flakipype doctor` without a configuration exits with code 2
-   and the setup hint;
-5. renders the units with `daemon install --print` and checks them with
+1. runs `install.sh` with `FLAKIPYPE_SOURCE` set to a copy of the checkout,
+   which also exercises the verified `uv` download, since no image has `uv`;
+2. checks `flakipype --version` against `pyproject.toml`;
+3. checks that `flakipype doctor` without a configuration exits with code 1
+   and points to `flakipype setup`;
+4. renders the units with `daemon install --print`, checks that `ExecStart`
+   starts the installed command, and checks both units with
    `systemd-analyze verify`.
 
-The job has `permissions: {}` and checks out without credentials, like the
-existing jobs. Real GitHub and a real model are not used; `run` itself is
-tested in the `test` job with the `gh` stub and the fake model.
+The job may only read the repository and checks out without credentials,
+like the other jobs. Real GitHub and a real model are not used; `run` itself
+is tested in the `test` job with in-memory GitHub fakes and a fake model.
 
 ## Where it lives
 
-- **`unattended`** (new, on the layer of `tui`, independent of it): the run
-  service (the steps above, daily limits, the summary), the headless
-  confirmation function, and the choice of findings to fix. It uses
-  `investigate`, `fix` and `actions` the way the chat does.
+- **`unattended`** (on the layer of `tui`, independent of it): the run
+  service with the steps above and its report (`service.py`), the daily
+  limits (`limits.py`) and what a run takes over from the last one
+  (`carry.py`). It uses the chat's workspace and the `investigate`, `fix`
+  and `actions` services the way the chat does.
+- **`agent`**: the `HeadlessGate` next to the policy gate (`tools.py`).
 - **`setup`**: `daemon.py` renders the units (pure text) and installs them
-  through a `systemctl`/`systemd-run` runner it is given.
-- **`store`**: the run lock, WAL, run sessions, the fix attempts that were
-  not pushed, and audit queries over 24 hours.
-- **`config`**: `[run]` and `[secrets]`, the typed keyring error.
-- **`fix`** and **`actions`**: the origin `run`, texts that do not mention
-  `/new` or `/mode` outside the chat, the check for an open pull request
-  before delivery.
-- **`cli`**: `run` and `daemon`, wired in `wiring.py`.
+  through a command runner it is given.
+- **`store`**: the run lock (`lock.py`), WAL, run sessions, the fixes a run
+  did not push, and audit entries since a time.
+- **`config`**: `[run]`, `[secrets]` and the store choice.
+- **`fix`** and **`actions`**: the origin `run`, audited verification runs,
+  taking over pull requests and runs, the check for an open pull request
+  before delivery, and typed errors for a fix that was not made and a failed
+  delivery.
+- **`investigate`**: run sessions in `/sessions` and `/resume`.
+- **`cli`**: `run` and `daemon` (`run_command.py`, `run_report.py`,
+  `daemon_commands.py`), wired in `wiring.py`.
 
 ## Testing
 
-- The run service against the `gh` stub and the fake model: both modes, a fix
-  with warnings, a rejected fix that is not retried, every budget and daily
-  limit, the time limit with verifications left over and continued by the
-  next run, exit codes, the summary and its JSON.
-- Daily limits from audit entries at given times with a fake clock.
-- The run lock with two processes; WAL with a chat and a run writing at once.
-- `/resume` of a run session: copied scan, verdicts and kept fixes; the
-  run's pull requests are not polled by the chat.
-- Unit rendering with snapshots; install, uninstall and status against a
-  fake runner, including a failing `doctor` and foreign unit files.
+- The run service over in-memory GitHub fakes and a fake agent and fixer,
+  with a settable clock: both modes, a fix with warnings, a rejected fix that
+  is not tried again (and is in a dry run), every limit, the time limit with
+  verifications left over and finished by the next `auto` run, a failed
+  delivery, the session it leaves for the chat.
+- Daily usage from audit entries and the per-run limits it leaves.
+- The run lock held twice; WAL on a cache file.
+- `/resume` of a run session: a new session with the run's fixes not pushed,
+  without its pull requests.
+- The exact unit files; install, uninstall and status against a fake command
+  runner, including a failing `doctor`, foreign unit files and a refused
+  start.
 - The keyring error and each `secrets.store` value.
-- `install.sh` with ShellCheck (`shellcheck-py`, a dev dependency) in
-  `poe check`, and end to end in the smoke job.
+- The summary, its JSON and every exit code of `run`; the `daemon` commands.
+- `install.sh` and the smoke test with ShellCheck (`shellcheck-py`) in
+  `poe check`, a test that the script installs the version in
+  `pyproject.toml`, and end to end in the smoke job.

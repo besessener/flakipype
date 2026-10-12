@@ -1,5 +1,6 @@
 import stat
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,9 @@ from flakipype.config.secrets import (
     FileSecretStore,
     KeyringSecretStore,
     SecretStoreError,
-    default_secret_store,
+    secret_store,
 )
+from flakipype.config.settings import SecretStoreChoice
 
 
 class MemoryKeyring(KeyringBackend):
@@ -100,14 +102,33 @@ def test_unreadable_file_is_a_secret_store_error(tmp_path: Path, content: str) -
         FileSecretStore(path).get("llm-api-key")
 
 
-def test_default_store_uses_a_working_keyring(tmp_path: Path) -> None:
-    store = default_secret_store(MemoryKeyring(), tmp_path / "secrets.json")
-
-    assert isinstance(store, KeyringSecretStore)
+def no_keyring() -> KeyringBackend:
+    return fail.Keyring()  # type: ignore[no-untyped-call]  # keyring's __init__ is unannotated
 
 
-def test_default_store_falls_back_to_a_file_without_keyring(tmp_path: Path) -> None:
-    no_keyring = fail.Keyring()  # type: ignore[no-untyped-call]  # keyring's __init__ is unannotated
-    store = default_secret_store(no_keyring, tmp_path / "secrets.json")
+@pytest.mark.parametrize(
+    ("choice", "backend", "expected"),
+    [
+        (SecretStoreChoice.AUTO, MemoryKeyring, KeyringSecretStore),
+        (SecretStoreChoice.AUTO, no_keyring, FileSecretStore),
+        (SecretStoreChoice.KEYRING, MemoryKeyring, KeyringSecretStore),
+        (SecretStoreChoice.KEYRING, no_keyring, KeyringSecretStore),
+        (SecretStoreChoice.FILE, MemoryKeyring, FileSecretStore),
+    ],
+)
+def test_the_choice_picks_the_store(
+    tmp_path: Path,
+    choice: SecretStoreChoice,
+    backend: Callable[[], KeyringBackend],
+    expected: type[object],
+) -> None:
+    store = secret_store(choice, backend(), tmp_path / "secrets.json")
 
-    assert isinstance(store, FileSecretStore)
+    assert isinstance(store, expected)
+
+
+def test_a_chosen_keyring_that_does_not_exist_is_an_error(tmp_path: Path) -> None:
+    store = secret_store(SecretStoreChoice.KEYRING, no_keyring(), tmp_path / "secrets.json")
+
+    with pytest.raises(SecretStoreError):
+        store.get("llm-api-key")

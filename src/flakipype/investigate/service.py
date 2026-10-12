@@ -110,6 +110,8 @@ class InvestigationRequest:
     selection: Selection
     # Ignore stored verdicts and investigate again.
     fresh: bool = False
+    # A lower token limit than the configured one for this call, e.g. what a day has left.
+    max_tokens: int | None = None
 
 
 class InvestigationService:
@@ -155,7 +157,10 @@ class InvestigationService:
         unknown = tuple(number for number in request.selection.numbers if number not in known)
         host = request.scan.host
         results = {} if request.fresh else self._cached(host, chosen)
-        budget = RunBudget(self._run_tokens)
+        limit = self._run_tokens
+        if request.max_tokens is not None:
+            limit = min(limit, request.max_tokens)
+        budget = RunBudget(limit)
         todo = [finding for finding in chosen if finding.number not in results]
         results.update(
             self._investigate_all(todo, evidence=report.evidence, budget=budget, on_event=on_event)

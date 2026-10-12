@@ -1,6 +1,9 @@
 """Compact Markdown views of scans, findings and verdicts, for the model and the chat window."""
 
-from flakipype.agent.verdict import EvidenceItem
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+from flakipype.agent.verdict import EvidenceItem, Verdict
 from flakipype.flaky.findings import Finding, FindingKind
 from flakipype.investigate.service import InvestigationResult
 from flakipype.scan.service import ScanReport
@@ -31,6 +34,35 @@ HELP = """\
 - `/help` – this list · `/quit` – leave (also Ctrl+Q)
 
 Or just ask, e.g. *why does the E2E test of Archivist fail?*"""
+
+
+@dataclass(frozen=True)
+class SidebarItem:
+    number: int
+    kind: str
+    title: str
+    verdict: str = ""
+
+
+def sidebar_items(
+    findings: list[Finding], results: Mapping[int, InvestigationResult]
+) -> list[SidebarItem]:
+    """The findings with their verdicts, as the chat's sidebar lists them."""
+    return [
+        SidebarItem(
+            finding.number,
+            kind_label(finding.kind),
+            finding_title(finding),
+            verdict_label(results[finding.number].verdict) if finding.number in results else "",
+        )
+        for finding in findings
+    ]
+
+
+def verdict_label(verdict: Verdict | None) -> str:
+    if verdict is None:
+        return "no verdict"
+    return f"{verdict.classification.value.replace('_', ' ')} ({verdict.confidence.value})"
 
 
 def finding_title(finding: Finding) -> str:

@@ -12,13 +12,14 @@ from typing import Any
 from flakipype.actions.watch import WatchedRun
 from flakipype.agent.orchestrator import ChatAgent, StepListener, ignore_steps
 from flakipype.agent.tools import Confirmer, Mode, PolicyGate, ToolDeclinedError, ToolError
-from flakipype.agent.verdict import Verdict
 from flakipype.flaky.findings import FindingKind
 from flakipype.github.actions import GitHubApiError
-from flakipype.investigate.chat_text import HELP, finding_title, kind_label
+from flakipype.investigate.chat_text import HELP, SidebarItem, sidebar_items
 from flakipype.investigate.workspace import ChatWorkspace
 from flakipype.scan.service import ScanRequest
-from flakipype.store.sessions import SessionStore
+from flakipype.store.sessions import SessionKind, SessionStore
+
+__all__ = ["ChatEntry", "ChatService", "EntryKind", "SidebarItem"]
 
 _TITLE_LENGTH = 60
 _RECENT_SESSIONS = 10
@@ -46,14 +47,6 @@ class EntryKind(StrEnum):
 class ChatEntry:
     kind: EntryKind
     text: str
-
-
-@dataclass(frozen=True)
-class SidebarItem:
-    number: int
-    kind: str
-    title: str
-    verdict: str = ""
 
 
 @dataclass
@@ -135,18 +128,7 @@ class ChatService:
         findings = self._workspace.finding_list()
         if not findings:
             return list(self._session.snapshot)
-        results = self._workspace.results
-        return [
-            SidebarItem(
-                finding.number,
-                kind_label(finding.kind),
-                finding_title(finding),
-                _verdict_label(results[finding.number].verdict)
-                if finding.number in results
-                else "",
-            )
-            for finding in findings
-        ]
+        return sidebar_items(findings, self._workspace.results)
 
     def _ask(self, text: str, on_step: StepListener) -> ChatEntry:
         reply = self._agent.ask(text, on_step)
@@ -301,7 +283,9 @@ class ChatService:
         if not sessions:
             return "No saved sessions yet."
         lines = [
-            f"- `{s.session_id}` {s.title} ({s.updated[:16].replace('T', ' ')})" for s in sessions
+            f"- `{s.session_id}` {s.title} ({s.updated[:16].replace('T', ' ')})"
+            + (" · run" if s.kind is SessionKind.RUN else "")
+            for s in sessions
         ]
         return "Recent sessions (resume with /resume N):\n" + "\n".join(lines)
 
@@ -318,8 +302,10 @@ class ChatService:
         if stored is None:
             return ChatEntry(EntryKind.ERROR, "No such session. See /sessions.")
         document: dict[str, Any] = json.loads(stored)
+        # A run's session is copied: its runs and pull requests stay with the timer that polls them.
+        copy = self._sessions.kind(numbers[0]) is SessionKind.RUN
         self._session = _Session(
-            session_id=numbers[0],
+            session_id=None if copy else numbers[0],
             entries=[ChatEntry(EntryKind(e["kind"]), e["text"]) for e in document["entries"]],
             snapshot=[SidebarItem(**item) for item in document["findings"]],
             chat_tokens=int(document["chat_tokens"]),
@@ -331,23 +317,23 @@ class ChatService:
         )
         self._workspace.report = None
         self._workspace.results = {}
-        if "actions" in document:
+        self._workspace.actions.reset()
+        self._workspace.fixes.reset()
+        if "actions" in document and not copy:
             self._workspace.actions.restore(document["actions"])
-        else:
-            self._workspace.actions.reset()
-        if "fix" in document:
+        if "fix" in document and copy:
+            self._workspace.fixes.restore_proposals(document["fix"])
+        elif "fix" in document:
             self._workspace.fixes.restore(document["fix"])
-        else:
-            self._workspace.fixes.reset()
         self._gate.mode = Mode.ASK
+        if copy:
+            return ChatEntry(
+                EntryKind.NOTE,
+                f"New session from run {numbers[0]}, with its scan, verdicts and fixes not pushed; "
+                "its pull requests stay with the timer. The next action rescans.",
+            )
         return ChatEntry(EntryKind.NOTE, f"Resumed session {numbers[0]}. The next action rescans.")
 
 
 def _numbers(arguments: list[str]) -> list[int]:
     return [int(argument.lstrip("#")) for argument in arguments if argument.lstrip("#").isdigit()]
-
-
-def _verdict_label(verdict: Verdict | None) -> str:
-    if verdict is None:
-        return "no verdict"
-    return f"{verdict.classification.value.replace('_', ' ')} ({verdict.confidence.value})"

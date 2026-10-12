@@ -24,6 +24,7 @@ pulls the image (several GB).
 ```bash
 act pull_request -j test       # quality gates on Python 3.12 and 3.14
 act pull_request -j hygiene    # gitleaks over the history, prek hooks, zizmor
+act pull_request -j smoke      # install.sh and a first start on four distributions
 act -l                         # list all jobs
 ```
 

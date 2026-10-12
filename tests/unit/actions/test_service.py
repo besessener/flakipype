@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from flakipype.actions.service import ActionService
+from flakipype.actions.service import ActionService, Origin
 from flakipype.actions.watch import RunKind, WatchedRun
 from flakipype.agent.tools import Answer, PreparedAction, ToolError
 from flakipype.config.settings import ActionSettings
@@ -281,7 +281,12 @@ def test_authorised_reruns_and_dispatches_use_the_budget(cache: ScanCache) -> No
     assert actions.used == 2
     assert actions.rerun_authorised(finished, "verify 3/3") is None
     assert actions.dispatch_authorised(template) is None
-    assert cache.audit.entries(actions.session) == []
+    entries = cache.audit.entries(actions.session)
+    assert [(entry.action, entry.answer, entry.outcome, entry.run_id) for entry in entries] == [
+        ("verify_dispatch", "covered by the push", "Started R1.", 70),
+        ("verify_rerun", "covered by the push", "Started R2.", 70),
+    ]
+    assert entries[0].request == "app · E2E verify 1/3 on flakipype/fix-e2e-1 @ c0ffee1"
 
 
 def test_an_authorised_rerun_needs_a_run_id(cache: ScanCache) -> None:
@@ -294,6 +299,32 @@ def test_an_authorised_rerun_needs_a_run_id(cache: ScanCache) -> None:
 
     assert actions.rerun_authorised(unlocated, "verify 2/3") is None
     assert actions.used == 0
+
+
+def test_adopted_runs_keep_their_numbers_and_new_ones_follow(cache: ScanCache) -> None:
+    runs = failed_run()
+    runs.dispatch_ids = [71]
+    earlier = WatchedRun(
+        number=4, kind=RunKind.RERUN, repository="octo-org/app", workflow_path=E2E,
+        workflow_name="E2E", label="verify 2/3", commit="c0ffee1", ref="flakipype/fix-e2e-1",
+        started=START, run_id=70, attempt=2,
+    )  # fmt: skip
+    actions = ActionService(
+        runs=runs, files=runs, audit=cache.audit, settings=ActionSettings(), owner="octo-org",
+        now=lambda: START, origin=Origin.RUN,
+    )  # fmt: skip
+
+    actions.adopt([earlier])
+    started = actions.dispatch_authorised(replace(earlier, number=0, run_id=None, attempt=1))
+    with actions.commanded():
+        pass
+
+    assert actions.find(4) == earlier
+    assert started is not None
+    assert started.number == 5
+    assert actions.used == 1
+    assert actions.origin == "run"
+    assert cache.audit.entries(actions.session)[0].origin == "run"
 
 
 def test_no_actions_yet(cache: ScanCache) -> None:

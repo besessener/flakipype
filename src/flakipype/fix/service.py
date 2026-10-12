@@ -21,7 +21,7 @@ from flakipype.fix.texts import (
     PullRequestFacts,
     branch_name,
     failure_rate,
-    finding_marker,
+    identity_marker,
     pull_request_body,
 )
 from flakipype.fix.verify import Stage, Verification, Verifier
@@ -37,6 +37,14 @@ _UNREVIEWED = ("not reviewed", "revised, second review unavailable")
 _PATHS_SHOWN = 3
 
 type ProposeFix = Callable[[FixRequest], FixResult]
+
+
+class FixNotMadeError(ToolError):
+    """The fixer found no fix, or the review did not accept it."""
+
+
+class FixDeliveryError(ToolError):
+    """A delivery step failed after the push was allowed; the message says what exists."""
 
 
 class FixPulls(Protocol):
@@ -91,6 +99,10 @@ class FixService:
         self.opened = 0
         self.tokens = 0
 
+    def kept(self, finding: Finding) -> Proposal:
+        """The fix for the finding that was made but not pushed; KeyError if there is none."""
+        return self._proposals[finding.identity]
+
     def discard(self, finding: Finding) -> None:
         """Forget a proposal that was not pushed, so the next /fix starts over."""
         self._proposals.pop(finding.identity, None)
@@ -113,7 +125,7 @@ class FixService:
                     "as branches of the repository itself, not through forks."
                 )
                 raise ToolError(message)
-            self._check_no_open_pull(finding)
+            self._check_no_open_pull(finding.key.repository, finding.identity, finding.number)
             proposal = self._proposals.get(finding.identity)
             if proposal is None or instructions:
                 proposal = self._new_proposal(target, access.default_branch, instructions)
@@ -123,8 +135,12 @@ class FixService:
                 "Ask for changes, or /fix N --fresh to start over. The diff:\n"
                 + unified_diff(list(proposal.changes))
             )
-            raise ToolError(message)
+            raise FixNotMadeError(message)
         return self._prepared(proposal)
+
+    def adopt(self, pulls: list[OpenedPull]) -> None:
+        """Continue verifying pull requests an earlier session opened; costs no budget."""
+        self.pulls.extend(pulls)
 
     def poll(self) -> list[str]:
         """Moves every unfinished verification one step; a note for each one that finished."""
@@ -151,21 +167,26 @@ class FixService:
         }
 
     def restore(self, state: dict[str, Any]) -> None:
+        self.restore_proposals(state)
         self.opened = int(state["opened"])
+        self.pulls = [OpenedPull.from_dict(item) for item in state["pulls"]]
+
+    def restore_proposals(self, state: dict[str, Any]) -> None:
+        """Only the fixes not pushed yet; the budget and the pull requests start empty."""
+        self.reset()
         proposals = [Proposal.from_dict(item) for item in state["proposals"]]
         self._proposals = {proposal.identity: proposal for proposal in proposals}
-        self.pulls = [OpenedPull.from_dict(item) for item in state["pulls"]]
 
     def reset(self) -> None:
         self.opened = 0
         self._proposals = {}
         self.pulls = []
 
-    def _check_no_open_pull(self, finding: Finding) -> None:
-        marker = finding_marker(finding)
-        for pull in self._pulls.open_pulls(finding.key.repository):
+    def _check_no_open_pull(self, repository: str, identity: str, number: int) -> None:
+        marker = identity_marker(identity)
+        for pull in self._pulls.open_pulls(repository):
             if pull.branch.startswith(BRANCH_PREFIX) and marker in pull.body:
-                message = f"An open flakipype pull request for #{finding.number} exists: {pull.url}"
+                message = f"An open flakipype pull request for #{number} exists: {pull.url}"
                 raise ToolError(message)
 
     def _new_proposal(self, target: FixTarget, base: str, instructions: str) -> Proposal:
@@ -183,7 +204,7 @@ class FixService:
         self.tokens += result.tokens
         if result.proposal is None:
             message = f"No fix for #{finding.number}: {result.detail or result.review}"
-            raise ToolError(message)
+            raise FixNotMadeError(message)
         changes = list(result.changes)
         warnings = tuple(change_warnings(changes))
         rate = failure_rate(finding, target.evidence, base)
@@ -234,11 +255,20 @@ class FixService:
             )  # fmt: skip
 
         def run(answer: Answer) -> str:
+            # Another flakipype (the chat, a run) may have opened one since the fixer started.
+            try:
+                with _from_github():
+                    self._check_no_open_pull(
+                        proposal.repository, proposal.identity, proposal.finding
+                    )
+            except ToolError as error:
+                record(answer, f"not pushed: {error}")
+                raise
             try:
                 outcome = self._deliver(proposal)
             except DeliveryError as error:
                 record(answer, f"failed: {error}")
-                raise ToolError(str(error)) from error
+                raise FixDeliveryError(str(error)) from error
             record(answer, outcome)
             return outcome
 

@@ -113,7 +113,8 @@ class RunWatch:
 
     @property
     def next_number(self) -> int:
-        return len(self.runs) + 1
+        # Runs adopted from an earlier session keep their numbers, which may have gaps.
+        return max((run.number for run in self.runs), default=0) + 1
 
     def add(self, run: WatchedRun) -> WatchedRun:
         numbered = replace(run, number=self.next_number)

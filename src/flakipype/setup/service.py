@@ -8,6 +8,8 @@ from flakipype.config.secrets import LLM_API_KEY, SecretStore
 from flakipype.config.settings import (
     GitHubSettings,
     LlmSettings,
+    SecretSettings,
+    SecretStoreChoice,
     Settings,
     SettingsError,
     load_settings,
@@ -45,6 +47,8 @@ class SetupDraft:
     host: str
     owner: str
     api_key: str = field(default="", repr=False)
+    # None keeps the saved choice.
+    secret_store: SecretStoreChoice | None = None
 
 
 @dataclass(frozen=True)
@@ -117,9 +121,12 @@ class SetupService:
             errors["github.owner"] = "is required"
         if llm is None or github is None or errors:
             raise InvalidSetupError(errors)
-        # The wizard does not edit [scan] and [agent]; keep whatever the file already has.
+        # Setup edits only [llm], [github] and the secret store; every other section is kept.
         current = self.load().settings
-        return Settings(llm=llm, github=github, scan=current.scan, agent=current.agent)
+        secrets = (
+            SecretSettings(store=draft.secret_store) if draft.secret_store else current.secrets
+        )
+        return current.model_copy(update={"llm": llm, "github": github, "secrets": secrets})
 
     def _validated_llm(self, draft: SetupDraft) -> tuple[LlmSettings | None, dict[str, str]]:
         model = draft.model.strip()

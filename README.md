@@ -17,21 +17,31 @@ review it.
 - **Safe by design**: never touches the default branch; every fix is a draft PR.
 
 > **Status:** pre-alpha. Setup, scanning, agent investigations, the chat,
-> confirmed reruns and dispatches, and fixes as draft pull requests from the
-> chat work; unattended runs come next, see the
+> confirmed reruns and dispatches, fixes as draft pull requests and unattended
+> runs from a systemd timer work, see the
 > [roadmap](docs/explanation/roadmap.md).
 
 ## Installation
 
-Requires Linux and [uv](https://docs.astral.sh/uv/).
+Requires Linux (x86_64 or aarch64, glibc) with `curl`, `tar` and `git`. The
+script installs [uv](https://docs.astral.sh/uv/) if you have none, checked
+against its published SHA-256, and then flakipype for your user:
 
 ```bash
-uv tool install git+https://github.com/besessener/flakipype
+curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
+sh install.sh
+```
+
+With uv already installed: `uv tool install git+https://github.com/besessener/flakipype@v0.1.0`.
+
+```bash
 flakipype setup     # model endpoint, gh (downloaded and verified if missing), GitHub login
 flakipype doctor    # check everything
 flakipype scan          # find and rank flaky jobs (--json for scripts)
 flakipype investigate   # let the agent explain them, with evidence
 flakipype               # the chat: ask, scan, investigate, rerun and fix interactively
+flakipype run           # unattended: scan, investigate, open draft pull requests
+flakipype daemon install    # run it daily from a systemd user timer
 ```
 
 Step by step: [getting started](docs/tutorials/getting-started.md).

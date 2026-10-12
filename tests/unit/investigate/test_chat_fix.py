@@ -6,13 +6,24 @@ from flakipype.agent.investigator import Status
 from flakipype.agent.tools import ActionRequest, Confirmer, Mode
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings
+from flakipype.fix.state import OpenedPull
 from flakipype.github.runs import CommitRun
 from flakipype.investigate.chat import ChatService, EntryKind
 from flakipype.store.database import ScanCache
+from flakipype.store.sessions import SessionKind
 
 from support.fake_anthropic import ScriptedModel, call, message, text
 from support.fake_chat import NOW, FixFakes, chat_service
-from support.fake_fix import CHANGE, FIX_COMMIT, FakeFixer, fixed, no_fix
+from support.fake_fix import (
+    BRANCH,
+    CHANGE,
+    FIX_COMMIT,
+    TITLE,
+    FakeFixer,
+    fixed,
+    no_fix,
+    verification,
+)
 from support.fake_investigation import FakeAgent
 from support.fake_runs import FakeRuns, state
 
@@ -198,6 +209,34 @@ def test_sessions_from_before_fixes_resume_without_them(cache: ScanCache) -> Non
     chat.handle("/resume 1")
 
     assert chat.workspace.fixes.state() == {"opened": 0, "proposals": [], "pulls": []}
+
+
+def test_a_run_session_resumes_as_a_copy_without_its_pull_requests(cache: ScanCache) -> None:
+    chat, asked = chat_with(cache, answer=False)
+    chat.handle("/fix 1")
+    document = json.loads(cache.sessions.load(1) or "{}")
+    opened = OpenedPull(1, TITLE, "https://github.com/octo-org/app/pull/12", BRANCH, verification())
+    document["fix"]["pulls"] = [opened.to_dict()]
+    run = cache.sessions.create(
+        "run 2026-10-09 06:00 (auto)", now=NOW.isoformat(), data=json.dumps(document),
+        kind=SessionKind.RUN,
+    )  # fmt: skip
+
+    listed = chat.handle("/sessions")[1].text
+    (resumed_entry,) = chat.handle(f"/resume {run}")
+    resumed = resumed_entry.text
+    chat.handle("/fix 1")
+
+    lines = {line.split("`")[1]: line for line in listed.splitlines()[1:]}
+    assert lines[str(run)].startswith(f"- `{run}` run 2026-10-09 06:00 (auto) (")
+    assert lines[str(run)].endswith(" · run")
+    assert not lines["1"].endswith(" · run")
+    assert resumed.startswith(f"New session from run {run}, with its scan, verdicts and fixes")
+    assert chat.workspace.fixes.pulls == []
+    assert len(asked) == 2
+    kept = json.loads(cache.sessions.load(run) or "{}")["fix"]["pulls"]
+    assert [OpenedPull.from_dict(pull) for pull in kept] == [opened]
+    assert cache.sessions.recent(1)[0].kind is SessionKind.CHAT
 
 
 @pytest.mark.parametrize(

@@ -5,9 +5,10 @@ import pytest
 from typer.testing import CliRunner, Result
 
 from flakipype.cli import app, setup_commands, wiring
-from flakipype.config.secrets import LLM_API_KEY
-from flakipype.config.settings import load_settings
+from flakipype.config.secrets import LLM_API_KEY, SecretStoreError
+from flakipype.config.settings import SecretStoreChoice, load_settings
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
+from flakipype.setup.service import SetupService
 from flakipype.tui.setup_wizard import SetupWizard
 
 from support.fake_gh import FakeGh
@@ -17,9 +18,24 @@ runner = CliRunner()
 
 
 @pytest.fixture
-def world(tmp_path: Path, fake_gh: FakeGh, monkeypatch: pytest.MonkeyPatch) -> SetupWorld:
+def chosen_stores() -> list[SecretStoreChoice | None]:
+    return []
+
+
+@pytest.fixture
+def world(
+    tmp_path: Path,
+    fake_gh: FakeGh,
+    monkeypatch: pytest.MonkeyPatch,
+    chosen_stores: list[SecretStoreChoice | None],
+) -> SetupWorld:
     created = setup_world(tmp_path, fake_gh)
-    monkeypatch.setattr(wiring, "build_setup_service", lambda: created.service)
+
+    def build(choice: SecretStoreChoice | None = None) -> SetupService:
+        chosen_stores.append(choice)
+        return created.service
+
+    monkeypatch.setattr(wiring, "build_setup_service", build)
     return created
 
 
@@ -38,6 +54,38 @@ def test_headless_setup_saves_and_reports(world: SetupWorld, fake_gh: FakeGh) ->
     assert world.secrets.get(LLM_API_KEY) == "key-1"
     assert "Saved" in output_of(result)
     assert "octocat" in output_of(result)
+
+
+def test_headless_setup_saves_the_secret_store(
+    world: SetupWorld, fake_gh: FakeGh, chosen_stores: list[SecretStoreChoice | None]
+) -> None:
+    logged_in(fake_gh)
+    world.service.save(complete_draft())
+    arguments = ["setup", "--non-interactive", "--secret-store", "file", "--api-key-stdin"]
+
+    result = runner.invoke(app, arguments, input="key-2\n")
+
+    assert result.exit_code == 0, result.output
+    assert chosen_stores == [SecretStoreChoice.FILE]
+    assert load_settings(world.paths.config_file).secrets.store is SecretStoreChoice.FILE
+
+
+@pytest.mark.parametrize("command", [["doctor"], ["setup", "--non-interactive"]])
+def test_an_unreadable_keyring_explains_the_file_store(
+    world: SetupWorld, monkeypatch: pytest.MonkeyPatch, command: list[str]
+) -> None:
+    def locked(name: str) -> str | None:
+        message = f"{name}: the collection is locked"
+        raise SecretStoreError(message)
+
+    monkeypatch.setattr(world.secrets, "get", locked)
+
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 2
+    text = " ".join(output_of(result).split())
+    assert "Secret store: llm-api-key: the collection is locked" in text
+    assert "--secret-store file --api-key-stdin" in text
 
 
 def test_headless_setup_keeps_existing_values(world: SetupWorld, fake_gh: FakeGh) -> None:

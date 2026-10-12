@@ -74,6 +74,22 @@ def test_verdicts_are_only_valid_for_the_same_newest_failure(cache: ScanCache) -
     assert cache.cached_verdict("ghes.example", "flaky|a", "2026-10-02") is None
 
 
+def test_unpushed_fixes_are_remembered_until_a_newer_failure(cache: ScanCache) -> None:
+    cache.save_unpushed_fix(HOST, "flaky|a", last_seen="2026-10-01", outcome="rejected")
+
+    assert cache.unpushed_fix(HOST, "flaky|a", "2026-10-01") == "rejected"
+    assert cache.unpushed_fix(HOST, "flaky|a", "2026-10-02") is None
+    assert cache.unpushed_fix("ghes.example", "flaky|a", "2026-10-01") is None
+
+
+def test_a_cache_file_uses_the_wal_journal(tmp_path: Path) -> None:
+    path = tmp_path / "cache.sqlite3"
+    ScanCache.open(path).close()
+
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
 def test_schema_version_is_recorded_and_migrations_run_once(tmp_path: Path) -> None:
     path = tmp_path / "cache.sqlite3"
     ScanCache.open(path).close()

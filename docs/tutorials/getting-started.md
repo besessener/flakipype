@@ -8,8 +8,20 @@ scan.
 ## 1. Install
 
 ```bash
-uv tool install git+https://github.com/besessener/flakipype
+curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
+sh install.sh
 flakipype --version
+```
+
+The script needs `curl`, `tar` and `git`. It uses your `uv` if you have one;
+otherwise it downloads the `uv` release it names, checks the download against
+the SHA-256 that release publishes, and installs it to `~/.local/bin`. Then
+it runs `uv tool install` for the flakipype release, which also brings a
+Python 3.12 or newer if your system has none. Nothing needs root. With `uv`
+already installed, this is the same:
+
+```bash
+uv tool install git+https://github.com/besessener/flakipype@v0.1.0
 ```
 
 ## 2. Run the setup wizard
@@ -66,4 +78,5 @@ Every failed line has an arrow with the next step. `doctor` exits with code
 1 when a check fails, so it also works in scripts.
 
 On a server without a terminal UI, see
-[set up a headless machine](../how-to/set-up-headless.md).
+[set up a headless machine](../how-to/set-up-headless.md); to let flakipype
+work on its own, [run it on a schedule](../how-to/run-on-a-schedule.md).
