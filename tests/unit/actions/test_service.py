@@ -7,7 +7,8 @@ from flakipype.actions.service import ActionService, Origin
 from flakipype.actions.watch import RunKind, WatchedRun
 from flakipype.agent.tools import Answer, PreparedAction, ToolError
 from flakipype.config.settings import ActionSettings
-from flakipype.github.actions import GitHubApiError
+from flakipype.github.actions import GitHubApiError, api_error
+from flakipype.github.gh import GhResult
 from flakipype.github.runs import JobState
 from flakipype.store.database import ScanCache
 
@@ -335,6 +336,20 @@ def test_a_dispatch_whose_first_run_fails_starts_nothing(cache: ScanCache) -> No
     assert (actions.used, actions.watched) == (0, [])
     (entry,) = cache.audit.entries(actions.session)
     assert (entry.outcome, entry.run_id) == ("failed: Server Error (HTTP 502)", None)
+
+
+def test_a_rate_limit_says_to_wait_not_which_permission_is_missing(cache: ScanCache) -> None:
+    runs = failed_run()
+    stderr = (
+        "gh: You have exceeded a secondary rate limit. Please wait a few minutes before you "
+        "try again. (HTTP 403)"
+    )
+    runs.errors["rerun_failed_jobs"] = api_error(GhResult(1, "", stderr))
+    prepared = rerun_failed(service(cache, runs))
+
+    with pytest.raises(ToolError, match="rate limit for this token is reached") as raised:
+        prepared.run(Answer.CONFIRMED)
+    assert "write access" not in str(raised.value)
 
 
 def test_refused_authorised_runs_are_audited(cache: ScanCache) -> None:

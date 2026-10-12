@@ -135,7 +135,7 @@ def test_default_branch_and_refs(fake_gh: FakeGh) -> None:
     fake_gh.record(["api", f"repos/{REPO}"], stdout='{"default_branch": "main"}')
     fake_gh.record(["api", f"repos/{REPO}/branches/main"], stdout='{"commit": {"sha": "abc"}}')
     not_found(fake_gh, ["api", f"repos/{REPO}/branches/v1"])
-    fake_gh.record(["api", f"repos/{REPO}/git/ref/tags/v1"], stdout='{"object": {"sha": "def"}}')
+    fake_gh.record(["api", f"repos/{REPO}/git/ref/tags/v1"], stdout=git_object("def", "commit"))
     not_found(fake_gh, ["api", f"repos/{REPO}/branches/a%2Fb"])
     not_found(fake_gh, ["api", f"repos/{REPO}/git/ref/tags/a%2Fb"])
     fake_gh.record(
@@ -149,6 +149,24 @@ def test_default_branch_and_refs(fake_gh: FakeGh) -> None:
     assert control.ref_commit(REPO, "a/b") is None
     with pytest.raises(GitHubApiError):
         control.ref_commit(REPO, "boom")
+
+
+def git_object(sha: str, kind: str) -> str:
+    return json.dumps({"object": {"sha": sha, "type": kind}})
+
+
+def test_an_annotated_tag_resolves_to_the_commit_it_tags(fake_gh: FakeGh) -> None:
+    for name in ("v2", "tree"):
+        not_found(fake_gh, ["api", f"repos/{REPO}/branches/{name}"])
+    fake_gh.record(["api", f"repos/{REPO}/git/ref/tags/v2"], stdout=git_object("tag1", "tag"))
+    fake_gh.record(["api", f"repos/{REPO}/git/tags/tag1"], stdout=git_object("tag2", "tag"))
+    fake_gh.record(["api", f"repos/{REPO}/git/tags/tag2"], stdout=git_object("c0ffee", "commit"))
+    fake_gh.record(["api", f"repos/{REPO}/git/ref/tags/tree"], stdout=git_object("t1", "tag"))
+    fake_gh.record(["api", f"repos/{REPO}/git/tags/t1"], stdout=git_object("b1", "tree"))
+    control = RunControl(fake_gh.cli())
+
+    assert control.ref_commit(REPO, "v2") == "c0ffee"
+    assert control.ref_commit(REPO, "tree") is None
 
 
 def test_workflow_files_are_named_by_their_file() -> None:

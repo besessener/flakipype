@@ -1,7 +1,9 @@
 """Who is logged in to gh, and does the token carry the scopes flakipype needs."""
 
 import json
+import shlex
 from dataclasses import dataclass
+from pathlib import Path
 
 from flakipype.github.gh import GhCli, GhCommandError
 
@@ -88,5 +90,7 @@ def browser_login_arguments(host: str) -> list[str]:
     ]
 
 
-def refresh_scopes_command(host: str, missing: frozenset[str]) -> str:
-    return f"gh auth refresh --hostname {host} --scopes {','.join(sorted(missing))}"
+def refresh_scopes_command(*, gh: Path, host: str, missing: frozenset[str]) -> str:
+    """Names the gh in use: flakipype's own copy is not on PATH."""
+    scopes = ",".join(sorted(missing))
+    return f"{shlex.quote(str(gh))} auth refresh --hostname {host} --scopes {scopes}"

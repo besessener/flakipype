@@ -10,7 +10,8 @@ from flakipype.fix.texts import finding_marker
 from flakipype.fix.verify import Stage, Verification
 from flakipype.flaky.findings import Finding
 from flakipype.flaky.signature import Category, ErrorSignature
-from flakipype.github.actions import ApiRateLimitError, GitHubApiError
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError, api_error
+from flakipype.github.gh import GhResult
 from flakipype.github.pulls import PullRequest
 from flakipype.github.runs import CommitRun
 from flakipype.store.database import ScanCache
@@ -83,6 +84,16 @@ def test_github_errors_before_the_fixer_say_what_is_missing(cache: ScanCache) ->
 
     with pytest.raises(ToolError, match="'Workflows: read and write' for a fine-grained token"):
         world.fixes.prepare(target())
+
+
+def test_a_rate_limit_before_the_fixer_says_to_wait(cache: ScanCache) -> None:
+    world = FixWorld(cache)
+    stderr = "gh: API rate limit exceeded for user ID 1234. (HTTP 403)"
+    world.github.errors["access"] = api_error(GhResult(1, "", stderr))
+
+    with pytest.raises(ToolError, match="rate limit for this token is reached") as raised:
+        world.fixes.prepare(target())
+    assert "Workflows" not in str(raised.value)
 
 
 def test_an_open_flakipype_pull_request_is_linked_instead(cache: ScanCache) -> None:

@@ -21,7 +21,7 @@ from flakipype.github.payloads import (
 _SYMLINK_MODE = "120000"
 _HTTP_NOT_FOUND = 404
 _HTTP_UNPROCESSABLE = 422
-_OPEN_PULLS_LISTED = 100
+_OPEN_PULLS_PAGE = 100
 _COMMIT_MUTATION = """\
 mutation($input: CreateCommitOnBranchInput!) {
   createCommitOnBranch(input: $input) { commit { oid } }
@@ -171,8 +171,16 @@ class PullRequests:
         return _pull(parse_answer(PullPayload.model_validate_json, output))
 
     def open_pulls(self, repository: str) -> list[PullRequest]:
-        path = f"repos/{repository}/pulls?state=open&per_page={_OPEN_PULLS_LISTED}"
-        return [_pull(item) for item in parse_answer(_pull_list, self._get(path))]
+        """Every open pull request, page by page: an older flakipype one may follow 100 newer."""
+        pulls: list[PullRequest] = []
+        page = 1
+        while True:
+            path = f"repos/{repository}/pulls?state=open&per_page={_OPEN_PULLS_PAGE}&page={page}"
+            listed = parse_answer(_pull_list, self._get(path))
+            pulls.extend(_pull(item) for item in listed)
+            if len(listed) < _OPEN_PULLS_PAGE:
+                return pulls
+            page += 1
 
     def comment(self, repository: str, number: int, body: str) -> None:
         path = f"repos/{repository}/issues/{number}/comments"

@@ -4,7 +4,14 @@ from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.setup.doctor import Check, CheckStatus, run_checks
 
 from support.fake_gh import FakeGh
-from support.fake_setup import USER_CALL, SetupWorld, complete_draft, logged_in, setup_world
+from support.fake_setup import (
+    INSTALLED_GH,
+    USER_CALL,
+    SetupWorld,
+    complete_draft,
+    logged_in,
+    setup_world,
+)
 
 
 def statuses(checks: list[Check]) -> dict[str, CheckStatus]:
@@ -97,7 +104,19 @@ def test_missing_scopes_suggest_a_refresh(tmp_path: Path, fake_gh: FakeGh) -> No
 
     assert login.status is CheckStatus.FAILED
     assert "read:org, workflow" in login.detail
-    assert login.next_step.startswith("gh auth refresh")
+    assert login.next_step == (
+        f"{INSTALLED_GH.path} auth refresh --hostname github.com --scopes read:org,workflow"
+    )
+
+
+def test_without_gh_the_login_cannot_be_checked(tmp_path: Path, fake_gh: FakeGh) -> None:
+    world = configured_world(tmp_path, fake_gh)
+    world.gh.installed = None
+
+    login = run_checks(world.service)[3]
+
+    assert (login.status, login.detail) == (CheckStatus.FAILED, "gh is not installed yet.")
+    assert login.next_step == "Run `flakipype setup`."
 
 
 def test_fine_grained_token_is_a_warning(tmp_path: Path, fake_gh: FakeGh) -> None:
@@ -107,3 +126,11 @@ def test_fine_grained_token_is_a_warning(tmp_path: Path, fake_gh: FakeGh) -> Non
 
     assert login.status is CheckStatus.WARNING
     assert "Workflows" in login.next_step
+
+
+def test_a_failed_login_check_shows_ghs_answer(tmp_path: Path, fake_gh: FakeGh) -> None:
+    fake_gh.record(USER_CALL, stderr="gh: Server Error (HTTP 500)", exit_code=1)
+
+    login = run_checks(configured_world(tmp_path, fake_gh).service)[3]
+
+    assert (login.status, login.detail) == (CheckStatus.FAILED, "gh: Server Error (HTTP 500)")

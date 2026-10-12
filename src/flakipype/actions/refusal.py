@@ -1,15 +1,17 @@
-"""GitHub errors of actions, turned into tool errors that say which permission is missing."""
+"""GitHub errors of actions, turned into tool errors: a missing permission or the rate limit."""
 
 from collections.abc import Generator
 from contextlib import contextmanager
 
 from flakipype.agent.tools import ToolError
-from flakipype.github.actions import GitHubApiError
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 
 _HTTP_FORBIDDEN = 403
 
 
 def refusal(error: GitHubApiError) -> str:
+    if isinstance(error, ApiRateLimitError):
+        return error.next_step()
     if error.status == _HTTP_FORBIDDEN:
         return (
             f"GitHub refused: {error}. flakipype needs write access to Actions: the repo scope "

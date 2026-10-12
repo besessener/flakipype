@@ -96,9 +96,9 @@ Deterministic, before the reviewer and before any dialog:
 | --- | --- |
 | Not empty | At least one changed line |
 | Size | At most 10 files and 400 changed lines (`fix.max_files`, `fix.max_changed_lines`) |
-| Still parses | Changed `.yml`, `.yaml`, `.json`, `.toml` files parse; workflow files still have `on` and `jobs` |
+| Still parses | A changed `.yml`, `.yaml`, `.json` or `.toml` file that parsed before (or is new) still parses. YAML may hold several documents and application tags (`!Sub`, `!Ref`); JSON may start with a byte order mark. A file that did not parse before (JSONC with comments, for example) is not checked. Workflow files, the top-level `.yml` and `.yaml` files in `.github/workflows/`, still hold one document with `on` and `jobs` |
 | Nothing masked | No file gains a `[masked: …]` placeholder; masked lines hide real content |
-| Hides failures | Adds `continue-on-error: true`, `if: always()`, a test skip or focus marker (`pytest.skip(`, `pytest.xfail(`, `pytest.mark.skip`/`xfail` with or without `@`, `@unittest.skip`, `.skipTest(`, `SkipTest`, `.skip(`, `xit(`, `.only(`, `@Disabled`, `@Ignore`, `t.Skip`) or removes more test declarations (including `async def test_`) than it adds |
+| Hides failures | Adds `continue-on-error: true`, `if: always()`, a test skip or focus marker (`pytest.skip(`, `pytest.xfail(`, `pytest.mark.skip`/`xfail` with or without `@`, `@unittest.skip`, `.skipTest(`, `SkipTest`, `.skip(` and `.only(` on a test (`test.`, `it.`, `describe.`, `context.`, `suite.`, `fixture.`, `this.`), `xit(`, `@Disabled`, `@Ignore`, `t.Skip`) that the file did not already hold as often, or removes more test declarations (including `async def test_` and modifier forms such as `test.serial(`) than it adds |
 | Reaches out | Adds a `secrets.` reference, `github.token`, an environment dump (`env`, `printenv`), `curl`, `wget`, `nc`, `ncat`, or an `http(s)://` URL other than localhost (the host must be exactly `localhost`, `127.0.0.1` or `[::1]`; any URL with `user@` counts) |
 | Touches `.github/` | Changes workflows or composite actions under `.github/` |
 
@@ -166,6 +166,8 @@ All through `gh api`, against the configured owner and host only. Right
 before the branch, flakipype looks for an open flakipype pull request for the
 finding once more, since the chat or a run may have opened one while the
 fixer worked; if there is one, nothing is pushed and the message links it.
+Both looks read every page of the repository's open pull requests, so an
+older flakipype pull request behind many newer ones is still found.
 
 1. **Branch.** `POST /repos/{o}/{r}/git/refs` creates
    `refs/heads/flakipype/fix-<workflow>-<hash>` at the pinned commit (the
@@ -311,7 +313,10 @@ The `repo` and `workflow` scopes flakipype already asks for cover branches,
 commits (including workflow files) and pull requests. A fine-grained token
 needs **Contents**, **Pull requests** and **Workflows: read and write**, plus
 **Actions: read and write** for verification. A `403` explains which
-permission is missing, and nothing is retried.
+permission is missing, and nothing is retried. A `403` from GitHub's rate
+limit says so instead and asks to try again after the limit resets. When
+GitHub gives reasons for a refusal (a `422` such as "Draft pull requests are
+not supported in this repository"), the message includes them.
 
 ## Where it lives
 

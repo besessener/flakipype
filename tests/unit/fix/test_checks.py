@@ -79,11 +79,69 @@ def test_files_that_parse_pass(path: str, after: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("path", "before", "after"),
+    [
+        ("tsconfig.json", '{\n  // c\n  "a": false\n}', '{\n  // c\n  "a": true\n}'),
+        ("deploy/app.yaml", "a: [1\nb: 1\n", "a: [1\nb: 2\n"),
+        ("pyproject.toml", "a = \nb = 1\n", "a = \nb = 2\n"),
+    ],
+)
+def test_an_edit_to_a_file_that_did_not_parse_before_is_no_error(
+    path: str, before: str, after: str
+) -> None:
+    assert change_errors([edit(path, after, before)], DiffLimits(10, 400)) == []
+
+
+@pytest.mark.parametrize(
+    ("path", "before", "after"),
+    [
+        ("appsettings.json", '\ufeff{"timeout": 5}', '\ufeff{"timeout": 30}'),
+        ("db.yaml", "kind: Service\n---\nkind: Deployment\nx: 1\n", "kind: Service\n---\nx: 10\n"),
+        ("template.yaml", "Name: !Sub '${A}-q'\nT: 5\n", "Name: !Sub '${A}-q'\nT: 30\n"),
+        ("mkdocs.yml", "f: !!python/name:m.f\nx: [a, b]\n", "f: !!python/name:m.f\nx: [b]\n"),
+        ("k.yml", "a: !Ref {b: 1}\nc: !GetAZs [x]\n", "a: !Ref {b: 2}\nc: !GetAZs [x]\n"),
+        (".github/workflows/matrix.json", '{"node": [18, 20]}', '{"node": [20, 22]}'),
+        (".github/workflows/config/labels.yml", "a: 1\n", "a: 2\n"),
+    ],
+)
+def test_valid_files_that_are_not_strict_json_or_one_document_pass(
+    path: str, before: str, after: str
+) -> None:
+    assert change_errors([edit(path, after, before)], DiffLimits(10, 400)) == []
+
+
+@pytest.mark.parametrize(
+    ("path", "before", "after", "problem"),
+    [
+        ("package.json", '{"a": 1}', '{"a": 1,}', "package.json no longer parses: "),
+        ("new.json", None, "{", "new.json no longer parses: "),
+        ("db.yaml", "a: 1\n---\nb: 2\n", "a: 1\n---\nb: [\n", "db.yaml no longer parses: "),
+        (WORKFLOW, "on: push\njobs: {}\n", "on: push\njobs: {}\n---\na: 1\n", f"{WORKFLOW} is no"),
+        (
+            ".github/workflows/E2E.YML",
+            "on: push\njobs: {}\n",
+            "on: push\n",
+            ".github/workflows/E2E",
+        ),
+    ],
+)
+def test_an_edit_that_breaks_a_file_is_still_an_error(
+    path: str, before: str | None, after: str, problem: str
+) -> None:
+    (error,) = change_errors([edit(path, after, before)], DiffLimits(10, 400))
+
+    assert error.startswith(problem)
+
+
+@pytest.mark.parametrize(
     ("added", "found"),
     [
         ("continue-on-error: true", "adds `continue-on-error: true`"),
         ("if: ${{ always() }}", "adds `if: ${{ always()`"),
-        ("test.skip('slow', () => {})", "adds `.skip(`"),
+        ("test.skip('slow', () => {})", "adds `test.skip(`"),
+        ("  it.only('x', () => {})", "adds `it.only(`"),
+        ("test.describe.skip('suite', () => {})", "adds `test.describe.skip(`"),
+        ("this.skip()", "adds `this.skip(`"),
         ("@pytest.mark.xfail", "adds `pytest.mark.xfail`"),
         ("@pytest.mark.skipif(True, reason='x')", "adds `pytest.mark.skip`"),
         ("pytestmark = [pytest.mark.xfail(strict=False)]", "adds `pytest.mark.xfail`"),
@@ -112,6 +170,33 @@ def test_a_removed_test_is_a_warning(removed: str) -> None:
     assert change_warnings([edit("tests/test_app.py", after, before)]) == [
         "hides failures: tests/test_app.py (removes a test)"
     ]
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("test('uploads', async t => {", "test.serial('uploads', async t => {"),
+        ("it('uploads', () => {", "it.sequential('uploads', () => {"),
+        ("def test_uploads():", "async def test_uploads():"),
+    ],
+)
+def test_a_test_changed_to_its_serial_or_async_form_is_no_warning(before: str, after: str) -> None:
+    change = edit("tests/test_app.py", f"{after}\n    pass\n", f"{before}\n    pass\n")
+
+    assert change_warnings([change]) == []
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("User.find(f).skip(n).limit(s);", "User.find(f).sort({ _id: 1 }).skip(n).limit(s);"),
+        ('Item.objects.only("id")', 'Item.objects.only("id").order_by("id")'),
+        ("let rest = lines.iter().skip(1);", "let rest = lines.iter().skip(2);"),
+        ("test.skip('slow', () => {})", "test.skip('slow', async () => {})"),
+    ],
+)
+def test_an_edited_line_that_already_had_the_call_is_no_warning(before: str, after: str) -> None:
+    assert change_warnings([edit("src/users.js", f"{after}\n", f"{before}\n")]) == []
 
 
 def test_a_renamed_test_is_no_warning() -> None:

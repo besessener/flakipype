@@ -10,7 +10,9 @@ from flakipype.github.actions import (
     GitHubApiError,
     Repository,
     TimeWindow,
+    api_error,
 )
+from flakipype.github.gh import GhResult
 
 from support.fake_gh import FakeGh, gh_fixture
 
@@ -189,3 +191,41 @@ def test_unexpected_answer_is_an_api_error(fake_gh: FakeGh) -> None:
 
     with pytest.raises(GitHubApiError, match="Unexpected answer"):
         ActionsClient(fake_gh.cli()).runs(REPO, WINDOW)
+
+
+def test_a_rest_error_keeps_githubs_reasons() -> None:
+    body = {
+        "message": "Validation Failed",
+        "errors": [
+            {"resource": "PullRequest", "message": "Draft pull requests are not supported."},
+            {"resource": "PullRequest", "code": "invalid"},
+            "No commits between main and fix.",
+        ],
+    }
+    failed = GhResult(1, json.dumps(body), "gh: Validation Failed (HTTP 422)\n")
+
+    error = api_error(failed)
+
+    assert str(error) == (
+        "gh: Validation Failed (HTTP 422): Draft pull requests are not supported.; "
+        "No commits between main and fix."
+    )
+    assert error.status == 422
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    ["", "not json", "[]", '{"message": "Not Found"}', '{"errors": "x"}', "[" * 100_000],
+)
+def test_an_error_without_reasons_keeps_ghs_text(stdout: str) -> None:
+    error = api_error(GhResult(1, stdout, "gh: Not Found (HTTP 404)"))
+
+    assert str(error) == "gh: Not Found (HTTP 404)"
+
+
+def test_a_reason_gh_already_printed_is_not_repeated() -> None:
+    body = json.dumps({"errors": [{"message": "Could not resolve to a Repository"}]})
+
+    error = api_error(GhResult(1, body, "GraphQL: Could not resolve to a Repository (repository)"))
+
+    assert str(error) == "GraphQL: Could not resolve to a Repository (repository)"
