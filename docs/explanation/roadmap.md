@@ -25,7 +25,7 @@ Each milestone is one branch and one pull request.
 | M3 | Agent | Investigators per finding with read-only tools (prepared log excerpts, run history, commit diffs, files), citation check and reviewer, verdicts with evidence, policy gate, budgets, masking; chat with slash commands, resumable sessions; `flakipype investigate`. Design: [the agent](agent.md) |
 | M4 | Actions | In the chat: rerun failed jobs or a whole run, dispatch a workflow, cancel own runs; each confirmed, budgeted and audited; live run view. How it works: [actions](actions.md) |
 | M5 | Fix | Fixer agent with edit tools on an in-memory copy (no clone), checks and reviewer on the diff, one confirmation with the diff, branch plus signed commit through the API, draft PR, verification by rerunning the fix branch; `/mode ask\|auto` in the chat. How it works: [fixes](fix.md) |
-| M6 | Unattended and release | `flakipype run --auto`, `flakipype daemon install` (systemd user timer), install script, multi-distro smoke tests |
+| M6 | Unattended and release | `flakipype run [--mode auto\|ask]` with verifications continued across runs and daily limits, `flakipype daemon install` (systemd user timer), `secrets.store`, verified install script, release `v0.1.0`, smoke tests on Ubuntu, Debian, Fedora and Arch. Design: [unattended runs and release](unattended.md) |
 
 ## Chat commands
 

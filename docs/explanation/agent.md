@@ -25,7 +25,7 @@ and history the way an engineer would. That is the agent's job.
 
 ```text
              ┌──────────────────────────────┐
-  you ──────▶│ Orchestrator (chat / --auto) │  decides what to investigate,
+  you ──────▶│ Orchestrator (chat)          │  decides what to investigate,
              └──────┬───────────────────────┘  talks to you, shows results
                     │ one finding each, in parallel
         ┌───────────┼────────────┐
@@ -72,7 +72,8 @@ through them. Its action tools (`rerun_failed`, `rerun_run`, `dispatch`,
 `instructions` for changes to a fix it showed) in [fixes](fix.md). Slash
 commands do the same without the model. Headless,
 `flakipype investigate` has no orchestrator model: it investigates the
-selected findings and prints the verdicts.
+selected findings and prints the verdicts. Neither has `flakipype run`
+(M6): its steps are fixed in code ([unattended runs](unattended.md)).
 
 ## What the investigator can use
 
