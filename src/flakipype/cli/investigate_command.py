@@ -18,8 +18,8 @@ EXIT_NOT_READY = 2
 def investigate(  # noqa: PLR0913 - Typer maps every command line option to one parameter
     *,
     finding: Annotated[
-        list[int] | None,
-        typer.Option(min=1, help="Finding number from `flakipype scan`; repeat for more."),
+        list[str] | None,
+        typer.Option(help="Finding number, or its reference from `scan --json`; repeat for more."),
     ] = None,
     all_findings: Annotated[
         bool, typer.Option("--all", help="Every finding, also seen once and fixed.")
@@ -46,7 +46,7 @@ def investigate(  # noqa: PLR0913 - Typer maps every command line option to one 
     options = ScanOptions(
         owner=owner, days=days, max_logs=None, min_runs=None, repositories=tuple(repo or ())
     )
-    selection = Selection(numbers=tuple(finding or ()))
+    selection = _selection(finding or [])
     if all_findings:
         selection = Selection(kinds=tuple(FindingKind))
     try:
@@ -68,3 +68,10 @@ def investigate(  # noqa: PLR0913 - Typer maps every command line option to one 
         Console(highlight=False).print(render_investigation(report))
     if not report.complete or not report.scan.complete:
         raise typer.Exit(EXIT_INCOMPLETE)
+
+
+def _selection(findings: list[str]) -> Selection:
+    """Numbers belong to one scan, which this command repeats; references stay valid."""
+    numbers = [int(item) for item in findings if item.isascii() and item.isdigit()]
+    references = [item.lower() for item in findings if not (item.isascii() and item.isdigit())]
+    return Selection(numbers=tuple(numbers), references=tuple(references))

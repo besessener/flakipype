@@ -15,6 +15,7 @@ run.
 flakipype scan                     # note the numbers of the findings
 flakipype investigate              # the flaky jobs and the recurring errors
 flakipype investigate --finding 3  # one finding; repeat --finding for more
+flakipype investigate --finding 3f9c2a1b  # by reference from `scan --json`
 flakipype investigate --all        # also "seen once" and "fixed"
 ```
 
@@ -51,7 +52,7 @@ reached, no verdict) are never stored.
 
 | Option | Meaning |
 | --- | --- |
-| `--finding N` | Investigate finding N (numbers from `flakipype scan`); repeatable |
+| `--finding N` | Investigate finding N, or the finding with a reference from `flakipype scan --json`; repeatable. `investigate` scans again, and new runs can change the numbers since your scan; a reference always names the same finding. In the chat, after `/resume`, a number that now names another finding is refused once, and the sidebar shows the new numbers |
 | `--all` | Every finding instead of flaky jobs and recurring errors |
 | `--fresh` | Ignore stored verdicts |
 | `--days`, `--repo`, `--owner` | As for `flakipype scan` |

@@ -182,6 +182,30 @@ def test_unknown_numbers_are_named(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Nothing to investigate." in text
 
 
+def test_a_reference_from_scan_json_names_the_finding(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = FakeAgent()
+    use(monkeypatch, agent)
+    scanned = json.loads(runner.invoke(app, ["investigate", "--finding", "9", "--json"]).stdout)
+    reference = scanned["scan"]["recurring_errors"][0]["reference"]
+
+    result = runner.invoke(
+        app, ["investigate", "--finding", reference.upper(), "--finding", "deadbeef", "--json"]
+    )
+
+    exported = json.loads(result.stdout)
+    assert [item["finding"] for item in exported["investigations"]] == [3]
+    assert exported["unknown_references"] == ["deadbeef"]
+    assert agent.calls == [3]
+
+
+def test_unknown_references_are_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    use(monkeypatch, FakeAgent())
+
+    result = runner.invoke(app, ["investigate", "--finding", "deadbeef", "--finding", "9"])
+
+    assert "No such finding: #9, deadbeef" in click.unstyle(result.stdout)
+
+
 def test_nothing_to_investigate(monkeypatch: pytest.MonkeyPatch) -> None:
     use(monkeypatch, FakeAgent(), FakeActions())
 

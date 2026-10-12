@@ -27,6 +27,7 @@ owner = "octo-org"
 [scan]
 window_days = 30
 max_log_downloads = 50
+max_job_reads = 500
 min_flaky_runs = 2
 
 [agent]
@@ -72,6 +73,7 @@ store = "auto"
 | `github.owner` | — (required) | GitHub user or organisation name |
 | `scan.window_days` | `30` | 1–400 days to look back (GitHub keeps run history for 400 days, logs usually 90) |
 | `scan.max_log_downloads` | `50` | 0–1000; hard limit of job logs read per scan. Read logs are cached, so later scans continue |
+| `scan.max_job_reads` | `500` | 0–5000; hard limit of attempts whose jobs are read per scan, flaky candidates and newest first. Read jobs are cached, so later scans continue |
 | `scan.min_flaky_runs` | `2` | 1–100; runs with proven flaky events before a job counts as flaky (and before an error counts as recurring). With `1` every single event counts |
 | `agent.max_rounds` | `12` | 1–50 model calls per investigation |
 | `agent.max_tokens_per_investigation` | `200000` | 10k–2M tokens (input, output, cache writes and reads at full weight, thinking) per investigation; also per chat question, counting only what the question adds |

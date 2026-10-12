@@ -44,6 +44,7 @@ class ScanOptions:
             ),
             min_flaky_runs=self.min_runs or settings.scan.min_flaky_runs,
             repositories=self.repositories,
+            max_job_reads=settings.scan.max_job_reads,
         )
 
 

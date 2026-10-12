@@ -102,8 +102,10 @@ def render_investigation(report: InvestigationReport) -> RenderableType:
     header.append(f" · {report.tokens:,} tokens used\n")
     header.append("Assessments by the model, with the evidence it cites. ", style="dim")
     header.append("The scan's facts: flakipype scan.", style="dim")
-    if report.unknown_numbers:
-        unknown = ", ".join(f"#{number}" for number in report.unknown_numbers)
+    if report.unknown_numbers or report.unknown_references:
+        unknown = ", ".join(
+            [*(f"#{number}" for number in report.unknown_numbers), *report.unknown_references]
+        )
         header.append(f"\nNo such finding: {unknown}", style="yellow")
     if not report.results:
         header.append("\nNothing to investigate.", style="green")
@@ -134,6 +136,7 @@ def investigation_as_json(report: InvestigationReport) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "tokens": report.tokens,
         "unknown_findings": list(report.unknown_numbers),
+        "unknown_references": list(report.unknown_references),
         "investigations": [_result_json(result) for result in report.results],
         "scan": report_as_json(report.scan),
     }

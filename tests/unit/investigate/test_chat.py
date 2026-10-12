@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from flakipype.agent.investigator import Status
+from flakipype.flaky.model import WorkflowRun
 from flakipype.github.actions import GitHubApiError
 from flakipype.investigate.chat import ChatEntry, EntryKind, SidebarItem
 from flakipype.investigate.chat_text import HELP
@@ -9,7 +10,7 @@ from flakipype.store.database import ScanCache
 from support.fake_actions import FakeActions
 from support.fake_anthropic import ScriptedModel, call, message, text
 from support.fake_chat import chat_service
-from support.fake_investigation import FakeAgent
+from support.fake_investigation import APP, FakeAgent, world
 
 
 def kinds(entries: list[ChatEntry]) -> list[EntryKind]:
@@ -36,10 +37,11 @@ def test_scan_fills_the_sidebar(cache: ScanCache) -> None:
 
     assert note.text.startswith("Scanned 1 repositories")
     assert chat.workspace.request.window_days == 14
+    references = [finding.reference for finding in chat.workspace.finding_list()]
     assert chat.sidebar() == [
-        SidebarItem(1, "flaky", "octo-org/app › CI › test"),
-        SidebarItem(2, "seen once", "octo-org/app › E2E › e2e"),
-        SidebarItem(3, "recurring error", "octo-org/app › CI › lint"),
+        SidebarItem(1, "flaky", "octo-org/app › CI › test", reference=references[0]),
+        SidebarItem(2, "seen once", "octo-org/app › E2E › e2e", reference=references[1]),
+        SidebarItem(3, "recurring error", "octo-org/app › CI › lint", reference=references[2]),
     ]
     assert chat.handle("/findings")[1].text == chat.handle("/flaky")[1].text
 
@@ -150,6 +152,47 @@ def test_sessions_are_saved_listed_and_resumed(cache: ScanCache) -> None:
     assert [item.number for item in chat.sidebar()] == [1, 2, 3]
     chat.handle("Again?")
     assert [m["role"] for m in model.requests[1]["messages"]] == ["user", "assistant", "user"]
+
+
+def test_a_number_that_moved_since_the_resumed_scan_is_refused_once(cache: ScanCache) -> None:
+    actions = world()
+    agent = FakeAgent()
+    chat = chat_service(cache, ScriptedModel([]), agent=agent, actions=actions)
+    chat.handle("/scan")
+    chat.handle("/new")
+    chat.handle("/resume 1")
+    # The E2E run that made #2 has left the window: the lint error is #2 now.
+    actions.runs_by_repository[APP] = [item for item in world_runs() if item.run_id != 4]
+
+    (_, refused) = chat.handle("/why 2")
+    (_, answered) = chat.handle("/why 2")
+
+    assert refused == ChatEntry(
+        EntryKind.ERROR,
+        "Finding numbers changed since this session's scan (#2). The sidebar now shows the "
+        "current numbers; run the command again with those.",
+    )
+    assert answered.text.startswith("#2 octo-org/app › CI › lint")
+    assert agent.calls == [2]
+
+
+def world_runs() -> list[WorkflowRun]:
+    runs = world().runs_by_repository[APP]
+    assert isinstance(runs, list)
+    return runs
+
+
+def test_numbers_that_still_match_after_a_resume_just_work(cache: ScanCache) -> None:
+    agent = FakeAgent()
+    chat = chat_service(cache, ScriptedModel([]), agent=agent)
+    chat.handle("/scan")
+    chat.handle("/new")
+    chat.handle("/resume 1")
+
+    (_, answered) = chat.handle("/why 1")
+
+    assert answered.text.startswith("#1 octo-org/app › CI › test")
+    assert agent.calls == [1]
 
 
 def test_resuming_an_unknown_session(cache: ScanCache) -> None:

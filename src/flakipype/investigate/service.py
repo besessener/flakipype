@@ -49,11 +49,17 @@ class Selection:
 
     numbers: tuple[int, ...] = ()
     kinds: tuple[FindingKind, ...] = DEFAULT_KINDS
+    # Finding references, which name the same finding in any later scan.
+    references: tuple[str, ...] = ()
 
     def pick(self, findings: Sequence[Finding]) -> list[Finding]:
-        if self.numbers:
-            wanted = set(self.numbers)
-            return [finding for finding in findings if finding.number in wanted]
+        if self.numbers or self.references:
+            numbers, references = set(self.numbers), set(self.references)
+            return [
+                finding
+                for finding in findings
+                if finding.number in numbers or finding.reference in references
+            ]
         return [finding for finding in findings if finding.kind in self.kinds]
 
 
@@ -98,6 +104,7 @@ class InvestigationReport:
     results: list[InvestigationResult]
     tokens: int
     unknown_numbers: tuple[int, ...]
+    unknown_references: tuple[str, ...] = ()
 
     @property
     def complete(self) -> bool:
@@ -168,6 +175,10 @@ class InvestigationService:
         chosen = request.selection.pick(findings)
         known = {finding.number for finding in findings}
         unknown = tuple(number for number in request.selection.numbers if number not in known)
+        referenced = {finding.reference for finding in findings}
+        unknown_references = tuple(
+            reference for reference in request.selection.references if reference not in referenced
+        )
         host = request.scan.host
         results = {} if request.fresh else self._cached(host, chosen)
         budget = budget or self.budget_for(request)
@@ -190,7 +201,7 @@ class InvestigationService:
                     result=result.stored(),
                 )
         ordered = [results[finding.number] for finding in chosen]
-        return InvestigationReport(report, ordered, budget.used, unknown)
+        return InvestigationReport(report, ordered, budget.used, unknown, unknown_references)
 
     def _cached(self, host: str, findings: Sequence[Finding]) -> dict[int, InvestigationResult]:
         cached = {}

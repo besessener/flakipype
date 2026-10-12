@@ -122,6 +122,88 @@ def test_recurring_errors_without_proof_are_listed_apart(cache: ScanCache) -> No
     assert recurring.signature.category.value == "timeout"
 
 
+def recurring_world() -> FakeActions:
+    """The same timeout, rerun-proven flaky in runs 1 and 3, never rerun in runs 4 and 6."""
+    return FakeActions(
+        repositories_found=[Repository(APP, "main")],
+        runs_by_repository={
+            APP: [
+                run(1, attempt=2),
+                run(2),
+                run(3, attempt=2),
+                run(4, conclusion="failure", sha="4" * 40),
+                run(6, conclusion="failure", sha="6" * 40),
+            ]
+        },
+        jobs_by_attempt={
+            (1, 1): [job(11, run_id=1)],
+            (3, 1): [job(31, run_id=3)],
+            (4, 1): [job(41, run_id=4)],
+            (6, 1): [job(61, run_id=6)],
+        },
+        logs={11: LOG, 31: LOG, 41: LOG, 61: LOG},
+    )
+
+
+def test_an_error_proven_flaky_is_not_listed_again_as_recurring(cache: ScanCache) -> None:
+    report = service(recurring_world(), cache).scan(request(min_flaky_runs=2))
+
+    (flaky,) = report.ranking.flaky
+    assert flaky.key.job == "test"
+    assert report.recurring == []
+
+
+def test_a_rate_limit_before_the_logs_keeps_the_cached_signatures(cache: ScanCache) -> None:
+    actions = recurring_world()
+    actions.runs_by_repository[APP] = [
+        run(1, conclusion="failure", sha="1" * 40),
+        run(2, sha="2" * 40),
+        run(3, conclusion="failure", sha="3" * 40),
+    ]
+    scanner = service(actions, cache)
+    scanner.scan(request(min_flaky_runs=2))
+    actions.runs_by_repository[APP] = [
+        run(1, conclusion="failure", sha="1" * 40),
+        run(2, sha="2" * 40),
+        run(3, conclusion="failure", sha="3" * 40),
+        run(5, conclusion="failure", sha="5" * 40),
+    ]
+    actions.jobs_by_attempt[5, 1] = ApiRateLimitError("API rate limit exceeded", 403)
+
+    report = scanner.scan(request(min_flaky_runs=2))
+
+    assert not report.complete
+    (recurring,) = report.recurring
+    assert recurring.runs == 2
+    assert report.attempts_not_read == 1
+
+
+def test_more_repositories_than_the_limit_are_cut_and_reported(cache: ScanCache) -> None:
+    actions = FakeActions(
+        repositories_found=[Repository(f"octo-org/r{number}", "main") for number in range(1001)]
+    )
+
+    report = service(actions, cache).scan(request())
+
+    assert report.repositories == 1000
+    assert report.problems == [
+        (
+            "octo-org has more than 1000 repositories; only 1000 were scanned. "
+            "Choose repositories with --repo."
+        )
+    ]
+
+
+def test_job_reads_are_capped_flaky_attempts_and_newest_first(cache: ScanCache) -> None:
+    actions = recurring_world()
+
+    report = service(actions, cache).scan(request(max_job_reads=2))
+
+    reads = [call for call in actions.calls if call.startswith("jobs")]
+    assert reads == [f"jobs {APP} 3/1", f"jobs {APP} 1/1"]
+    assert report.attempts_not_read == 2
+
+
 def test_proven_failures_get_their_logs_read_first(cache: ScanCache) -> None:
     actions = flaky_world()
     actions.runs_by_repository[APP] = [

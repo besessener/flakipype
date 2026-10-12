@@ -41,6 +41,7 @@ def test_json_report_has_a_stable_documented_shape(cache: ScanCache) -> None:
 
     timeout = report.ranking.seen_once[0].signatures[0].fingerprint
     lint = report.recurring[0].signature.fingerprint
+    references = [finding.reference for finding in report.findings]
     assert json.loads(json.dumps(exported)) == exported
     assert exported == {
         "schema_version": SCHEMA_VERSION,
@@ -51,11 +52,13 @@ def test_json_report_has_a_stable_documented_shape(cache: ScanCache) -> None:
         "repositories": 1,
         "runs": 5,
         "logs_not_read": 0,
+        "attempts_not_read": 0,
         "problems": [],
         "min_flaky_runs": 2,
         "jobs": [
             {
                 "finding": 1,
+                "reference": references[0],
                 "status": "seen_once",
                 "repository": "octo-org/app",
                 "workflow": {"name": "CI", "path": ".github/workflows/ci.yml"},
@@ -83,6 +86,7 @@ def test_json_report_has_a_stable_documented_shape(cache: ScanCache) -> None:
         "recurring_errors": [
             {
                 "finding": 2,
+                "reference": references[1],
                 "repository": "octo-org/app",
                 "workflow": {"name": "CI", "path": ".github/workflows/ci.yml"},
                 "job": "lint",
@@ -103,3 +107,5 @@ def test_json_report_has_a_stable_documented_shape(cache: ScanCache) -> None:
             }
         ],
     }
+    assert len(set(references)) == 2
+    assert all(len(reference) == 8 for reference in references)

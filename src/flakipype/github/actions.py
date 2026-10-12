@@ -17,7 +17,8 @@ from flakipype.github.payloads import JobsPage, RepositoryPayload, RunsPage
 # GitHub returns at most this many results for one filtered run listing.
 RUN_LISTING_CAP = 1000
 PAGE_SIZE = 100
-_REPOSITORY_LIMIT = "1000"
+# The most repositories a scan reads; one more is asked for to notice a longer list.
+REPOSITORY_LIMIT = 1000
 _SMALLEST_WINDOW = timedelta(minutes=1)
 _HTTP_STATUS = re.compile(r"\bHTTP (\d{3})\b")
 _RATE_LIMIT = re.compile(r"rate limit", re.IGNORECASE)
@@ -89,7 +90,8 @@ class ActionsClient:
     def repositories(self, owner: str) -> list[Repository]:
         """Repositories the owner owns, without archived ones and forks."""
         fields = "nameWithOwner,defaultBranchRef"
-        listing = ["repo", "list", owner, "--no-archived", "--source", "--limit", _REPOSITORY_LIMIT]
+        limit = str(REPOSITORY_LIMIT + 1)
+        listing = ["repo", "list", owner, "--no-archived", "--source", "--limit", limit]
         output = self._run([*listing, "--json", fields])
         payloads = parse_answer(_REPOSITORIES.validate_json, output)
         return [

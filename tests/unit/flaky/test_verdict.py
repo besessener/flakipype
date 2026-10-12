@@ -57,6 +57,8 @@ def test_still_failing_has_no_passing_since() -> None:
 
     assert flaky.passing_since is None
     assert flaky.first_seen < flaky.last_seen
+    assert not flaky.recurred
+    assert verdict(flaky, min_runs=2) is Verdict.FLAKY
 
 
 def test_classify_keeps_the_ranking_order_in_each_group() -> None:

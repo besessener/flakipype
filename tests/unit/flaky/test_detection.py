@@ -27,6 +27,22 @@ def test_failed_run_on_a_commit_that_also_passed() -> None:
     assert attempts_to_inspect(runs) == {AttemptRef(1, 1): Signal.SAME_COMMIT}
 
 
+def test_pull_request_runs_give_no_same_commit_proof() -> None:
+    sha = "b" * 40
+    runs = [
+        run(1, conclusion="success", sha=sha),
+        run(2, conclusion="failure", sha=sha, event="pull_request"),
+        run(3, conclusion="success", sha=sha, event="pull_request_target"),
+        run(4, conclusion="failure", sha=sha, event="pull_request"),
+        run(5, conclusion="failure", sha=sha, event="pull_request", attempt=2),
+    ]
+
+    assert attempts_to_inspect(runs) == {}
+    assert attempts_to_inspect([*runs, run(6, sha=sha, event="pull_request", attempt=2)]) == {
+        AttemptRef(6, 1): Signal.RERUN_PASSED
+    }
+
+
 def test_same_commit_needs_the_same_workflow_and_repository() -> None:
     runs = [
         run(1, conclusion="failure"),
