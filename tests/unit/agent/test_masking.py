@@ -14,27 +14,42 @@ JWT = "ey" + "J" + "a" * 20 + "." + "b" * 20 + "." + "c" * 20
 SHORT_HEADER = "ey" + "J" + "a" * 9 + "." + "b" * 10 + "." + "c" * 10
 
 
+GITHUB_APP_TOKEN = "gh" + "s_" + "c3D4" * 9
+GITHUB_OAUTH_TOKEN = "gh" + "o_" + "e5F6" * 9
+AWS_SESSION_KEY = "AS" + "IA" + "QRSTUVWXYZ234567"
+SLACK_TOKEN = "xo" + "xb-" + "1234567890-" + "abcdefghij"
+BEARER = "q" * 20 + "wxyz"
+PASSWORD = "correct-horse-battery"  # noqa: S105 - a fake password the masker must hide
+API_KEY = "abcdef" + "123456"
+URL_PASSWORD = "hunter2secret"  # noqa: S105 - a fake password the masker must hide
+
+
 @pytest.mark.parametrize(
-    ("text", "kind"),
+    ("text", "secret", "kind"),
     [
-        (f"token is {GITHUB_TOKEN} here", "github token"),
-        (f"using {FINE_GRAINED}", "github token"),
-        (f"ANTHROPIC_API_KEY={ANTHROPIC_KEY}", "anthropic key"),
-        (f"aws {AWS_KEY} end", "aws key"),
-        (f"key:\n{KEY_BLOCK}\nafter", "private key"),
-        (f"Authorization: Bearer {'q' * 24}", "bearer token"),
-        (f"cookie {JWT}", "jwt"),
-        ("https://deploy:hunter2secret@example.com/repo.git", "url credentials"),
-        ("DB_PASSWORD=correct-horse-battery", "secret"),
-        ('"api_key": "' + "abcdef" + "123456" + '"', "secret"),
+        (f"token is {GITHUB_TOKEN} here", GITHUB_TOKEN, "github token"),
+        (f"app {GITHUB_APP_TOKEN} here", GITHUB_APP_TOKEN, "github token"),
+        (f"oauth {GITHUB_OAUTH_TOKEN} here", GITHUB_OAUTH_TOKEN, "github token"),
+        (f"using {FINE_GRAINED}", FINE_GRAINED, "github token"),
+        (f"ANTHROPIC_API_KEY={ANTHROPIC_KEY}", ANTHROPIC_KEY, "anthropic key"),
+        (f"aws {AWS_KEY} end", AWS_KEY, "aws key"),
+        (f"aws session {AWS_SESSION_KEY} end", AWS_SESSION_KEY, "aws key"),
+        (f"slack {SLACK_TOKEN} end", SLACK_TOKEN, "slack token"),
+        (f"key:\n{KEY_BLOCK}\nafter", KEY_BLOCK, "private key"),
+        (f"Authorization: Bearer {BEARER}", BEARER, "bearer token"),
+        (f"cookie {JWT}", JWT, "jwt"),
+        (f"https://deploy:{URL_PASSWORD}@example.com/repo.git", URL_PASSWORD, "url credentials"),
+        (f"DB_PASSWORD={PASSWORD}", PASSWORD, "secret"),
+        ('"api_key": "' + API_KEY + '"', API_KEY, "secret"),
     ],
 )
-def test_secret_values_are_masked(text: str, kind: str) -> None:
+def test_secret_values_are_masked(text: str, secret: str, kind: str) -> None:
     masked = Masker().mask(text)
 
     assert f"[masked: {kind}]" in masked
-    for secret in (GITHUB_TOKEN, FINE_GRAINED, ANTHROPIC_KEY, AWS_KEY, "hunter2secret"):
-        assert secret not in masked
+    assert secret not in masked
+    # A pattern that masks only a prefix leaves the tail behind.
+    assert secret[-4:] not in masked
 
 
 def test_known_secrets_are_masked_even_without_a_pattern() -> None:

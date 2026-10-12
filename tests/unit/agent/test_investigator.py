@@ -33,8 +33,9 @@ def investigator(
     limits: Limits | None = None,
     extra: list[Tool] | None = None,
     settings: ModelSettings | None = None,
+    logs: FakeLogs | None = None,
 ) -> Investigator:
-    tools = FindingTools(finding(), evidence(), FakeLogs(), FakeContents()).tools()
+    tools = FindingTools(finding(), evidence(), logs or FakeLogs(), FakeContents()).tools()
     return Investigator(
         client=model.client(),
         settings=settings or ModelSettings(model="m-1"),
@@ -204,6 +205,28 @@ def test_unknown_tools_failing_tools_and_the_gate_answer_with_errors() -> None:
     assert declined == ["rerun"]
     assert "not a job of this workflow" in results["toolu_3"]["content"]
     assert all(result["is_error"] for result in results.values())
+
+
+def test_secrets_in_tool_results_and_tool_errors_are_masked() -> None:
+    logs = FakeLogs(logs={11: "line one\nTOKEN super-secret-value leaked\nline three\n"})
+    model = ScriptedModel(
+        [
+            message(
+                EXCERPT,
+                call("toolu_2", "log_range", {"job_id": 11, "from_line": 1, "to_line": 3}),
+                call("toolu_3", "read_file", {"path": "super-secret-value.py", "ref": "main"}),
+            ),
+            message(submit("toolu_4", "proven flaky", "finding")),
+        ]
+    )
+
+    investigator(model, logs=logs).start(finding_text(finding()))
+
+    results = model.tool_results(1)
+    for call_id in ("toolu_1", "toolu_2", "toolu_3"):
+        assert "super-secret-value" not in results[call_id]["content"]
+        assert "[masked: configured secret]" in results[call_id]["content"]
+    assert results["toolu_3"]["is_error"] is True
 
 
 def test_revise_continues_the_conversation_with_the_questions() -> None:
