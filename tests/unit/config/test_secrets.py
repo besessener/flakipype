@@ -1,3 +1,5 @@
+import errno
+import os
 import stat
 import sys
 from collections.abc import Callable
@@ -91,6 +93,31 @@ def test_file_store_is_only_readable_by_the_owner(tmp_path: Path) -> None:
     FileSecretStore(path).put("llm-api-key", "value-1")
 
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_a_failed_write_keeps_the_stored_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "secrets.json"
+    FileSecretStore(path).put("llm-api-key", "value-1")
+
+    def disk_full(_: int) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(os, "fsync", disk_full)
+    with pytest.raises(SecretStoreError, match=r"Cannot write .*No space left"):
+        FileSecretStore(path).put("llm-api-key", "value-2")
+
+    monkeypatch.undo()
+    assert FileSecretStore(path).get("llm-api-key") == "value-1"
+    assert [entry.name for entry in tmp_path.iterdir()] == ["secrets.json"]
+
+
+def test_a_folder_that_cannot_be_created_is_a_secret_store_error(tmp_path: Path) -> None:
+    (tmp_path / "config").write_text("not a folder", encoding="utf-8")
+
+    with pytest.raises(SecretStoreError, match="Cannot write"):
+        FileSecretStore(tmp_path / "config" / "secrets.json").put("llm-api-key", "value-1")
 
 
 def test_a_file_that_is_not_utf8_is_a_secret_store_error(tmp_path: Path) -> None:

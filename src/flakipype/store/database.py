@@ -85,12 +85,27 @@ class LogResult:
     signature: ErrorSignature | None = None
 
 
+def _schema_version(connection: sqlite3.Connection) -> int:
+    return int(connection.execute("PRAGMA user_version").fetchone()[0])
+
+
 def _migrate(connection: sqlite3.Connection) -> None:
-    version = connection.execute("PRAGMA user_version").fetchone()[0]
-    for number, script in enumerate(MIGRATIONS[version:], start=version + 1):
-        with connection:
+    """All missing steps in one transaction, so a crash or a second process never sees half."""
+    if _schema_version(connection) >= len(MIGRATIONS):
+        return
+    # In legacy mode executescript commits first, which would end the transaction after a step.
+    connection.autocommit = True
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        # Read again under the write lock: another process may have migrated meanwhile.
+        for script in MIGRATIONS[_schema_version(connection) :]:
             connection.executescript(script)
-            connection.execute(f"PRAGMA user_version = {number}")
+        connection.execute(f"PRAGMA user_version = {len(MIGRATIONS)}")
+        connection.execute("COMMIT")
+    finally:
+        # Legacy rollback() ends a failed migration and does nothing after the commit.
+        connection.autocommit = sqlite3.LEGACY_TRANSACTION_CONTROL
+        connection.rollback()
 
 
 def _parse_time(value: str | None) -> datetime | None:

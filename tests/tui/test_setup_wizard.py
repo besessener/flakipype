@@ -7,7 +7,7 @@ import pytest
 from textual.pilot import Pilot
 from textual.widgets import Button, Input, ProgressBar, Static
 
-from flakipype.config.secrets import LLM_API_KEY
+from flakipype.config.secrets import LLM_API_KEY, SecretStoreError
 from flakipype.config.settings import load_settings
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.tui.setup_wizard import LOGIN_BUTTONS, SetupWizard, StatusLine, download_status
@@ -129,6 +129,54 @@ async def test_broken_config_is_shown(
     async with app.run_test(size=SIZE) as pilot:
         await settle(pilot)
         assert shown in str(app.query_one("#save-status", Static).render())
+
+
+async def test_save_over_a_broken_config_keeps_the_file(tmp_path: Path, fake_gh: FakeGh) -> None:
+    logged_in(fake_gh)
+    world = setup_world(tmp_path, fake_gh)
+    world.paths.config_dir.mkdir(parents=True)
+    config = "[run]\nmax_prs_per_day = 1\n\n[agent]\nparalel = 2\n"
+    world.paths.config_file.write_text(config, encoding="utf-8")
+    app = SetupWizard(world.service)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(pilot)
+        await type_into(pilot, "api-key", "key-1")
+        await type_into(pilot, "model", "m-1")
+        await type_into(pilot, "owner", "octo-org")
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        message = str(app.query_one("#save-status", Static).render())
+
+    assert app.return_value is None
+    assert "agent.paralel" in message
+    assert world.paths.config_file.read_text(encoding="utf-8") == config
+
+
+async def test_a_failed_key_write_explains_the_file_store(
+    tmp_path: Path, fake_gh: FakeGh, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    logged_in(fake_gh)
+    world = setup_world(tmp_path, fake_gh)
+    world.service.save(complete_draft())
+
+    def locked(name: str, _: str) -> None:
+        message = f"{name}: the collection is locked"
+        raise SecretStoreError(message)
+
+    monkeypatch.setattr(world.secrets, "put", locked)
+    app = SetupWizard(world.service)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(pilot)
+        await type_into(pilot, "api-key", "key-2")
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        message = " ".join(str(app.query_one("#save-status", Static).render()).split())
+
+    assert app.return_value is None
+    assert "Secret store: llm-api-key: the collection is locked" in message
+    assert "--secret-store file --api-key-stdin" in message
 
 
 async def test_connection_test_success_and_failure(tmp_path: Path, fake_gh: FakeGh) -> None:

@@ -89,7 +89,8 @@ Guide: [find flaky pipelines](../how-to/find-flaky-pipelines.md).
 | `--secret-store auto\|keyring\|file` | Where the API key is kept (`secrets.store`); with a new store, pass the key again |
 
 Omitted options keep their saved value. Setup downloads `gh` if needed and
-ends with the `doctor` checks.
+ends with the `doctor` checks. The wizard (`flakipype setup` without
+`--non-interactive`) takes `--secret-store` too and saves that choice.
 
 ### Exit codes
 
@@ -97,4 +98,4 @@ ends with the `doctor` checks.
 | --- | --- | --- |
 | 0 | Saved and all checks passed (warnings allowed) | All checks passed (warnings allowed) |
 | 1 | Saved, but a check failed; or the wizard was cancelled | A check failed |
-| 2 | Invalid input, no terminal for the wizard, or the secret store cannot be read | The secret store cannot be read |
+| 2 | Invalid input, a configuration file setup cannot keep, no terminal for the wizard, or the secret store cannot be read or written | The secret store cannot be read |

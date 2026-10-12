@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import click
@@ -165,6 +166,47 @@ def test_wizard_cancelled(world: SetupWorld, monkeypatch: pytest.MonkeyPatch) ->
     assert result.exit_code == 1
     assert "Setup cancelled" in output_of(result)
     assert not world.paths.config_file.exists()
+
+
+def test_the_wizard_on_an_unreadable_keyring_explains_the_file_store(
+    world: SetupWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def locked(name: str) -> str | None:
+        message = f"{name}: the collection is locked"
+        raise SecretStoreError(message)
+
+    monkeypatch.setattr(world.secrets, "get", locked)
+    monkeypatch.setattr(setup_commands, "is_interactive_terminal", lambda: True)
+    monkeypatch.setattr(SetupWizard, "run", lambda _: pytest.fail("the wizard started"))
+
+    result = runner.invoke(app, ["setup"])
+
+    assert result.exit_code == 2
+    text = " ".join(output_of(result).split())
+    assert "Secret store: llm-api-key: the collection is locked" in text
+    assert "--secret-store file --api-key-stdin" in text
+
+
+def test_the_wizard_saves_the_chosen_secret_store(
+    world: SetupWorld, fake_gh: FakeGh, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    logged_in(fake_gh)
+    world.service.save(complete_draft())
+    monkeypatch.setattr(setup_commands, "is_interactive_terminal", lambda: True)
+
+    async def press_save(wizard: SetupWizard) -> bool:
+        async with wizard.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("ctrl+s")
+            await pilot.pause()
+        return bool(wizard.return_value)
+
+    monkeypatch.setattr(SetupWizard, "run", lambda wizard: asyncio.run(press_save(wizard)))
+
+    result = runner.invoke(app, ["setup", "--secret-store", "file"])
+
+    assert result.exit_code == 0, result.output
+    assert load_settings(world.paths.config_file).secrets.store is SecretStoreChoice.FILE
 
 
 def test_doctor_healthy(world: SetupWorld, fake_gh: FakeGh) -> None:

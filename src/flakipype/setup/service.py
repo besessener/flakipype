@@ -8,11 +8,11 @@ from flakipype.config.secrets import LLM_API_KEY, SecretStore
 from flakipype.config.settings import (
     GitHubSettings,
     LlmSettings,
-    SecretSettings,
     SecretStoreChoice,
     Settings,
     SettingsError,
     load_settings,
+    read_settings_file,
     save_settings,
 )
 from flakipype.github.auth import (
@@ -59,15 +59,15 @@ class SetupState:
 
 
 def _validated[Model](
-    build: Callable[[], Model], prefix: str
+    build: Callable[[], Model], *prefix: str
 ) -> tuple[Model | None, dict[str, str]]:
     try:
         return build(), {}
     except ValidationError as error:
         errors = {
-            ".".join([prefix, *(str(part) for part in item["loc"])]): str(item["msg"]).removeprefix(
-                "Value error, "
-            )
+            ".".join([*prefix, *(str(part) for part in item["loc"])]): str(
+                item["msg"]
+            ).removeprefix("Value error, ")
             for item in error.errors()
         }
         return None, errors
@@ -119,14 +119,28 @@ class SetupService:
         errors |= github_errors
         if not draft.owner.strip():
             errors["github.owner"] = "is required"
-        if llm is None or github is None or errors:
+        kept, kept_errors = self._kept_settings(draft.secret_store)
+        errors |= kept_errors
+        if llm is None or github is None or kept is None or errors:
             raise InvalidSetupError(errors)
-        # Setup edits only [llm], [github] and the secret store; every other section is kept.
-        current = self.load().settings
-        secrets = (
-            SecretSettings(store=draft.secret_store) if draft.secret_store else current.secrets
-        )
-        return current.model_copy(update={"llm": llm, "github": github, "secrets": secrets})
+        return kept.model_copy(update={"llm": llm, "github": github})
+
+    def _kept_settings(
+        self, secret_store: SecretStoreChoice | None
+    ) -> tuple[Settings | None, dict[str, str]]:
+        """The sections setup does not edit, as the file has them; never defaults for a bad file."""
+        path = self._paths.config_file
+        try:
+            content = read_settings_file(path)
+        except SettingsError as error:
+            return None, {"config": str(error)}
+        kept = {name: value for name, value in content.items() if name not in {"llm", "github"}}
+        if secret_store:
+            kept["secrets"] = {"store": secret_store.value}
+        settings, errors = _validated(lambda: Settings.model_validate(kept))
+        if errors:
+            errors["config"] = f"setup edits only [llm], [github] and [secrets]; fix {path} by hand"
+        return settings, errors
 
     def _validated_llm(self, draft: SetupDraft) -> tuple[LlmSettings | None, dict[str, str]]:
         model = draft.model.strip()
