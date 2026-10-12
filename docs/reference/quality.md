@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Formatting | ruff format | One style, no discussion |
 | Lint | ruff (`select = ["ALL"]`) | Bugs, security (bandit rules), complexity ≤ 10 per function, at most 4 parameters (3 positional) |
-| Types | mypy `--strict` | Fully typed `src` and `tests`; ignores need an error code |
+| Types | ty, plus ruff `ANN` for annotations | Fully typed `src` and `tests`; warnings fail; ignores are `# ty: ignore[<rule>]` (`type: ignore` is not honoured) |
 | Architecture | import-linter | Layer contract, see [architecture](../explanation/architecture.md) |
 | Dependencies | deptry | No unused, missing or misplaced dependencies |
 | Dead code | vulture | No unused code |

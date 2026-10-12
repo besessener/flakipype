@@ -7,7 +7,7 @@
 | `format` | `ruff format` | Format all files |
 | `format-check` | `ruff format --check` | Fail on unformatted files |
 | `lint` | `ruff check` | Lint with all ruff rules (exceptions in `pyproject.toml`) |
-| `typecheck` | `mypy` | Type check `src` and `tests` in strict mode |
+| `typecheck` | `ty check` | Type check `src` and `tests` (rules in `pyproject.toml`) |
 | `arch` | `lint-imports` | Architecture boundaries (import-linter) |
 | `deps` | `deptry src` | Unused, missing and misplaced dependencies |
 | `deadcode` | `vulture` | Dead code |

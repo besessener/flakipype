@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import ClassVar
 
@@ -35,7 +35,7 @@ class RecordingApp:
 
 def in_terminal(monkeypatch: pytest.MonkeyPatch, error: Exception | None = None) -> None:
     @contextmanager
-    def open_chat() -> Iterator[tuple[ChatService, Settings]]:
+    def open_chat() -> Generator[tuple[ChatService, Settings]]:
         if error is not None:
             raise error
         with ScanCache.in_memory() as cache:

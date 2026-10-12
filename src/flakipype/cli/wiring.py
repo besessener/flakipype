@@ -6,7 +6,7 @@ import platform
 import shutil
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -148,7 +148,7 @@ def _scan_service(actions: ActionsClient, cache: ScanCache) -> ScanService:
 
 
 @contextmanager
-def open_scan() -> Iterator[tuple[ScanService, Settings]]:
+def open_scan() -> Generator[tuple[ScanService, Settings]]:
     paths = _paths()
     settings = _ready_settings(paths)
     actions = ActionsClient(_gh_cli(paths, settings.github.host))
@@ -195,7 +195,7 @@ class _Agentic:
 
 
 @contextmanager
-def _open_agentic() -> Iterator[_Agentic]:
+def _open_agentic() -> Generator[_Agentic]:
     paths = _paths()
     settings = _ready_settings(paths)
     if not settings.llm.model:
@@ -224,7 +224,7 @@ def _open_agentic() -> Iterator[_Agentic]:
 
 
 @contextmanager
-def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
+def open_investigation() -> Generator[tuple[InvestigationService, Settings]]:
     with _open_agentic() as agentic:
         yield agentic.service, agentic.settings
 
@@ -254,7 +254,7 @@ def _fix_service(
 
 
 @contextmanager
-def open_chat() -> Iterator[tuple[ChatService, Settings]]:
+def open_chat() -> Generator[tuple[ChatService, Settings]]:
     with _open_agentic() as agentic:
         settings = agentic.settings
         request = ScanRequest(
@@ -305,7 +305,7 @@ def open_chat() -> Iterator[tuple[ChatService, Settings]]:
 
 
 @contextmanager
-def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Iterator[RunService]:
+def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Generator[RunService]:
     """Raises RunLockedError while another run holds the lock, before anything else happens."""
     with run_lock(_paths().run_lock_file), _open_agentic() as agentic:
         settings, cache = agentic.settings, agentic.cache

@@ -1,7 +1,7 @@
 """One `flakipype run` at a time, through SQLite's file lock: the OS releases it if a run dies."""
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -11,7 +11,7 @@ class RunLockedError(Exception):
 
 
 @contextmanager
-def run_lock(path: Path) -> Iterator[None]:
+def run_lock(path: Path) -> Generator[None]:
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, timeout=0, isolation_level=None)
     try:

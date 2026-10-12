@@ -315,10 +315,11 @@ class ChatService:
             chat_tokens=int(document["chat_tokens"]),
         )
         self._agent.restore(document["history"])
-        scan = document["scan"]
-        self._workspace.request = ScanRequest(
-            **{**scan, "repositories": tuple(scan["repositories"])}
-        )
+        scan: dict[str, Any] = {
+            **document["scan"],
+            "repositories": tuple(document["scan"]["repositories"]),
+        }
+        self._workspace.request = ScanRequest(**scan)
         self._workspace.report = None
         self._workspace.results = {}
         self._workspace.actions.reset()

@@ -41,7 +41,7 @@ def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
     previous = keyring.get_keyring()
-    keyring.set_keyring(fail.Keyring())  # type: ignore[no-untyped-call]  # keyring's __init__ is unannotated
+    keyring.set_keyring(fail.Keyring())
     yield tmp_path
     keyring.set_keyring(previous)
 

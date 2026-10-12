@@ -1,5 +1,5 @@
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Annotated
 
@@ -65,7 +65,7 @@ def setup(  # noqa: PLR0913 - Typer maps every command line option to one parame
 
 
 @contextmanager
-def _secret_store_errors() -> Iterator[None]:
+def _secret_store_errors() -> Generator[None]:
     try:
         yield
     except SecretStoreError as error:

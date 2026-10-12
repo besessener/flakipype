@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from flakipype.flaky.detection import find_flaky_failures
 from flakipype.flaky.model import AttemptRef, WorkflowRun
 from flakipype.flaky.recurring import (
@@ -18,7 +20,7 @@ EXIT = ErrorSignature(
 
 def branch_run(run_id: int, branch: str, conclusion: str = "failure") -> WorkflowRun:
     built = run(run_id, conclusion=conclusion, sha=f"{run_id:040d}")
-    return type(built)(**{**built.__dict__, "head_branch": branch})
+    return replace(built, head_branch=branch)
 
 
 def test_latest_attempts_of_failed_tracked_runs() -> None:

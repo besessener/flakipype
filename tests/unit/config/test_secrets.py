@@ -111,7 +111,7 @@ def test_unreadable_file_is_a_secret_store_error(tmp_path: Path, content: str) -
 
 
 def no_keyring() -> KeyringBackend:
-    return fail.Keyring()  # type: ignore[no-untyped-call]  # keyring's __init__ is unannotated
+    return fail.Keyring()
 
 
 @pytest.mark.parametrize(

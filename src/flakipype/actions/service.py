@@ -1,6 +1,6 @@
 """The chat's actions: targets checked, a request for the gate, budget, audit and watching."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -124,7 +124,7 @@ class ActionService:
         self._watch.runs.extend(runs)
 
     @contextmanager
-    def commanded(self) -> Iterator[None]:
+    def commanded(self) -> Generator[None]:
         """Actions prepared inside are recorded as asked for by a command, not by the model."""
         self._origin = Origin.COMMAND
         try:

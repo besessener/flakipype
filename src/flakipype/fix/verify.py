@@ -51,12 +51,13 @@ class Verification:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Verification":
-        return cls(**{
+        fields: dict[str, Any] = {
             **data, "started": datetime.fromisoformat(data["started"]),
             "rate": Rate(**data["rate"]), "fingerprints": tuple(data["fingerprints"]),
             "stage": Stage(data["stage"]),
             "watched": tuple(data["watched"]), "results": tuple(data["results"]),
-        })  # fmt: skip
+        }  # fmt: skip
+        return cls(**fields)
 
 
 class CommitRuns(Protocol):

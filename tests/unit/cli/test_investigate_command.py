@@ -1,6 +1,6 @@
 import io
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import replace
 
@@ -38,7 +38,7 @@ def use(
     monkeypatch: pytest.MonkeyPatch, agent: FakeAgent, actions: FakeActions | None = None
 ) -> None:
     @contextmanager
-    def open_investigation() -> Iterator[tuple[InvestigationService, Settings]]:
+    def open_investigation() -> Generator[tuple[InvestigationService, Settings]]:
         with ScanCache.in_memory() as cache:
             scan = ScanService(
                 actions=actions or world(), cache=cache, now=lambda: START.replace(day=9)

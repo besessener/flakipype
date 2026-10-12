@@ -67,7 +67,8 @@ class WatchedRun:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WatchedRun":
         started = datetime.fromisoformat(data["started"])
-        return cls(**{**data, "kind": RunKind(data["kind"]), "started": started})
+        fields: dict[str, Any] = {**data, "kind": RunKind(data["kind"]), "started": started}
+        return cls(**fields)
 
 
 def job_detail(jobs: list[JobState]) -> str:

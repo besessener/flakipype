@@ -1,6 +1,6 @@
 """The chat's fixes: which findings, the fixer, one confirmation, delivery and verification."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -65,7 +65,7 @@ class FixTarget:
 
 
 @contextmanager
-def _from_github() -> Iterator[None]:
+def _from_github() -> Generator[None]:
     try:
         yield
     except GitHubApiError as error:

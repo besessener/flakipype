@@ -1,6 +1,6 @@
 """GitHub errors of actions, turned into tool errors that say which permission is missing."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 from flakipype.agent.tools import ToolError
@@ -20,7 +20,7 @@ def refusal(error: GitHubApiError) -> str:
 
 
 @contextmanager
-def from_github() -> Iterator[None]:
+def from_github() -> Generator[None]:
     try:
         yield
     except GitHubApiError as error:
