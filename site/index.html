@@ -31,8 +31,8 @@
           explains the likely cause with evidence and fixes it through a draft pull request, verified by rerunning the fix branch.
         </p>
         <p class="actions">
-          <a class="button primary" href="#start">Install</a>
-          <a class="button" href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/getting-started.md">Getting started</a>
+          <a class="button primary" href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/getting-started.md">Getting started</a>
+          <a class="button" href="https://github.com/besessener/flakipype">Source on GitHub</a>
         </p>
         <img
           class="shot"
@@ -90,21 +90,15 @@
 
       <section id="start">
         <h2>Get started</h2>
-        <p class="section-lead">
-          Requires Linux (x86_64 or aarch64, glibc) with <code>curl</code>, <code>tar</code> and <code>git</code>. The script installs
-          <a href="https://docs.astral.sh/uv/">uv</a> if you have none, checked against its published SHA-256.
-        </p>
-        <pre><code>curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
-sh install.sh</code></pre>
         <ol class="steps">
+          <li>
+            <strong>Install.</strong> On Linux (x86_64 or aarch64, glibc), as described in
+            <a href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/getting-started.md">getting started</a>.
+          </li>
           <li><strong>Set up.</strong> <code>flakipype setup</code> asks for the model endpoint, downloads and verifies <code>gh</code> if needed and logs in to GitHub.</li>
           <li><strong>Scan.</strong> <code>flakipype scan</code> finds and ranks the flaky jobs of your user or organisation.</li>
           <li><strong>Fix.</strong> Run <code>flakipype</code> for the chat: investigate a finding, then <code>/fix</code> it and confirm the draft pull request.</li>
         </ol>
-        <p>
-          The <a href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/getting-started.md">getting started</a> tutorial walks you
-          through it step by step.
-        </p>
       </section>
 
       <section id="docs">

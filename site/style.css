@@ -219,15 +219,6 @@ code {
   font-size: 0.9em;
 }
 
-pre {
-  overflow-x: auto;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--canvas);
-  line-height: 1.5;
-}
-
 .checks,
 .steps {
   padding-left: 1.25rem;
