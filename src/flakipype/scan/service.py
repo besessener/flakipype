@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import partial
@@ -14,10 +14,11 @@ from flakipype.flaky.recurring import (
     latest_failed_attempts,
     unproven_failures,
 )
-from flakipype.flaky.scoring import rank_flaky_jobs
+from flakipype.flaky.scoring import FlakyKey, rank_flaky_jobs
 from flakipype.flaky.signature import ErrorSignature, signature_from_log
 from flakipype.flaky.verdict import FlakyRanking, classify
 from flakipype.github.actions import (
+    REPOSITORY_LIMIT,
     ApiRateLimitError,
     GitHubApiError,
     Repository,
@@ -46,6 +47,7 @@ class ScanRequest:
     max_log_downloads: int
     min_flaky_runs: int = 2
     repositories: tuple[str, ...] = ()
+    max_job_reads: int = 500
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,8 @@ class ScanReport:
     logs_not_read: int
     complete: bool
     evidence: Evidence = field(default_factory=Evidence)
+    # Attempts whose jobs were not read yet (limit or early stop); later scans continue.
+    attempts_not_read: int = 0
 
     @property
     def findings(self) -> list[Finding]:
@@ -81,6 +85,7 @@ class _Scan:
     signatures: dict[int, ErrorSignature] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
     logs_not_read: int = 0
+    attempts_not_read: int = 0
 
     @property
     def host(self) -> str:
@@ -126,34 +131,50 @@ class ScanService:
         window = TimeWindow(end - timedelta(days=request.window_days), end)
         scan = _Scan(request, window, on_progress)
         on_progress(Progress(Stage.REPOSITORIES, 0, 1, request.owner))
-        repositories = select_repositories(
-            self._actions.repositories(request.owner), request.repositories
-        )
-        complete = True
-        try:
-            self._read_runs(scan, repositories)
-            self._read_jobs(scan)
-            self._read_logs(scan)
-        except _RateLimitReachedError as error:
-            complete = False
-            scan.problems.append(f"Stopped early: {error}. Run the scan again later.")
+        listed = self._actions.repositories(request.owner)
+        if len(listed) > REPOSITORY_LIMIT:
+            listed = listed[:REPOSITORY_LIMIT]
+            scan.problems.append(
+                f"{request.owner} has more than {REPOSITORY_LIMIT} repositories; only "
+                f"{REPOSITORY_LIMIT} were scanned. Choose repositories with --repo."
+            )
+        repositories = select_repositories(listed, request.repositories)
+        complete = self._stage(scan, lambda: self._read_runs(scan, repositories))
+        complete = complete and self._stage(scan, lambda: self._read_jobs(scan))
+        # Cached logs count even when the scan stopped before it could read new ones.
+        to_read = self._cached_logs(scan)
+        complete = complete and self._stage(scan, lambda: self._read_logs(scan, to_read))
         proven = find_flaky_failures(scan.runs, scan.jobs)
         unproven = unproven_failures(scan.runs, scan.jobs, proven)
+        ranking = classify(
+            rank_flaky_jobs(scan.runs, proven, scan.signatures), request.min_flaky_runs
+        )
         return ScanReport(
             owner=request.owner,
             host=request.host,
             window=window,
             repositories=len(repositories),
             runs=len(scan.runs),
-            ranking=classify(
-                rank_flaky_jobs(scan.runs, proven, scan.signatures), request.min_flaky_runs
+            ranking=ranking,
+            recurring=find_recurring_errors(
+                unproven, scan.signatures, request.min_flaky_runs, proven=_proven_errors(ranking)
             ),
-            recurring=find_recurring_errors(unproven, scan.signatures, request.min_flaky_runs),
             problems=scan.problems,
             logs_not_read=scan.logs_not_read,
             complete=complete,
             evidence=Evidence(scan.runs, scan.jobs, scan.signatures),
+            attempts_not_read=scan.attempts_not_read,
         )
+
+    @staticmethod
+    def _stage(scan: _Scan, read: Callable[[], None]) -> bool:
+        """False when a rate limit stopped the stage; the scan keeps what it has."""
+        try:
+            read()
+        except _RateLimitReachedError as error:
+            scan.problems.append(f"Stopped early: {error}. Run the scan again later.")
+            return False
+        return True
 
     def _read_runs(self, scan: _Scan, repositories: Sequence[Repository]) -> None:
         total = len(repositories)
@@ -171,25 +192,32 @@ class ScanService:
 
     def _read_jobs(self, scan: _Scan) -> None:
         # Attempts that can be flaky, plus the last attempt of every failed run (recurring errors).
-        candidates = [*attempts_to_inspect(scan.runs), *latest_failed_attempts(scan.runs)]
-        refs = list(dict.fromkeys(candidates))
+        created = {run.run_id: run.created_at for run in scan.runs}
+        flaky = _newest_first(attempts_to_inspect(scan.runs), created)
+        refs = list(
+            dict.fromkeys([*flaky, *_newest_first(latest_failed_attempts(scan.runs), created)])
+        )
         scan.jobs = self._cache.cached_jobs(scan.host, refs)
         missing = [ref for ref in refs if ref not in scan.jobs]
+        to_read = missing[: scan.request.max_job_reads]
+        scan.attempts_not_read = len(missing)
         repository_of = {run.run_id: run.repository for run in scan.runs}
-        for done, ref in enumerate(missing):
+        for done, ref in enumerate(to_read):
             repository = repository_of[ref.run_id]
             scan.on_progress(
-                Progress(Stage.JOBS, done, len(missing), f"{repository} #{ref.run_id}")
+                Progress(Stage.JOBS, done, len(to_read), f"{repository} #{ref.run_id}")
             )
             read = partial(self._actions.attempt_jobs, repository, ref.run_id, ref.attempt)
             action = f"read the jobs of run {ref.run_id}"
             jobs = _guarded(scan, read, repository=repository, action=action)
+            scan.attempts_not_read -= 1
             if jobs is not None:
                 self._cache.save_jobs(scan.host, ref, jobs)
                 scan.jobs[ref] = jobs
-        scan.on_progress(Progress(Stage.JOBS, len(missing), len(missing)))
+        scan.on_progress(Progress(Stage.JOBS, len(to_read), len(to_read)))
 
-    def _read_logs(self, scan: _Scan) -> None:
+    def _cached_logs(self, scan: _Scan) -> list[tuple[int, str]]:
+        """Loads the cached log results; the logs still to read, as (job id, repository)."""
         proven = find_flaky_failures(scan.runs, scan.jobs)
         unproven = unproven_failures(scan.runs, scan.jobs, proven)
         # Proven flaky failures first, then the other failed jobs; newest first within each.
@@ -201,10 +229,12 @@ class ScanService:
         results = self._cache.log_results(scan.host, repository_of)
         scan.signatures = {job_id: r.signature for job_id, r in results.items() if r.signature}
         missing = [job_id for job_id in repository_of if job_id not in results]
-        to_read = missing[: scan.request.max_log_downloads]
         scan.logs_not_read = len(missing)
-        for done, job_id in enumerate(to_read):
-            repository = repository_of[job_id]
+        return [(job_id, repository_of[job_id]) for job_id in missing]
+
+    def _read_logs(self, scan: _Scan, missing: list[tuple[int, str]]) -> None:
+        to_read = missing[: scan.request.max_log_downloads]
+        for done, (job_id, repository) in enumerate(to_read):
             scan.on_progress(Progress(Stage.LOGS, done, len(to_read), f"{repository} job {job_id}"))
             read = partial(self._read_log, repository, job_id)
             action = f"read the log of job {job_id}"
@@ -218,6 +248,18 @@ class ScanService:
 
     def _read_log(self, repository: str, job_id: int) -> LogResult:
         return _log_result(self._actions.job_log(repository, job_id))
+
+
+def _newest_first(refs: Iterable[AttemptRef], created: dict[int, datetime]) -> list[AttemptRef]:
+    return sorted(refs, key=lambda ref: created[ref.run_id], reverse=True)
+
+
+def _proven_errors(ranking: FlakyRanking) -> frozenset[tuple[FlakyKey, str]]:
+    """The errors of jobs proven flaky, so they are not listed again as recurring errors."""
+    jobs = [*ranking.flaky, *ranking.seen_once, *ranking.fixed]
+    return frozenset(
+        (job.key, signature.fingerprint) for job in jobs for signature in job.signatures
+    )
 
 
 def _seen_at(run: WorkflowRun, job: JobResult) -> datetime:

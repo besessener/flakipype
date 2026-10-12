@@ -15,11 +15,13 @@ version; renaming or removing one raises the version.
   "repositories": 18,
   "runs": 1396,
   "logs_not_read": 0,
+  "attempts_not_read": 0,
   "problems": [],
   "min_flaky_runs": 2,
   "jobs": [
     {
       "finding": 1,
+      "reference": "3f9c2a1b",
       "status": "flaky",
       "repository": "octo-org/app",
       "workflow": {"name": "CI", "path": ".github/workflows/ci.yml"},
@@ -75,6 +77,7 @@ How the statuses are decided: [how flakiness is detected](../explanation/flake-d
 | `repositories` | int | Repositories scanned (no archived ones, no forks) |
 | `runs` | int | Workflow runs listed in the window |
 | `logs_not_read` | int | Failed jobs whose log was not read yet (limit or early stop) |
+| `attempts_not_read` | int | Attempts whose jobs were not read yet (`scan.max_job_reads` or early stop); later scans continue |
 | `problems` | list of strings | Repositories or items that could not be read |
 | `min_flaky_runs` | int | Runs needed for status `flaky` |
 | `jobs` | list | Jobs with proven flaky events: all `flaky` ones in ranking order, then `seen_once`, then `fixed` |
@@ -84,8 +87,9 @@ How the statuses are decided: [how flakiness is detected](../explanation/flake-d
 
 | Field | Meaning |
 | --- | --- |
-| `finding` | The finding number, as shown by `flakipype scan` and used by `flakipype investigate --finding N` |
-| `status` | `flaky`, `seen_once` (fewer runs than `min_flaky_runs`) or `fixed` (all events before the workflow passed for good) |
+| `finding` | The finding number, as shown by `flakipype scan`. Numbers belong to one scan: a later scan (which `investigate` runs) can number differently |
+| `reference` | 8 hex characters that name the same finding in any later scan; `flakipype investigate --finding REF` accepts it |
+| `status` | `flaky`, `seen_once` (fewer runs than `min_flaky_runs`) or `fixed` (all events before the workflow passed again for good) |
 | `repository`, `workflow.name`, `workflow.path`, `job`, `step` | Where the failures happen; `step` is the first failed step, empty if unknown |
 | `flaky_failures` | Failed jobs with proof (one run can contribute several attempts) |
 | `affected_runs` | Distinct runs with such a failure |
@@ -103,6 +107,7 @@ How the statuses are decided: [how flakiness is detected](../explanation/flake-d
 | Field | Meaning |
 | --- | --- |
 | `finding` | The finding number; numbering continues after `jobs[]` |
+| `reference` | As in `jobs[]` |
 | `repository`, `workflow`, `job`, `step` | As in `jobs[]` |
 | `runs` | Runs that ended with this error |
 | `branches` | Branches those runs were on |

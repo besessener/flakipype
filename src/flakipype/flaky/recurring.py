@@ -60,15 +60,22 @@ def find_recurring_errors(
     failures: Iterable[FailedJob],
     signatures: Mapping[int, ErrorSignature],
     min_runs: int,
+    *,
+    proven: frozenset[tuple[FlakyKey, str]] = frozenset(),
 ) -> list[RecurringError]:
-    """Same job, step and error in at least `min_runs` runs, on any branch; most runs first."""
+    """Same job, step and error in at least `min_runs` runs, on any branch; most runs first.
+
+    `proven` holds the (job, fingerprint) pairs the scan already proved flaky; they are skipped.
+    """
     groups: defaultdict[tuple[FlakyKey, str], list[FailedJob]] = defaultdict(list)
     for failure in failures:
         signature = signatures.get(failure.job.job_id)
         # A generic exit code says nothing about the cause, so it cannot tie runs together.
         if signature is None or signature.category is Category.EXIT_CODE:
             continue
-        groups[_key(failure), signature.fingerprint].append(failure)
+        group = (_key(failure), signature.fingerprint)
+        if group not in proven:
+            groups[group].append(failure)
     recurring = [
         _summarise(key, group, signatures[group[0].job.job_id])
         for (key, _), group in groups.items()

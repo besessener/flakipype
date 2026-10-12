@@ -80,6 +80,28 @@ def test_weak_error_words_are_the_last_resort() -> None:
     assert signature.message == "upload failed, retrying"
 
 
+@pytest.mark.parametrize(
+    "cause",
+    [
+        "TypeError: Cannot read properties of undefined (reading 'connect')",
+        "AssertionError: expected 3 to equal 4",
+        "AssertionError [ERR_ASSERTION]: values are not equal",
+        "java.lang.IllegalStateException: pool closed",
+    ],
+)
+def test_compound_error_names_win_over_a_generic_exit_code(cause: str) -> None:
+    log = (
+        f"{STAMP}seeding\n{STAMP}{cause}\n{STAMP}    at main (scripts/seed.js:4:9)\n"
+        f"{STAMP}Node.js v20.11.0\n{STAMP}##[error]Process completed with exit code 1.\n"
+    )
+
+    signature = signature_from_log(log)
+
+    assert signature is not None
+    assert signature.category is not Category.EXIT_CODE
+    assert signature.message == normalise(cause)
+
+
 def test_generic_exit_code_is_the_fallback() -> None:
     log = f"{STAMP}compiling\n{STAMP}##[error]Process completed with exit code 2.\n"
 
@@ -139,6 +161,13 @@ def test_normalise(raw: str, normalised: str) -> None:
         ("AssertionError: expected 2 to equal 1", Category.ASSERTION),
         ("Process completed with exit code 1.", Category.EXIT_CODE),
         ("Something odd happened", Category.OTHER),
+        ("Request failed with status code 502", Category.NETWORK),
+        ("HTTP/1.1 503 Service Unavailable", Category.NETWORK),
+        ("upstream answered 504 Gateway Timeout", Category.NETWORK),
+        ("GET /api -> status: 429", Category.RATE_LIMIT),
+        ("tests/e2e/scan.spec.ts:503:7 expect(locator).toHaveCount", Category.ASSERTION),
+        ("Error: something broke at app.ts:429", Category.OTHER),
+        ("1 failed, 503 passed in 12.3s", Category.OTHER),
     ],
 )
 def test_categories(text: str, category: Category) -> None:

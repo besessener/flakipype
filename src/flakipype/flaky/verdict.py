@@ -13,14 +13,15 @@ class Verdict(StrEnum):
     SEEN_ONCE = "seen_once"
     """Fewer affected runs than required; a single event can be an outage or a fix."""
     FIXED = "fixed"
-    """Several failures, all before the workflow started passing for good: a real error fixed."""
+    """Several failures, all before the workflow passed again for good: a real error fixed."""
 
 
 def verdict(job: FlakyJob, min_runs: int) -> Verdict:
     if job.affected_runs < min_runs:
         return Verdict.SEEN_ONCE
-    # One run cannot recur; with min_runs = 1 the user asked to count it anyway.
-    if job.affected_runs > 1 and not job.recurred:
+    # One run cannot recur; with min_runs = 1 the user asked to count it anyway. A job with no
+    # pass since its failures is not fixed: it is investigated like a flaky one.
+    if job.affected_runs > 1 and not job.recurred and job.passing_since is not None:
         return Verdict.FIXED
     return Verdict.FLAKY
 

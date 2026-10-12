@@ -1,5 +1,6 @@
 """Numbered findings of a scan: what the user can pick and the agent can investigate."""
 
+import hashlib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -10,6 +11,8 @@ from flakipype.flaky.recurring import RecurringError
 from flakipype.flaky.scoring import FlakyJob, FlakyKey
 from flakipype.flaky.signature import ErrorSignature
 from flakipype.flaky.verdict import FlakyRanking
+
+_REFERENCE_LENGTH = 8
 
 
 class FindingKind(StrEnum):
@@ -44,6 +47,11 @@ class Finding:
         key = self.key
         parts = (self.kind, key.repository, key.workflow_path, key.job, key.step, self.fingerprint)
         return "|".join(parts)
+
+    @property
+    def reference(self) -> str:
+        """A short form of the identity; unlike the number, it names the same finding later."""
+        return hashlib.sha256(self.identity.encode("utf-8")).hexdigest()[:_REFERENCE_LENGTH]
 
 
 def _when(moment: datetime) -> str:

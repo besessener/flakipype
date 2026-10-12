@@ -82,9 +82,10 @@ described in the [scan JSON reference](../reference/scan-json.md).
 
 Jobs of finished attempts and the results of read logs never change, so
 flakipype caches them in `~/.local/share/flakipype/cache.sqlite3`. A second
-scan only lists the runs again. Logs are read at most `max_log_downloads` per
-scan, newest flaky failures first; the next scan continues where the last one
-stopped. Deleting the cache file is always safe.
+scan only lists the runs again. Jobs are read for at most `max_job_reads`
+attempts and logs at most `max_log_downloads` per scan, newest flaky
+failures first; the next scan continues where the last one stopped, and the
+*Notes* say how many are left. Deleting the cache file is always safe.
 
 ## When something goes wrong
 

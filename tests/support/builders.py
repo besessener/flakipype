@@ -14,6 +14,7 @@ def run(
     workflow: str = ".github/workflows/ci.yml",
     repository: str = "octo-org/app",
     name: str = "CI",
+    event: str = "push",
 ) -> WorkflowRun:
     return WorkflowRun(
         repository=repository,
@@ -22,7 +23,7 @@ def run(
         workflow_name=name,
         head_sha=sha,
         head_branch="main",
-        event="push",
+        event=event,
         attempt=attempt,
         conclusion=conclusion,
         created_at=START + timedelta(hours=run_id),

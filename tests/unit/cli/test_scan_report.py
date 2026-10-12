@@ -144,11 +144,12 @@ def test_labels_and_plurals() -> None:
 def test_clean_report_with_notes() -> None:
     problems = ["octo-org/docs: could not list runs: gh: Not Found (HTTP 404)"]
 
-    text = rendered(report(ranking(), problems=problems, logs_not_read=3))
+    text = rendered(report(ranking(), problems=problems, logs_not_read=3, attempts_not_read=40))
 
     assert "No flaky jobs found" in text
     assert "• octo-org/docs: could not list runs" in text
     assert "3 logs not read (limit: scan.max_log_downloads)" in text
+    assert "40 failed runs not inspected yet (limit:" in " ".join(text.split())
 
 
 @pytest.mark.parametrize(

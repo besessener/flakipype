@@ -79,6 +79,8 @@ class ScanSettings(BaseModel):
     window_days: int = Field(default=30, ge=1, le=MAX_WINDOW_DAYS)
     # Hard limit per scan; log downloads are the slow, heavy part.
     max_log_downloads: int = Field(default=50, ge=0, le=1000)
+    # Hard limit per scan on reading the jobs of an attempt; a large first scan continues later.
+    max_job_reads: int = Field(default=500, ge=0, le=5000)
     # One failure that passed on rerun can be an outage; flaky means it keeps happening.
     min_flaky_runs: int = Field(default=2, ge=1, le=100)
 

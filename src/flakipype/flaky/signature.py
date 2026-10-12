@@ -11,14 +11,15 @@ _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?|
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 _ERROR_MARK = "##[error]"
 # Bump whenever messages or fingerprints change, so cached signatures are recomputed.
-SIGNATURE_VERSION = 3
+SIGNATURE_VERSION = 4
 _GENERIC_EXIT = re.compile(r"^Process completed with exit code \d+\.?$")
 _LIST_MARKER = re.compile(r"^\d+\)\s*")
 _LOOKBACK_ENTRIES = 40
 _STACK_FRAME = re.compile(r"^\s+at\s")
 _WARNING = re.compile(r"\bwarn(?:ing)?\b", re.IGNORECASE)
 _STRONG_ERROR = re.compile(
-    r"ERR!|\b(?:Error|error|fatal|FATAL|panic):|Traceback|\bFAILED\b|\bException\b"
+    r"ERR!|\b(?:\w*Error(?: \[\w+\])?|error|fatal|FATAL|panic):|Traceback|\bFAILED\b|"
+    r"\b\w*Exception\b"
 )
 _WEAK_ERROR = re.compile(r"\b(?:error|failed|failure)\b", re.IGNORECASE)
 _MESSAGE_LINES = 3
@@ -61,11 +62,14 @@ _CATEGORY_PATTERNS = (
         r"out of memory|oomkilled|heap out of memory|enospc|"
         r"no space left on device|exit code 137"
     )),
-    (Category.RATE_LIMIT, r"rate limit|too many requests|\b429\b"),
+    # Status codes only with HTTP context: a bare 429 or 503 is as likely a line number or count.
+    (Category.RATE_LIMIT, r"rate limit|too many requests|(?:HTTP/\S+|status(?: code)?:?)\s*429\b"),
     (Category.NETWORK, (
         r"econnreset|econnrefused|etimedout|enotfound|eai_again|socket hang up|"
         r"connection (?:reset|refused|timed out)|could not resolve host|"
-        r"temporary failure in name resolution|tls handshake|\b50[234]\b|network is unreachable"
+        r"temporary failure in name resolution|tls handshake|network is unreachable|"
+        r"(?:HTTP/\S+|status(?: code)?:?)\s*50[234]\b|"
+        r"\b50[234] (?:bad gateway|service unavailable|gateway time-?out)"
     )),
     (Category.DEPENDENCIES, (
         r"npm err!|npm error|could not resolve dependencies|"

@@ -7,6 +7,8 @@ from enum import StrEnum
 
 from flakipype.flaky.model import AttemptRef, JobResult, WorkflowRun
 
+_MERGE_EVENTS = frozenset({"pull_request", "pull_request_target"})
+
 
 class Signal(StrEnum):
     RERUN_PASSED = "rerun_passed"
@@ -36,7 +38,9 @@ def attempts_to_inspect(runs: Iterable[WorkflowRun]) -> dict[AttemptRef, Signal]
 def _same_commit_attempts(runs: Sequence[WorkflowRun]) -> dict[AttemptRef, Signal]:
     by_commit: defaultdict[tuple[str, str, str], list[WorkflowRun]] = defaultdict(list)
     for run in runs:
-        by_commit[run.repository, run.workflow_path, run.head_sha].append(run)
+        # A pull request run tests its merge with the base, not head_sha: other code.
+        if run.event not in _MERGE_EVENTS:
+            by_commit[run.repository, run.workflow_path, run.head_sha].append(run)
     inspect: dict[AttemptRef, Signal] = {}
     for group in by_commit.values():
         if not any(run.succeeded for run in group):

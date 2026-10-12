@@ -28,6 +28,8 @@ _ALL = "all"
 _FRESH = "--fresh"
 _ALL_JOBS = "--all"
 _REPEATS = re.compile(r"x(\d+)")
+# Commands that name findings by the number the sidebar shows.
+_BY_FINDING = frozenset({"/investigate", "/why", "/rerun", "/dispatch", "/fix"})
 _MODES = {
     Mode.ASK: "Mode: ask. Every action asks you first.",
     Mode.AUTO: (
@@ -168,8 +170,26 @@ class ChatService:
         if handler is None:
             reply = ChatEntry(EntryKind.ERROR, f"Unknown command {name}. Type /help.")
         else:
-            reply = self._guarded(lambda: handler(arguments))
+            reply = self._guarded(lambda: self._moved(name, arguments) or handler(arguments))
         return self._record([ChatEntry(EntryKind.USER, text), reply])
+
+    def _moved(self, name: str, arguments: list[str]) -> ChatEntry | None:
+        """After /resume the first command scans again; a number naming another finding stops."""
+        stored = {item.number: item.reference for item in self._session.snapshot if item.reference}
+        numbers = [number for number in _numbers(arguments) if number in stored]
+        if name not in _BY_FINDING or self._workspace.report is not None or not numbers:
+            return None
+        current = {
+            finding.number: finding.reference for finding in self._workspace.scan_report().findings
+        }
+        moved = [f"#{number}" for number in numbers if current.get(number) != stored[number]]
+        if not moved:
+            return None
+        message = (
+            f"Finding numbers changed since this session's scan ({', '.join(moved)}). "
+            "The sidebar now shows the current numbers; run the command again with those."
+        )
+        return ChatEntry(EntryKind.ERROR, message)
 
     def _note(self, text: str) -> ChatEntry:
         return ChatEntry(EntryKind.NOTE, text)

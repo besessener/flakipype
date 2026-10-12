@@ -42,6 +42,8 @@ class SidebarItem:
     kind: str
     title: str
     verdict: str = ""
+    # Names the finding in a later scan; empty in sessions stored before it existed.
+    reference: str = ""
 
 
 def sidebar_items(
@@ -54,6 +56,7 @@ def sidebar_items(
             kind_label(finding.kind),
             finding_title(finding),
             verdict_label(results[finding.number].verdict) if finding.number in results else "",
+            finding.reference,
         )
         for finding in findings
     ]

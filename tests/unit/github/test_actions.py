@@ -37,7 +37,7 @@ def jobs_call(page: int) -> list[str]:
 def test_repositories_from_gh_repo_list(fake_gh: FakeGh) -> None:
     entries: list[dict[str, Any]] = json.loads(gh_fixture("repo-list.json"))
     entries.append({"nameWithOwner": "besessener/empty", "defaultBranchRef": None})
-    arguments = ["repo", "list", "besessener", "--no-archived", "--source", "--limit", "1000"]
+    arguments = ["repo", "list", "besessener", "--no-archived", "--source", "--limit", "1001"]
     fake_gh.record(
         [*arguments, "--json", "nameWithOwner,defaultBranchRef"], stdout=json.dumps(entries)
     )
@@ -162,7 +162,7 @@ def test_rate_limit_is_its_own_error(fake_gh: FakeGh) -> None:
 
 
 def test_status_written_without_parentheses(fake_gh: FakeGh) -> None:
-    arguments = ["repo", "list", "octo-org", "--no-archived", "--source", "--limit", "1000"]
+    arguments = ["repo", "list", "octo-org", "--no-archived", "--source", "--limit", "1001"]
     message = "HTTP 401: Bad credentials (https://api.github.com/graphql)\n"
     fake_gh.record(
         [*arguments, "--json", "nameWithOwner,defaultBranchRef"], stderr=message, exit_code=1

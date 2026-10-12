@@ -209,6 +209,11 @@ def _recurring_table(report: ScanReport, now: datetime) -> Table:
 
 def _notes(report: ScanReport) -> Panel | None:
     notes = list(report.problems)
+    if report.attempts_not_read:
+        notes.append(
+            f"{report.attempts_not_read} failed runs not inspected yet (limit: "
+            "scan.max_job_reads). Run the scan again to read more; read jobs are cached."
+        )
     if report.logs_not_read:
         notes.append(
             f"{report.logs_not_read} logs not read (limit: scan.max_log_downloads). "

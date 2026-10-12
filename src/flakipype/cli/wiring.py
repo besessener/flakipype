@@ -262,6 +262,7 @@ def open_chat() -> Generator[tuple[ChatService, Settings]]:
             window_days=settings.scan.window_days,
             max_log_downloads=settings.scan.max_log_downloads,
             min_flaky_runs=settings.scan.min_flaky_runs,
+            max_job_reads=settings.scan.max_job_reads,
         )
         now = partial(datetime.now, UTC)
         actions = ActionService(
