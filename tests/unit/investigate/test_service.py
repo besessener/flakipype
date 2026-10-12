@@ -141,3 +141,14 @@ def test_run_budget_stops_further_investigations(cache: ScanCache) -> None:
     assert statuses.count(Status.BUDGET) == 2
     assert len(agent.calls) == 1
     assert "token limit is used up" in report.results[-1].detail
+
+
+def test_a_lower_token_limit_for_one_call_stops_further_investigations(cache: ScanCache) -> None:
+    agent = FakeAgent(tokens=5_000)
+    investigation = service(cache, agent, run_tokens=1_000_000, parallel=1)
+
+    report = investigation.run(InvestigationRequest(SCAN, Selection(), max_tokens=5_000))
+
+    assert agent.calls == [1]
+    assert report.tokens == 5_000
+    assert [result.status for result in report.results] == [Status.COMPLETED, Status.BUDGET]

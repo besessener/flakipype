@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 import pytest
 
@@ -10,14 +11,14 @@ from flakipype.agent.investigator import Status
 from flakipype.agent.pipeline import FindingResult
 from flakipype.agent.tools import Mode
 from flakipype.agent.workcopy import FileChange
-from flakipype.config.settings import FixSettings
+from flakipype.config.settings import FixSettings, Settings
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import PullRequest
 from flakipype.github.runs import CommitRun
 from flakipype.store.database import ScanCache
 from flakipype.store.sessions import SessionKind
-from flakipype.unattended.limits import day_usage
+from flakipype.unattended.limits import day_usage, run_limits_for
 from flakipype.unattended.service import FixOutcomeKind, RunReport
 
 from support.fake_fix import CHANGE, FIX_COMMIT, Clock, FakeFixer, fixed
@@ -271,6 +272,36 @@ def test_the_pull_request_limit_stops_further_fixes(cache: ScanCache) -> None:
 
     assert kinds(report) == [(1, FixOutcomeKind.OPENED), REAL_BUG]
     assert report.stops == ("the pull request limit (1 for this run)",)
+
+
+def test_pull_requests_of_earlier_runs_count_towards_the_daily_limit(cache: ScanCache) -> None:
+    settings = Settings.model_validate({"run": {"max_prs_per_day": 1}})
+    first = run_once(RunWorld(cache, limits=run_limits_for(settings, cache, NOW)))
+    later = NOW + timedelta(hours=23)
+
+    second = run_once(
+        RunWorld(cache, limits=run_limits_for(settings, cache, later), clock=Clock(later))
+    )
+
+    assert first.pull_requests == 1
+    assert (second.limits.pull_requests, second.pull_requests) == (0, 0)
+    assert second.stops == ("the pull request limit (0 for this run)",)
+    next_day = run_limits_for(settings, cache, NOW + timedelta(hours=24, minutes=1))
+    assert next_day.pull_requests == 1
+
+
+def test_the_token_limit_caps_the_investigations(cache: ScanCache) -> None:
+    world = RunWorld(cache, limits=limits(tokens=1_000))
+
+    report = run_once(world)
+
+    assert report.tokens == 1_000
+    assert world.agent.calls == [1]
+    assert [(r.finding.number, r.status) for r in report.results] == [
+        (1, Status.COMPLETED),
+        (3, Status.BUDGET),
+    ]
+    assert report.stops == ("the token limit (1,000 for this run)",)
 
 
 def test_the_token_limit_stops_fixes(cache: ScanCache) -> None:

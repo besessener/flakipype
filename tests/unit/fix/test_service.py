@@ -155,6 +155,19 @@ def test_the_confirmation_shows_facts_the_model_text_and_the_diff(cache: ScanCac
     assert world.fixes.tokens == 1_000
 
 
+def test_the_fixer_checks_its_diff_against_the_configured_limits(cache: ScanCache) -> None:
+    world = FixWorld(cache, fix_settings=FixSettings(max_files=1, max_changed_lines=10))
+    world.fixes.prepare(target())
+    changes = [FileChange(f"file{index}.txt", None, "a\nb\nc\nd\n") for index in range(3)]
+
+    (fix_request,) = world.fixer.requests
+
+    assert fix_request.check(changes) == [
+        "The fix changes 3 files; at most 1 are allowed.",
+        "The fix changes 12 lines; at most 10 are allowed.",
+    ]
+
+
 def test_warnings_need_a_person(cache: ScanCache) -> None:
     changes = (CHANGE, WORKFLOW_CHANGE, FileChange("a.txt", None, "a\n"),
                FileChange("b.txt", None, "b\n"))  # fmt: skip

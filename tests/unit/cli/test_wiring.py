@@ -1,13 +1,20 @@
+import json
 import shutil
 import sys
+import threading
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import httpx2
 import keyring
 import pytest
+from anthropic import Anthropic
 from keyring.backends import fail
 
+from flakipype.agent.investigator import Status
 from flakipype.agent.tools import ActionRequest, Mode, ToolError
+from flakipype.cli import wiring
 from flakipype.cli.wiring import (
     NotReadyError,
     build_daemon,
@@ -25,15 +32,20 @@ from flakipype.config.settings import SecretStoreChoice, Settings
 from flakipype.fix.service import FixTarget
 from flakipype.github.binary import GhBinary
 from flakipype.github.provider import ManagedGh
+from flakipype.investigate.service import InvestigationRequest, Selection
 from flakipype.llm.client import LlmEndpoint
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
-from flakipype.scan.service import ScanRequest
+from flakipype.scan.service import ScanRequest, ScanService
 from flakipype.setup.daemon import UnitOptions
+from flakipype.store.database import ScanCache
 from flakipype.store.lock import RunLockedError
 from flakipype.unattended.service import RunService
 
+from support.builders import START
+from support.fake_anthropic import ScriptedModel, message, text
 from support.fake_fix import verdict
 from support.fake_gh import FakeGh
+from support.fake_investigation import SCAN, world
 from support.fake_runs import e2e_evidence, e2e_finding
 from support.fake_setup import USER_CALL, logged_in
 
@@ -109,12 +121,27 @@ def test_a_run_holds_the_lock_and_is_wired_with_the_mode(
         return ScanRequest("octo-org", "github.com", 30, 50)
 
     with open_run(Mode.ASK, request_for) as service:
-        assert isinstance(service, RunService)
         with pytest.raises(RunLockedError), open_run(Mode.AUTO, request_for):
             pass
+        report = service.run()
 
     assert requests == ["octo-org"]
+    assert report.mode is Mode.ASK
     assert (isolated_home / "data" / "flakipype" / "run.lock").exists()
+
+
+def test_an_auto_run_is_wired_with_its_mode(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch, fake_gh: FakeGh
+) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n')
+    store_api_key(isolated_home)
+    use_fake_gh(isolated_home, monkeypatch, fake_gh)
+    logged_in(fake_gh)
+
+    with open_run(Mode.AUTO, lambda _: ScanRequest("octo-org", "github.com", 30, 50)) as service:
+        report = service.run()
+
+    assert report.mode is Mode.AUTO
 
 
 @pytest.mark.parametrize(("configured", "asked"), [("octo-org", "other-org"), ("", "other-org")])
@@ -245,8 +272,12 @@ def test_scan_is_wired_with_settings_and_a_cache(
     assert (isolated_home / "data" / "flakipype" / "cache.sqlite3").exists()
 
 
+# Obviously fake, long enough to be masked, and matching none of the masker's patterns.
+API_KEY = "fake-foundry-key-for-tests"
+
+
 def store_api_key(home: Path) -> None:
-    FileSecretStore(home / "config" / "flakipype" / "secrets.json").put(LLM_API_KEY, "key-1")
+    FileSecretStore(home / "config" / "flakipype" / "secrets.json").put(LLM_API_KEY, API_KEY)
 
 
 @pytest.mark.parametrize(
@@ -270,18 +301,52 @@ def test_investigation_needs_model_and_key(
         pass
 
 
+@dataclass
+class ParallelModel(ScriptedModel):
+    """Answers only once two requests are open at the same time."""
+
+    endpoints: list[LlmEndpoint] = field(default_factory=list)
+    both_open: threading.Barrier = field(default_factory=lambda: threading.Barrier(2, timeout=10))
+
+    def _handle(self, request: httpx2.Request) -> httpx2.Response:
+        response = super()._handle(request)
+        self.both_open.wait()
+        return response
+
+    def create_client(self, endpoint: LlmEndpoint) -> Anthropic:
+        self.endpoints.append(endpoint)
+        return self.client()
+
+
 def test_investigation_is_wired_with_agent_settings(
-    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch, cache: ScanCache
 ) -> None:
-    config = '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n\n[agent]\nparallel = 2\n'
+    config = (
+        '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n\n'
+        "[agent]\nparallel = 2\nmax_tokens_per_run = 10_000\nmax_output_tokens = 2_000\n"
+    )
     write_config(isolated_home, config)
     store_api_key(isolated_home)
     binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
     monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+    no_verdict = message(
+        text("No verdict yet."), usage={"input_tokens": 10_000, "output_tokens": 0}
+    )
+    model = ParallelModel([no_verdict, no_verdict])
+    monkeypatch.setattr(wiring, "create_client", model.create_client)
+    scan = ScanService(actions=world(), cache=cache, now=lambda: START.replace(day=9)).scan(SCAN)
+    request = InvestigationRequest(SCAN, Selection(numbers=(1, 2, 3)))
 
-    with open_investigation() as (service, settings):
-        assert settings.agent.parallel == 2
-        assert service is not None
+    with open_investigation() as (service, _):
+        report = service.investigate(scan, request)
+
+    assert model.endpoints == [LlmEndpoint("https://api.anthropic.com", API_KEY, "m-1")]
+    # Two investigations in parallel use up the run's tokens before the third starts.
+    assert [(r.status, r.tokens) for r in report.results] == [
+        (Status.BUDGET, 10_000), (Status.BUDGET, 10_000), (Status.BUDGET, 0),
+    ]  # fmt: skip
+    assert report.tokens == 20_000
+    assert [(r["model"], r["max_tokens"]) for r in model.requests] == [("m-1", 2_000)] * 2
 
 
 def test_a_conflicting_foundry_resource_is_not_ready(
@@ -302,19 +367,27 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
 ) -> None:
     config = (
         '[llm]\nmodel = "m-1"\n\n[github]\nowner = "octo-org"\n\n[scan]\nwindow_days = 9\n\n'
-        "[actions]\nmax_per_session = 3\n\n[fix]\nmax_prs_per_session = 2\n"
+        "[actions]\nmax_per_session = 3\n\n[fix]\nmax_prs_per_session = 2\n\n"
+        "[agent]\nmax_output_tokens = 2_000\n"
     )
     write_config(isolated_home, config)
     store_api_key(isolated_home)
     binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
     monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+    model = ScriptedModel([message(text("Noted."))])
+    monkeypatch.setattr(wiring, "create_client", lambda _: model.client())
 
-    with open_chat() as (chat, settings):
+    with open_chat() as (chat, _):
         assert chat.workspace.request.owner == "octo-org"
         assert chat.workspace.request.window_days == 9
-        assert settings.actions.max_per_session == 3
+        assert chat.workspace.actions.max_per_session == 3
         assert chat.handle("/sessions")[1].text == "No saved sessions yet."
         assert chat.handle("/actions")[1].text == "No actions requested in this session."
+        assert chat.handle(f"Is {API_KEY} still valid?")[1].text == "Noted."
+        (sent,) = model.requests
+        assert sent["max_tokens"] == 2_000
+        assert API_KEY not in json.dumps(sent)
+        assert "Is [masked: configured secret] still valid?" in json.dumps(sent)
         assert not chat.confirmer(ActionRequest("Rerun?", ()))
         assert chat.mode is Mode.ASK
         assert chat.handle("/mode auto")[1].text.startswith("Mode: auto.")

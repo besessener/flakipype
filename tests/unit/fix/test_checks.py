@@ -249,10 +249,11 @@ def test_localhost_is_not_reaching_out() -> None:
     assert change_warnings([edit("tests/e2e/config.ts", after)]) == []
 
 
-def test_changes_under_github_are_a_warning() -> None:
-    assert change_warnings([edit(WORKFLOW, "on: push\njobs: {}\n")]) == [
-        f"changes .github/: {WORKFLOW}"
-    ]
+@pytest.mark.parametrize(
+    "path", [WORKFLOW, ".github/actions/setup/action.yml", ".github/dependabot.yml"]
+)
+def test_changes_under_github_are_a_warning(path: str) -> None:
+    assert change_warnings([edit(path, "on: push\njobs: {}\n")]) == [f"changes .github/: {path}"]
 
 
 def test_several_warnings_for_one_file_are_sorted_and_deduplicated() -> None:

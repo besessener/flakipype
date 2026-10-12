@@ -1,6 +1,10 @@
 from flakipype.config.settings import Settings
 from flakipype.store.audit import AuditEntry
-from flakipype.unattended.limits import Usage, day_usage, run_limits
+from flakipype.store.database import ScanCache
+from flakipype.unattended.limits import Usage, day_usage, run_actions, run_fix_settings, run_limits
+
+from support.fake_fix import Clock
+from support.fake_runs import FakeRuns
 
 
 def entry(action: str, answer: str, outcome: str = "ok", origin: str = "run") -> AuditEntry:
@@ -36,3 +40,16 @@ def test_a_run_gets_the_smaller_of_its_own_limit_and_what_the_day_has_left() -> 
     assert (late.pull_requests, late.actions, late.tokens) == (1, 0, 600_000)
     assert late.day_limits == Usage(4, 20, 1_500_000)
     assert late.day_used == Usage(3, 25, 900_000)
+
+
+def test_a_runs_actions_and_fixes_keep_to_what_the_day_has_left(cache: ScanCache) -> None:
+    settings = Settings.model_validate({"github": {"owner": "octo-org"}})
+    limits = run_limits(settings, Usage(pull_requests=2, actions=18, tokens=0))
+    runs = FakeRuns()
+
+    actions = run_actions(
+        runs=runs, files=runs, audit=cache.audit, settings=settings, limits=limits, now=Clock()
+    )
+
+    assert actions.max_per_session == 2
+    assert run_fix_settings(settings, limits).max_prs_per_session == 1

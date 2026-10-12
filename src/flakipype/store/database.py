@@ -1,6 +1,7 @@
 """SQLite cache for what is expensive to fetch: jobs of finished attempts and log signatures."""
 
 import sqlite3
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -71,6 +72,7 @@ MIGRATIONS = (
 )
 # The chat and a run may write at the same time; a writer waits this long for the other.
 _BUSY_SECONDS = 30
+_RETRY_SECONDS = 0.01
 
 
 class LogState(StrEnum):
@@ -108,6 +110,20 @@ def _migrate(connection: sqlite3.Connection) -> None:
         connection.rollback()
 
 
+def _use_wal(connection: sqlite3.Connection) -> None:
+    """Switch to WAL, waiting out other openers: SQLite skips the busy timeout for this."""
+    deadline = time.monotonic() + _BUSY_SECONDS
+    while True:
+        try:
+            connection.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.OperationalError as error:
+            if error.sqlite_errorcode != sqlite3.SQLITE_BUSY or time.monotonic() >= deadline:
+                raise
+            time.sleep(_RETRY_SECONDS)
+        else:
+            return
+
+
 def _parse_time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
@@ -122,7 +138,7 @@ class ScanCache:
         path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(path, timeout=_BUSY_SECONDS, check_same_thread=False)
         try:
-            connection.execute("PRAGMA journal_mode = WAL")
+            _use_wal(connection)
             return cls(connection)
         except BaseException:
             connection.close()
