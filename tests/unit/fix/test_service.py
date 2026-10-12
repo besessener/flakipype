@@ -7,7 +7,7 @@ from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings
 from flakipype.fix.service import FixDeliveryError, FixNotMadeError, FixTarget
 from flakipype.fix.texts import finding_marker
-from flakipype.fix.verify import Stage
+from flakipype.fix.verify import Stage, Verification
 from flakipype.flaky.findings import Finding
 from flakipype.flaky.signature import Category, ErrorSignature
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
@@ -299,6 +299,27 @@ def test_poll_waits_for_the_rate_limit_and_skips_errors(cache: ScanCache) -> Non
     assert (
         world.github.calls.count("commit_runs octo-org/app .github/workflows/e2e.yml c0ffee1") == 3
     )
+
+
+def test_a_poll_never_writes_into_pull_requests_replaced_meanwhile(
+    cache: ScanCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = FixWorld(cache, fix_settings=FixSettings(verify_runs=1))
+    opened_fix(world)
+    world.github.runs_by_commit[FIX_COMMIT] = [CommitRun(91, "pull_request")]
+    world.runs.states[91] = [state(91, conclusion="success")]
+    world.fixes.poll()
+    world.actions.poll()
+    verify = world.verifier.poll
+
+    def start_over_meanwhile(current: Verification) -> Verification:
+        world.fixes.reset()
+        return verify(current)
+
+    monkeypatch.setattr(world.verifier, "poll", start_over_meanwhile)
+
+    assert world.fixes.poll() == []
+    assert world.fixes.pulls == []
 
 
 def test_the_session_state_survives_a_resume(cache: ScanCache) -> None:
