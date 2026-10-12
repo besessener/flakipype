@@ -75,6 +75,7 @@ Evaluations against a real model live in `tests/eval`, are not part of
 | `ci.yml` → `test` | `uv sync --locked` and `poe check` on Python 3.12 and 3.14; coverage table in the job summary | PR, push to `main` |
 | `ci.yml` → `smoke` | In Ubuntu 24.04, Debian 12, Fedora and Arch containers (pinned by digest), as a user without root: `install.sh` from the checkout (with the verified `uv` download), `flakipype --version`, `doctor` without a configuration, and the unit files through `systemd-analyze verify` (`tests/smoke/smoke.sh`) | PR, push to `main` |
 | `codeql.yml` | CodeQL `security-extended` for Python and Actions | PR, push to `main`, weekly |
+| `pages.yml` | Publishes `site/` to GitHub Pages, see [maintain the website](../how-to/maintain-the-website.md) | push to `main` that changes `site/`, by hand |
 | `dependabot.yml` | Updates for Actions, uv dependencies and hook revisions, 7-day cooldown | weekly |
 
 **Workflow hardening**: every action is pinned to a commit SHA (the comment

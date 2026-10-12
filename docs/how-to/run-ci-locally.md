@@ -55,4 +55,6 @@ the wrong directory.
   authority.
 - CodeQL (`codeql.yml`) needs GitHub's code scanning backend and does not run
   under act.
+- Pages (`pages.yml`) deploys to GitHub Pages and does not run under act;
+  preview `site/` locally instead ([maintain the website](maintain-the-website.md)).
 - `uv` may print "Failed to hardlink files" inside act; that is harmless.

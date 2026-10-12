@@ -16,6 +16,7 @@ Organised by [Diátaxis](https://diataxis.fr/).
 - [Set up a headless machine](how-to/set-up-headless.md) – servers, containers, SSH.
 - [Run on a schedule](how-to/run-on-a-schedule.md) – `flakipype run` and the systemd user timer.
 - [Run CI locally with act](how-to/run-ci-locally.md) – the Linux gate on Windows.
+- [Maintain the website](how-to/maintain-the-website.md) – `site/`, screenshots and the Pages workflow.
 
 ## Reference
 
