@@ -10,7 +10,7 @@ from pydantic import BaseModel, ValidationError
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
-from flakipype.agent.messages import content_blocks
+from flakipype.agent.messages import DECLINED, content_blocks, declined
 from flakipype.agent.prompts import REVIEWER_SYSTEM, data_block
 from flakipype.agent.verdict import Review, Verdict
 from flakipype.llm.client import create_message
@@ -94,4 +94,6 @@ class Reviewer:
         except (APIError, BudgetExceededError) as error:
             raise ReviewUnavailableError(str(error)) from error
         self._budget.record(response.usage)
+        if declined(response):
+            raise ReviewUnavailableError(DECLINED)
         return response

@@ -10,6 +10,14 @@ def content_blocks(response: Message) -> list[dict[str, Any]]:
     return [block.model_dump(exclude_none=True) for block in response.content]
 
 
+DECLINED = "The model declined to answer or gave an empty answer."
+
+
+def declined(response: Message) -> bool:
+    """A refusal or an empty answer; kept in a conversation, it makes every later request fail."""
+    return response.stop_reason == "refusal" or not response.content
+
+
 def tool_result(tool_use_id: str, text: str, *, failed: bool) -> dict[str, Any]:
     result: dict[str, Any] = {"type": "tool_result", "tool_use_id": tool_use_id, "content": text}
     if failed:

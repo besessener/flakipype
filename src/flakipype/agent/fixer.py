@@ -14,10 +14,12 @@ from flakipype.agent.budget import BudgetExceededError, InvestigationBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
 from flakipype.agent.messages import (
+    DECLINED,
     cached_messages,
     cached_system,
     cached_tools,
     content_blocks,
+    declined,
     tool_result,
 )
 from flakipype.agent.prompts import FIXER_SYSTEM
@@ -138,6 +140,8 @@ class Fixer:
             except APIError as error:
                 return FixOutcome(FixStatus.MODEL_ERROR, detail=str(error))
             self._budget.record(response.usage)
+            if declined(response):
+                return FixOutcome(FixStatus.NO_FIX, detail=DECLINED)
             self._messages.append({"role": "assistant", "content": content_blocks(response)})
             uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not uses:

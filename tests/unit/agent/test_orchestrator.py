@@ -18,6 +18,7 @@ from flakipype.agent.tools import (
     ToolError,
     deny_all,
 )
+from flakipype.github.actions import GitHubApiError
 
 from support.fake_anthropic import ScriptedModel, call, message, text
 
@@ -353,3 +354,119 @@ def test_the_cache_breakpoint_moves_and_stays_out_of_the_history() -> None:
     assert model.breakpoints(1) == ["tools", "system", "message 2"]
     assert model.breakpoints(2) == ["tools", "system", "message 4"]
     assert "cache_control" not in str(agent.history)
+
+
+class OfflineWorkspace(FakeWorkspace):
+    def scan(self, days: int | None, repositories: tuple[str, ...]) -> str:
+        del days, repositories
+        message = f"gh: HTTP 401: Bad credentials {SECRET}"
+        raise GitHubApiError(message, 401)
+
+
+def test_a_github_failure_in_a_tool_goes_to_the_model_and_keeps_the_history_valid() -> None:
+    model = ScriptedModel(
+        [
+            message(call("t1", "scan", {})),
+            message(text("GitHub rejected the login; run gh auth login.")),
+            message(text("Ok.")),
+        ]
+    )
+    agent = chat_agent(model, OfflineWorkspace())
+
+    reply = agent.ask("Scan my repositories")
+    agent.ask("Thanks")
+
+    result = model.tool_results(1)["t1"]
+    assert reply.completed
+    assert result["is_error"] is True
+    assert result["content"].startswith("GitHub failed:\n<tool-data")
+    assert "HTTP 401: Bad credentials" in result["content"]
+    assert SECRET not in result["content"]
+    assert [m["role"] for m in model.requests[2]["messages"]] == ["user"] + [
+        "assistant",
+        "user",
+    ] * 2
+
+
+class BrokenWorkspace(FakeWorkspace):
+    def findings(self) -> str:
+        message = "the cache is locked"
+        raise RuntimeError(message)
+
+
+def test_an_unexpected_failure_in_a_tool_drops_the_turn() -> None:
+    model = ScriptedModel([message(call("t1", "list_findings", {}))])
+    agent = chat_agent(model, BrokenWorkspace())
+
+    with pytest.raises(RuntimeError, match="locked"):
+        agent.ask("List them")
+
+    assert agent.history == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {**message(), "stop_reason": "refusal"},
+        message(),
+    ],
+    ids=["refusal", "empty"],
+)
+def test_a_refused_or_empty_answer_is_not_kept(answer: dict[str, object]) -> None:
+    model = ScriptedModel([answer, message(text("Hello."))])
+    agent = chat_agent(model, FakeWorkspace())
+
+    reply = agent.ask("What does zizmor report?")
+    agent.ask("Hi")
+
+    assert not reply.completed
+    assert reply.text == "The model declined to answer or gave an empty answer."
+    assert reply.tokens == 1_200
+    assert [m["role"] for m in model.requests[1]["messages"]] == ["user"]
+
+
+class HistoryReadingWorkspace(FakeWorkspace):
+    def __init__(self) -> None:
+        super().__init__()
+        self.agent: ChatAgent | None = None
+        self.seen: list[int] = []
+
+    def findings(self) -> str:
+        assert self.agent is not None
+        self.seen.append(len(self.agent.history))
+        return super().findings()
+
+
+def test_the_history_leaves_out_a_turn_still_running() -> None:
+    model = ScriptedModel(
+        [
+            message(text("Hello.")),
+            message(call("t1", "list_findings", {})),
+            message(text("One finding.")),
+        ]
+    )
+    workspace = HistoryReadingWorkspace()
+    agent = chat_agent(model, workspace)
+    workspace.agent = agent
+
+    agent.ask("Hi")
+    agent.ask("What failed?")
+
+    assert workspace.seen == [2]
+    assert len(agent.history) == 6
+
+
+def test_restore_drops_an_unfinished_turn() -> None:
+    model = ScriptedModel([message(text("Welcome back."))])
+    agent = chat_agent(model, FakeWorkspace())
+    finished = [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello."}]
+    unfinished = [
+        {"role": "user", "content": "Dispatch E2E"},
+        {"role": "assistant", "content": [call("toolu_A", "dispatch", {"finding": 1})]},
+    ]
+
+    agent.restore([*finished, *unfinished])
+    agent.ask("Again")
+
+    assert model.requests[0]["messages"][:2] == finished
+    assert len(model.requests[0]["messages"]) == 3

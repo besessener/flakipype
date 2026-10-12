@@ -165,7 +165,10 @@ def test_a_reviewer_answering_in_prose_is_nudged_once() -> None:
     [
         [message(text("Looks fine to me.")), message(text("Really fine."))],
         [message(call("toolu_r", "submit_review", {"decision": "approve"}))],
+        [{**message(), "stop_reason": "refusal"}],
+        [message()],
     ],
+    ids=["prose", "invalid", "refusal", "empty"],
 )
 def test_unusable_reviews_raise(answers: list[dict[str, Any] | int]) -> None:
     model = ScriptedModel(answers)

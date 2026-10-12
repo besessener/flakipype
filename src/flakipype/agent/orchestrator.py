@@ -12,7 +12,14 @@ from pydantic import BaseModel, Field
 from flakipype.agent.budget import BudgetExceededError, InvestigationBudget, Limits, RunBudget
 from flakipype.agent.investigator import ModelSettings
 from flakipype.agent.masking import Masker
-from flakipype.agent.messages import cached_messages, cached_system, cached_tools, content_blocks
+from flakipype.agent.messages import (
+    DECLINED,
+    cached_messages,
+    cached_system,
+    cached_tools,
+    content_blocks,
+    declined,
+)
 from flakipype.agent.prompts import CHAT_SYSTEM, data_block
 from flakipype.agent.tools import (
     PolicyGate,
@@ -23,6 +30,7 @@ from flakipype.agent.tools import (
     ToolError,
 )
 from flakipype.config.settings import MAX_WINDOW_DAYS
+from flakipype.github.actions import GitHubApiError
 from flakipype.llm.client import create_message
 
 type StepListener = Callable[[str], None]
@@ -160,15 +168,23 @@ class ChatAgent:
         self._masker = masker
         self._clock = clock
         self._messages: list[dict[str, Any]] = []
+        # Where the running question's turn starts; None between questions.
+        self._turn_start: int | None = None
         self._tool_seconds = 0.0
         self._declined = False
 
     @property
     def history(self) -> list[dict[str, Any]]:
-        return list(self._messages)
+        """The finished turns; a turn still running is left out, so a save never stores half."""
+        end = self._turn_start
+        return list(self._messages[:end])
 
     def restore(self, history: list[dict[str, Any]]) -> None:
-        self._messages = list(history)
+        """Older versions could save an unfinished turn; the API rejects its open tool calls."""
+        end = len(history)
+        while end and not _is_answer(history[end - 1]):
+            end -= 1
+        self._messages = list(history[:end])
 
     def run_tool(self, name: str, arguments: dict[str, Any]) -> str:
         """A tool asked for by the user directly; it passes the same gate as the model's calls."""
@@ -177,10 +193,20 @@ class ChatAgent:
     def ask(self, question: str, on_step: StepListener = ignore_steps) -> Reply:
         self._tool_seconds = 0.0
         self._declined = False
+        start = len(self._messages)
+        self._turn_start = start
+        try:
+            return self._turn(question, start, on_step)
+        except BaseException:
+            del self._messages[start:]
+            raise
+        finally:
+            self._turn_start = None
+
+    def _turn(self, question: str, start: int, on_step: StepListener) -> Reply:
         budget = InvestigationBudget(
             self._settings.limits, RunBudget(self._settings.turn_tokens), self._model_clock
         )
-        start = len(self._messages)
         self._messages.append({"role": "user", "content": self._masker.mask(question)})
         last_call = ""
         while True:
@@ -192,6 +218,8 @@ class ChatAgent:
             except APIError as error:
                 return self._abandon(start, f"The model could not answer: {error}", budget.tokens)
             budget.record(response.usage)
+            if declined(response):
+                return self._abandon(start, DECLINED, budget.tokens)
             self._messages.append({"role": "assistant", "content": content_blocks(response)})
             uses = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not uses:
@@ -243,12 +271,23 @@ class ChatAgent:
         except ToolError as error:
             data = f"\n{data_block('tool-data', error.data, tool=use.name)}" if error.data else ""
             return {**result, "content": self._masker.mask(f"{error}{data}"), "is_error": True}
+        except GitHubApiError as error:
+            failure = f"GitHub failed:\n{data_block('tool-data', str(error), tool=use.name)}"
+            return {**result, "content": self._masker.mask(failure), "is_error": True}
         finally:
             self._tool_seconds += self._clock() - started
         return {
             **result,
             "content": self._masker.mask(data_block("tool-result", text, tool=use.name)),
         }
+
+
+def _is_answer(message: dict[str, Any]) -> bool:
+    """A turn's final message: the model's, without tool calls waiting for results."""
+    if message["role"] != "assistant":
+        return False
+    content = message["content"]
+    return isinstance(content, str) or all(block.get("type") != "tool_use" for block in content)
 
 
 def _text(response: Message) -> str:

@@ -194,6 +194,16 @@ def test_a_fixer_that_gives_up_says_why() -> None:
     assert model.message_text(1, -1).startswith("Continue and finish")
 
 
+def test_a_refused_fix_ends_without_one() -> None:
+    model = ScriptedModel([{**message(), "stop_reason": "refusal"}])
+
+    result = propose(model)
+
+    assert result.status is FixStatus.NO_FIX
+    assert result.detail == "The model declined to answer or gave an empty answer."
+    assert len(model.requests) == 1
+
+
 def test_limits_loops_and_model_errors_end_the_fix() -> None:
     looping = ScriptedModel([message(EDIT), message(EDIT)])
     budget = ScriptedModel([message(EDIT)])
