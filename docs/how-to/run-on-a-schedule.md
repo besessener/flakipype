@@ -4,6 +4,12 @@
 window; a systemd user timer starts it. How it decides and what limits it:
 [unattended runs](../explanation/unattended.md).
 
+To try this end to end without touching a real project, point it at the
+sandbox [besessener/flakipype-test](https://github.com/besessener/flakipype-test),
+which is flaky in known ways and is there to receive draft pull requests and
+verification reruns: add `--repo besessener/flakipype-test` to the commands
+below.
+
 ## 1. Try a dry run
 
 ```bash
