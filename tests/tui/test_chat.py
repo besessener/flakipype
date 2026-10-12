@@ -99,6 +99,18 @@ async def test_questions_show_tool_activity_and_answers(cache: ScanCache) -> Non
         assert app.query_one("#prompt", Input).value == "/why 1"
 
 
+async def test_after_an_empty_answer_the_next_question_is_answered(cache: ScanCache) -> None:
+    app, _ = app_for(cache, ScriptedModel([message(), message(text("Hello."))]))
+
+    async with app.run_test(size=SIZE) as pilot:
+        await send(pilot, "What does zizmor report?")
+        empty = conversation(app)[-1]
+        await send(pilot, "Hi")
+
+        assert conversation(app)[-1] == "Hello."
+        assert "empty answer" in empty
+
+
 async def test_new_and_resume_replace_the_conversation(cache: ScanCache) -> None:
     app, _ = app_for(cache)
 

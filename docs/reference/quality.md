@@ -36,7 +36,10 @@ Tests never reach real GitHub or a real model.
 - **LLM**: `tests/support/fake_anthropic.py` answers like the Messages API
   through `httpx2.MockTransport`: scripted turns (thinking, tool calls,
   `submit_verdict`, `submit_review`, HTTP errors), and it records every request
-  so tests can assert masking, tool results and thinking settings. The real
+  so tests can assert masking, tool results and thinking settings. Like the
+  real API, it rejects with a 400 a history the API would reject (an empty
+  message before the last, or a tool call without its result in the next
+  message), so a broken chat history fails the next turn. The real
   `anthropic` client is used, only the transport is fake.
 - **Agent**: `tests/support/fake_sources.py` (logs, commits, files) and
   `tests/support/fake_investigation.py` (a scan world with one finding of
