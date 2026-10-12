@@ -207,9 +207,11 @@ def test_citations_must_match_their_tool_result() -> None:
     results = {"call_1": "Test timed out after 5000ms"}
 
     assert citation_problems(verdict, results) == []
-    assert citation_problems(verdict, {"call_2": "x"}) == [
-        "call_1 is not a tool call of this investigation"
-    ]
+    unknown = (
+        "call_1 is not a result of this investigation; use the id named at the top of the tool "
+        'result, like "r1", or "finding"'
+    )
+    assert citation_problems(verdict, {"call_2": "x"}) == [unknown]
     assert citation_problems(verdict, {"call_1": "something else"}) == [
         "the quote for job 11 is not in the result of call_1"
     ]

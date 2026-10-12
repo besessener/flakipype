@@ -20,6 +20,7 @@ SUBMIT_VERDICT = "submit_verdict"
 _CORRECTIONS = 2
 _NUDGES = 1
 _NUDGE = "Continue the investigation and finish by calling submit_verdict."
+_RESULT_PREFIX = "r"
 
 
 class Status(StrEnum):
@@ -90,6 +91,7 @@ class Investigator:
         self._pending: _Turn = _Turn()
         self._corrections = _CORRECTIONS
         self._last_call = ""
+        self._citable = 0
 
     @property
     def results(self) -> dict[str, str]:
@@ -179,8 +181,12 @@ class Investigator:
             text = self._masker.mask(tool.invoke(dict(use.input), self._gate))
         except ToolError as error:
             return self._masker.mask(str(error)), True
+        # Models do not reliably copy the random tool_use ids; a short id they can see, they do.
+        self._citable += 1
+        reference = f"{_RESULT_PREFIX}{self._citable}"
         self._results[use.id] = text
-        return text, False
+        self._results[reference] = text
+        return f'Cite this result with tool_call_id "{reference}".\n{text}', False
 
     def _submit(self, use: ToolUseBlock, turn: _Turn) -> Outcome | None:
         try:

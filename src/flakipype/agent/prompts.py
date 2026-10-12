@@ -28,8 +28,9 @@ Rules for the verdict:
 - configuration needs the error saying so (for example a missing permission or setting).
 - fixed means the failures stopped after a change you can point to.
 - unclear is a valid answer and better than a guess.
-- Every evidence quote must be copied exactly from a tool result, with that tool call's id.
-  Quotes are checked; invented or edited quotes are rejected.
+- Every evidence quote must be copied exactly from a tool result. As tool_call_id, give the id
+  named at the top of that result ("r1", "r2", ...; the finding is "finding"). Quotes are
+  checked; invented or edited quotes are rejected.
 - Cite what you actually relied on: the log lines, file lines, commits or history entries.
   At least one evidence item must come from such a tool result; quotes from the finding
   (kind "scan") alone only repeat what the scan already knows.

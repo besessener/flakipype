@@ -67,7 +67,19 @@ def test_tool_calls_then_a_cited_verdict() -> None:
     assert "[masked: configured secret]" in first["messages"][0]["content"]
     assert second["messages"][1]["content"][0]["type"] == "thinking"
     assert QUOTE in model.tool_results(1)["toolu_1"]["content"]
-    assert set(agent.results) == {"finding", "toolu_1"}
+    assert set(agent.results) == {"finding", "toolu_1", "r1"}
+
+
+def test_results_carry_a_short_id_the_model_can_cite() -> None:
+    model = ScriptedModel([message(EXCERPT), message(call("toolu_2", "submit_verdict",
+                                                         verdict_input(QUOTE, "r1")))])  # fmt: skip
+
+    outcome = investigator(model).start(finding_text(finding()))
+
+    assert outcome.status is Status.COMPLETED
+    assert model.tool_results(1)["toolu_1"]["content"].startswith(
+        'Cite this result with tool_call_id "r1".\n<log '
+    )
 
 
 def test_the_finding_can_be_cited_next_to_tool_results() -> None:

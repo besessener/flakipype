@@ -42,7 +42,9 @@ class EvidenceItem(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: EvidenceKind
-    tool_call_id: str = Field(description="id of the tool call whose result contains the quote")
+    tool_call_id: str = Field(
+        description='id named at the top of the tool result with the quote, e.g. "r2"'
+    )
     location: str = Field(description="job and lines, commit sha, or path and lines")
     quote: str = Field(description="exact text copied from that tool result")
     why_it_matters: str
@@ -88,7 +90,10 @@ def citation_problems(verdict: Verdict, results: Mapping[str, str]) -> list[str]
         result = results.get(item.tool_call_id)
         quote = _normalise(item.quote)
         if result is None:
-            problems.append(f"{item.tool_call_id} is not a tool call of this investigation")
+            problems.append(
+                f"{item.tool_call_id} is not a result of this investigation; use the id named "
+                'at the top of the tool result, like "r1", or "finding"'
+            )
         elif len(quote) < _MIN_QUOTE:
             problems.append(f"the quote for {item.location} is too short to check")
         elif quote not in _normalise(result):
