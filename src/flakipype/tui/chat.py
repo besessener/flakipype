@@ -170,7 +170,8 @@ class ChatApp(App[None]):
         self.call_from_thread(self._show_activity, text or "Thinking…")
 
     def _show_activity(self, text: str) -> None:
-        self.query_one("#activity", Static).update(text)
+        # Job names come from the repository: plain text, never markup.
+        self.query_one("#activity", Static).update(Text(text))
 
     def _show_status(self) -> None:
         self._show_activity(f"{self._service.tokens:,} tokens used · {self._service.mode} mode")

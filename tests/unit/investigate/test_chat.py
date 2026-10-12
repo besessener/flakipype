@@ -79,6 +79,26 @@ def test_commands_without_numbers_ask_for_them(cache: ScanCache) -> None:
     assert why == ChatEntry(EntryKind.ERROR, "Which finding? E.g. /why 1.")
 
 
+def test_numbers_that_are_not_ascii_digits_are_not_numbers(cache: ScanCache) -> None:
+    chat = chat_service(cache, ScriptedModel([]))
+
+    (_, why) = chat.handle("/why ²")
+    (_, dispatch) = chat.handle("/dispatch ²")
+
+    assert why == ChatEntry(EntryKind.ERROR, "Which finding? E.g. /why 1.")
+    assert dispatch.kind is EntryKind.ERROR
+
+
+def test_scan_days_stay_within_the_window_limit(cache: ScanCache) -> None:
+    chat = chat_service(cache, ScriptedModel([]))
+
+    (_, too_many) = chat.handle("/scan 1000000")
+    (_, none) = chat.handle("/scan 0")
+
+    assert too_many == ChatEntry(EntryKind.ERROR, "Scan 1 to 400 days, e.g. /scan 7.")
+    assert none.kind is EntryKind.ERROR
+
+
 def test_questions_go_to_the_agent(cache: ScanCache) -> None:
     model = ScriptedModel(
         [message(call("t1", "list_findings", {})), message(text("#1 is flaky.")), 500]

@@ -131,6 +131,20 @@ def test_llm_check_against_a_closed_local_port() -> None:
     assert result.problem is ConnectionProblem.UNREACHABLE
 
 
+FOUNDRY_URL = "https://acme.services.ai.azure.com/anthropic"
+
+
+def test_llm_check_names_a_conflicting_foundry_resource(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_FOUNDRY_RESOURCE", "acme")
+    endpoint = LlmEndpoint(base_url=FOUNDRY_URL, api_key="unused", model="m-1")
+
+    result = check_llm_endpoint(endpoint)
+
+    assert isinstance(result, ConnectionFailed)
+    assert result.problem is ConnectionProblem.ENVIRONMENT
+    assert "ANTHROPIC_FOUNDRY_RESOURCE" in result.detail
+
+
 def test_scan_needs_a_readable_config(isolated_home: Path) -> None:
     write_config(isolated_home, "broken = = toml")
 
@@ -195,6 +209,19 @@ def test_investigation_is_wired_with_agent_settings(
     with open_investigation() as (service, settings):
         assert settings.agent.parallel == 2
         assert service is not None
+
+
+def test_a_conflicting_foundry_resource_is_not_ready(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_FOUNDRY_RESOURCE", "acme")
+    write_config(isolated_home, f'[llm]\nmodel = "m-1"\nbase_url = "{FOUNDRY_URL}"\n')
+    store_api_key(isolated_home)
+    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
+    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+
+    with pytest.raises(NotReadyError, match="ANTHROPIC_FOUNDRY_RESOURCE"), open_investigation():
+        pass
 
 
 def test_chat_is_wired_with_scan_settings_and_sessions(

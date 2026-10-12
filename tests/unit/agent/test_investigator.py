@@ -219,6 +219,18 @@ def test_thinking_can_be_switched_off() -> None:
     assert "thinking" not in model.requests[0]
 
 
+def test_a_large_output_limit_is_streamed_not_refused() -> None:
+    # The SDK refuses a non-streaming call whose max_tokens could take over 10 minutes.
+    model = ScriptedModel([message(EXCERPT), message(submit("toolu_2"))])
+    settings = ModelSettings(model="m-1", max_tokens=64_000)
+
+    outcome = investigator(model, settings=settings).start(finding_text(finding()))
+
+    assert outcome.status is Status.COMPLETED
+    assert model.requests[0]["stream"] is True
+    assert model.requests[0]["max_tokens"] == 64_000
+
+
 def test_the_cache_breakpoint_follows_the_newest_message() -> None:
     model = ScriptedModel(
         [

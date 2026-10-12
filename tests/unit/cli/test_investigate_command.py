@@ -158,6 +158,20 @@ def test_counter_evidence_open_questions_cache_and_failures_render() -> None:
     assert "900 tokens, 3 rounds" in text
 
 
+def test_names_and_reviews_are_shown_as_text_not_markup() -> None:
+    base = run_world()
+    (result,) = base.results
+    finding = result.finding
+    named = replace(finding, key=replace(finding.key, job="test [ubuntu-latest]"))
+    review = "accepted: workspace [/home/runner/work] was cleaned"
+    report = replace(base, results=[replace(result, finding=named, review=review)])
+
+    text = rendered(report)
+
+    assert "test [ubuntu-latest]" in text
+    assert "[/home/runner/work]" in text
+
+
 def test_unknown_numbers_are_named(monkeypatch: pytest.MonkeyPatch) -> None:
     use(monkeypatch, FakeAgent())
 

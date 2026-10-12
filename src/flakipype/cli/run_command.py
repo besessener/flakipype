@@ -3,6 +3,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.text import Text
 
 from flakipype.agent.tools import Mode
 from flakipype.cli import wiring
@@ -65,4 +66,4 @@ def run(  # noqa: PLR0913 - Typer maps every command line option to one paramete
 
 def _show(console: Console, text: str) -> None:
     if text:
-        console.print(f"[dim]{text}[/]")
+        console.print(Text(text, style="dim"))

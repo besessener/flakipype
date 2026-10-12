@@ -93,3 +93,21 @@ def test_parse_keeps_untimestamped_lines() -> None:
         (1, True, "plain"),
         (2, False, "stamped"),
     ]
+
+
+def test_a_stamp_that_is_no_date_leaves_the_line_unstamped() -> None:
+    log = (
+        STAMP.format(5) + "##[error]Test failed\n2026-02-30T00:00:00Z continued\n"
+        "progress\r2026-13-01T00:00:00Z next"
+    )
+
+    lines = parse_log(log)
+
+    assert [(line.stamp is None, line.text) for line in lines] == [
+        (False, "##[error]Test failed"),
+        (True, "2026-02-30T00:00:00Z continued"),
+        (True, "progress"),
+        (True, "2026-13-01T00:00:00Z next"),
+    ]
+    assert "2026-02-30T00:00:00Z continued" in failure_excerpt(log, 50).text
+    assert "2026-13-01" in log_range(log, 1, 4)

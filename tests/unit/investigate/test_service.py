@@ -71,6 +71,21 @@ def test_failed_investigations_are_not_cached(cache: ScanCache) -> None:
     assert agent.calls == [2, 2]
 
 
+def test_one_crashing_investigation_keeps_the_others_and_their_tokens(cache: ScanCache) -> None:
+    agent = FakeAgent(crash_on=3)
+    scanner = service(cache, agent)
+
+    report = scanner.run(InvestigationRequest(SCAN, Selection()))
+    again = scanner.run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+
+    first, crashed = report.results
+    assert first.status is Status.COMPLETED
+    assert crashed.status is Status.FAILED
+    assert crashed.detail.startswith("Investigation failed: UnicodeDecodeError")
+    assert report.tokens == 2_000
+    assert again.results[0].from_cache
+
+
 def test_verdicts_whose_review_failed_are_investigated_again(cache: ScanCache) -> None:
     unreviewed = FakeAgent(review="not reviewed: Error code: 400 - tool_choice not supported")
     scanner = service(cache, unreviewed)

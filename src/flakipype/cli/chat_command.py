@@ -17,10 +17,14 @@ def open_chat_window(context: typer.Context) -> None:
     errors = Console(stderr=True, highlight=False)
     try:
         with wiring.open_chat() as (chat, settings):
-            ChatApp(chat, f"{settings.github.owner} on {settings.github.host}").run()
+            app = ChatApp(chat, f"{settings.github.owner} on {settings.github.host}")
+            app.run()
     except wiring.NotReadyError as error:
         errors.print(f"[red]Not ready:[/] {error}")
         raise typer.Exit(EXIT_NOT_READY) from error
     except GitHubApiError as error:
         errors.print(f"[red]GitHub:[/] {error}")
         raise typer.Exit(1) from error
+    # A crash in a chat worker closes the app with return code 1; it must not end as success.
+    if app.return_code:
+        raise typer.Exit(app.return_code)

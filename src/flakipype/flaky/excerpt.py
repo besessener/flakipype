@@ -37,9 +37,19 @@ def parse_log(log: str) -> list[LogLine]:
     lines = []
     for number, raw in enumerate(clean_text(log).split("\n"), start=1):
         match = _STAMP.match(raw)
-        stamp = datetime.fromisoformat(match.group(1)) if match else None
-        lines.append(LogLine(number, stamp, raw[match.end() :] if match else raw))
+        stamp = _parsed_stamp(match)
+        lines.append(LogLine(number, stamp, raw[match.end() :] if match and stamp else raw))
     return lines
+
+
+def _parsed_stamp(match: re.Match[str] | None) -> datetime | None:
+    """The line's time; a stamp of the right shape that is no date (2026-02-30) is none."""
+    if match is None:
+        return None
+    try:
+        return datetime.fromisoformat(match.group(1))
+    except ValueError:
+        return None
 
 
 def failure_excerpt(log: str, max_lines: int) -> Excerpt:

@@ -55,7 +55,7 @@ class Category(StrEnum):
 _CATEGORY_PATTERNS = (
     (Category.RUNNER, (
         r"lost communication with the server|runner has received a shutdown|"
-        r"hosted runner encountered an error|runner .* (?:was )?(?:lost|terminated)"
+        r"hosted runner encountered an error|runner .{0,200} (?:lost|terminated)"
     )),
     (Category.RESOURCES, (
         r"out of memory|oomkilled|heap out of memory|enospc|"
@@ -93,16 +93,17 @@ def clean_text(text: str) -> str:
 
 def log_entries(log: str) -> list[str]:
     """Split a log into entries: a timestamped line plus the untimestamped lines after it."""
-    entries: list[str] = []
+    # Lines are joined once at the end: appending to a growing string is quadratic.
+    entries: list[list[str]] = []
     for line in clean_text(log).split("\n"):
         stamped = _TIMESTAMP.match(line)
         if stamped:
-            entries.append(line[stamped.end() :])
+            entries.append([line[stamped.end() :]])
         elif entries:
-            entries[-1] += "\n" + line
+            entries[-1].append(line)
         elif line:
-            entries.append(line)
-    return entries
+            entries.append([line])
+    return ["\n".join(lines) for lines in entries]
 
 
 def error_entries(log: str) -> list[str]:

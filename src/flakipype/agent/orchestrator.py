@@ -22,6 +22,8 @@ from flakipype.agent.tools import (
     ToolDeclinedError,
     ToolError,
 )
+from flakipype.config.settings import MAX_WINDOW_DAYS
+from flakipype.llm.client import create_message
 
 type StepListener = Callable[[str], None]
 
@@ -55,7 +57,9 @@ class Workspace(Protocol):
 
 
 class ScanInput(BaseModel):
-    days: int | None = Field(default=None, ge=1, le=400, description="default: configuration")
+    days: int | None = Field(
+        default=None, ge=1, le=MAX_WINDOW_DAYS, description="default: configuration"
+    )
     repositories: list[str] = Field(default_factory=list, description="names; empty means all")
 
 
@@ -218,7 +222,7 @@ class ChatAgent:
             "messages": cached_messages(self._messages),
             **self._settings.model.thinking_parameter(),
         }
-        response: Message = self._client.messages.create(**request)
+        response: Message = create_message(self._client, request)
         return response
 
     def _run(self, use: ToolUseBlock, on_step: StepListener) -> dict[str, Any]:

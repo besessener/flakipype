@@ -85,7 +85,7 @@ class FileSecretStore:
             return {}
         try:
             content = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             message = f"Cannot read {self._path}: {error}"
             raise SecretStoreError(message) from error
         if not isinstance(content, dict):

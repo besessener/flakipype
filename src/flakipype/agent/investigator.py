@@ -21,6 +21,7 @@ from flakipype.agent.messages import (
 from flakipype.agent.prompts import INVESTIGATOR_SYSTEM
 from flakipype.agent.tools import PolicyGate, Tool, ToolError
 from flakipype.agent.verdict import FINDING_REFERENCE, Verdict, citation_problems
+from flakipype.llm.client import create_message
 
 SUBMIT_VERDICT = "submit_verdict"
 _CORRECTIONS = 2
@@ -35,6 +36,7 @@ class Status(StrEnum):
     LOOP = "loop"
     NO_VERDICT = "no_verdict"
     MODEL_ERROR = "model_error"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True)
@@ -165,7 +167,7 @@ class Investigator:
             "messages": cached_messages(self._messages),
             **self._settings.thinking_parameter(),
         }
-        response: Message = self._client.messages.create(**request)
+        response: Message = create_message(self._client, request)
         return response
 
     def _handle(self, use: ToolUseBlock, turn: _Turn) -> Outcome | None:

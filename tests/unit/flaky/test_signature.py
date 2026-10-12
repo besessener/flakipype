@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pytest
@@ -126,6 +127,8 @@ def test_normalise(raw: str, normalised: str) -> None:
     ("text", "category"),
     [
         ("The self-hosted runner lost communication with the server.", Category.RUNNER),
+        ("The runner ubuntu-24 was lost.", Category.RUNNER),
+        ("The runner ubuntu-24 has been terminated", Category.RUNNER),
         ("FATAL ERROR: Reached heap limit - JavaScript heap out of memory", Category.RESOURCES),
         ("API rate limit exceeded for installation", Category.RATE_LIMIT),
         ("Error: read ECONNRESET", Category.NETWORK),
@@ -140,3 +143,26 @@ def test_normalise(raw: str, normalised: str) -> None:
 )
 def test_categories(text: str, category: Category) -> None:
     assert categorise(text) is category
+
+
+# Each would take minutes if the work grew with the square of the input.
+QUICK_SECONDS = 5.0
+
+
+def test_many_continuation_lines_are_joined_in_linear_time() -> None:
+    log = f"{STAMP}##[group]x" + "\n" * 1_000_000
+
+    started = time.perf_counter()
+    (entry,) = log_entries(log)
+
+    assert time.perf_counter() - started < QUICK_SECONDS
+    assert entry.count("\n") == 1_000_000
+
+
+def test_a_long_line_full_of_runner_is_categorised_in_linear_time() -> None:
+    started = time.perf_counter()
+
+    category = categorise("Error: " + "runner " * 30_000)
+
+    assert time.perf_counter() - started < QUICK_SECONDS
+    assert category is Category.OTHER

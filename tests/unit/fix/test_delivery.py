@@ -145,3 +145,18 @@ def test_verification_that_cannot_start_leaves_the_pull_request(cache: ScanCache
     assert opened.url.endswith("/pull/12")
     assert opened.verification.stage is Stage.DONE
     assert opened.verification.outcome == ("Verification could not start: Server Error (HTTP 500)")
+
+
+def test_an_unexpected_error_after_the_draft_still_returns_the_pull_request(
+    cache: ScanCache,
+) -> None:
+    world = FixWorld(cache)
+    world.github.errors["file_bytes"] = ValueError("day is out of range for month")
+
+    opened = world.delivery.deliver(proposal())
+
+    assert opened.url.endswith("/pull/12")
+    assert opened.verification.stage is Stage.DONE
+    assert opened.verification.outcome == (
+        "Verification could not start: day is out of range for month"
+    )

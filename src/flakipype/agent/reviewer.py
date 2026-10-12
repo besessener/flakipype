@@ -13,6 +13,7 @@ from flakipype.agent.masking import Masker
 from flakipype.agent.messages import content_blocks
 from flakipype.agent.prompts import REVIEWER_SYSTEM, data_block
 from flakipype.agent.verdict import Review, Verdict
+from flakipype.llm.client import create_message
 
 SUBMIT_REVIEW = "submit_review"
 _NUDGE = "Answer by calling submit_review."
@@ -89,7 +90,7 @@ class Reviewer:
         }
         try:
             self._budget.check()
-            response: Message = self._client.messages.create(**request)
+            response: Message = create_message(self._client, request)
         except (APIError, BudgetExceededError) as error:
             raise ReviewUnavailableError(str(error)) from error
         self._budget.record(response.usage)

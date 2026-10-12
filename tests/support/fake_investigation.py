@@ -53,6 +53,7 @@ class FakeAgent:
     status: Status = Status.COMPLETED
     tokens: int = 1_000
     review: str = "accepted: ok"
+    crash_on: int | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __call__(
@@ -62,6 +63,8 @@ class FakeAgent:
             self.calls.append(finding.number)
         assert evidence.runs
         run_budget.add(self.tokens)
+        if finding.number == self.crash_on:
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
         verdict = Verdict.model_validate(verdict_input("quote", "finding"))
         good = self.status is Status.COMPLETED
         return FindingResult(

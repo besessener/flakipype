@@ -10,6 +10,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationErr
 
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 DEFAULT_GITHUB_HOST = "github.com"
+MAX_WINDOW_DAYS = 400
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _GITHUB_LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
@@ -67,7 +68,7 @@ class ScanSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     # GitHub keeps run history for 400 days; logs usually for 90.
-    window_days: int = Field(default=30, ge=1, le=400)
+    window_days: int = Field(default=30, ge=1, le=MAX_WINDOW_DAYS)
     # Hard limit per scan; log downloads are the slow, heavy part.
     max_log_downloads: int = Field(default=50, ge=0, le=1000)
     # One failure that passed on rerun can be an outage; flaky means it keeps happening.
@@ -156,7 +157,7 @@ def load_settings(path: Path) -> Settings:
         return Settings()
     try:
         return Settings.model_validate(tomllib.loads(path.read_text(encoding="utf-8")))
-    except (tomllib.TOMLDecodeError, ValidationError, OSError) as error:
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError, ValidationError, OSError) as error:
         message = f"Cannot read {path}: {error}"
         raise SettingsError(message) from error
 

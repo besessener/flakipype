@@ -4,7 +4,13 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 
-from flakipype.llm.client import EndpointKind, LlmEndpoint, create_client, endpoint_kind
+from flakipype.llm.client import (
+    ClientSetupError,
+    EndpointKind,
+    LlmEndpoint,
+    create_client,
+    endpoint_kind,
+)
 from flakipype.llm.connection import (
     ConnectionFailed,
     ConnectionOk,
@@ -119,6 +125,29 @@ def test_timeout() -> None:
 
     assert isinstance(result, ConnectionFailed)
     assert result.problem is ConnectionProblem.TIMEOUT
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        httpx2.Response(200, text="<html>Sign in</html>", headers={"content-type": "text/html"}),
+        httpx2.Response(200, json={"status": "ok"}),
+    ],
+)
+def test_an_answer_that_is_not_a_message_fails(answer: httpx2.Response) -> None:
+    result = check_connection(client_answering(httpx2.MockTransport(lambda _: answer)), "m-1")
+
+    assert isinstance(result, ConnectionFailed)
+    assert result.problem is ConnectionProblem.UNEXPECTED_ANSWER
+
+
+def test_a_foundry_resource_in_the_environment_is_a_typed_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_FOUNDRY_RESOURCE", "acme")
+
+    with pytest.raises(ClientSetupError, match="ANTHROPIC_FOUNDRY_RESOURCE"):
+        create_client(FOUNDRY)
 
 
 def test_every_problem_has_a_next_step() -> None:

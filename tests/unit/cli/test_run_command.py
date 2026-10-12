@@ -21,6 +21,7 @@ from flakipype.store.lock import RunLockedError
 from flakipype.unattended.limits import Usage
 from flakipype.unattended.service import RunService
 
+from support.fake_investigation import world
 from support.fake_run import ClassifyingAgent, RunWorld, limits
 
 runner = CliRunner()
@@ -186,3 +187,32 @@ def test_progress_goes_to_a_terminal_on_stderr(
     assert result.exit_code == 0
     assert "Investigating #1 test" in click.unstyle(terminal.getvalue())
     assert opened
+
+
+def test_progress_shows_job_names_as_text_not_markup(
+    monkeypatch: pytest.MonkeyPatch, cache: ScanCache
+) -> None:
+    source = world()
+    source.jobs_by_attempt = {
+        attempt: [replace(job, name="unit [/]") for job in jobs]
+        for attempt, jobs in source.jobs_by_attempt.items()
+        if isinstance(jobs, list)
+    }
+
+    @contextmanager
+    def open_run(
+        mode: Mode, request_for: Callable[[Settings], ScanRequest]
+    ) -> Iterator[RunService]:
+        del request_for
+        yield RunWorld(cache, mode=mode, source=source).service()
+
+    terminal = io.StringIO()
+    monkeypatch.setattr(wiring, "open_run", open_run)
+    monkeypatch.setattr(
+        run_command, "Console", lambda **_: Console(file=terminal, force_terminal=True, width=100)
+    )
+
+    result = runner.invoke(app, ["run"])
+
+    assert result.exit_code == 0, result.output
+    assert "Investigating #1 unit [/]" in click.unstyle(terminal.getvalue())

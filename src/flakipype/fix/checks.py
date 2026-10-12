@@ -101,8 +101,11 @@ def _parse_problem(change: FileChange) -> str | None:
         return None
     try:
         document = parse(change.after)
-    except (yaml.YAMLError, ValueError) as error:
-        first_line = str(error).splitlines()[0]
+    except RecursionError:
+        return f"{change.path} no longer parses: it is nested too deeply to check"
+    # safe_load lets KeyError and AttributeError escape for invalid tagged values (`!!bool on1`).
+    except (yaml.YAMLError, ValueError, KeyError, AttributeError) as error:
+        first_line = (str(error).splitlines() or [type(error).__name__])[0]
         return f"{change.path} no longer parses: {first_line}"
     if change.path.startswith(_WORKFLOWS) and not _is_workflow(document):
         return f"{change.path} is no longer a workflow: it needs `on` and `jobs`."

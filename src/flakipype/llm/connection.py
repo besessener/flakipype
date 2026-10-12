@@ -14,6 +14,8 @@ class ConnectionProblem(StrEnum):
     SERVER_ERROR = "server_error"
     TIMEOUT = "timeout"
     UNREACHABLE = "unreachable"
+    UNEXPECTED_ANSWER = "unexpected_answer"
+    ENVIRONMENT = "environment"
 
     @property
     def next_step(self) -> str:
@@ -32,6 +34,10 @@ _NEXT_STEPS = {
     ConnectionProblem.SERVER_ERROR: "The endpoint has a problem. Try again later.",
     ConnectionProblem.TIMEOUT: "No answer in time. Check the URL, proxy and network.",
     ConnectionProblem.UNREACHABLE: "Cannot reach the endpoint. Check the URL, proxy and network.",
+    ConnectionProblem.UNEXPECTED_ANSWER: "The endpoint did not answer like the Anthropic "
+    "Messages API. Check the base URL.",
+    ConnectionProblem.ENVIRONMENT: "An environment variable conflicts with the configured "
+    "endpoint. Unset it and test again.",
 }
 
 _PROBLEM_BY_STATUS: dict[int, ConnectionProblem] = {
@@ -76,4 +82,8 @@ def check_connection(client: Anthropic, model: str) -> ConnectionResult:
         return ConnectionFailed(ConnectionProblem.UNREACHABLE, str(error))
     except APIStatusError as error:
         return ConnectionFailed(problem_for_status(error.status_code), error.message)
-    return ConnectionOk(model=response.model)
+    # Without strict validation, any 200 answer passes: a sign-in page or another JSON API.
+    answered = getattr(response, "model", None)
+    if not isinstance(answered, str) or not answered:
+        return ConnectionFailed(ConnectionProblem.UNEXPECTED_ANSWER, f"Answer: {response!r:.200}")
+    return ConnectionOk(model=answered)

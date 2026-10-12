@@ -46,8 +46,13 @@ from flakipype.github.runs import RunControl
 from flakipype.investigate.chat import ChatService
 from flakipype.investigate.service import InvestigationService
 from flakipype.investigate.workspace import ChatWorkspace
-from flakipype.llm.client import LlmEndpoint, create_client
-from flakipype.llm.connection import ConnectionResult, check_connection
+from flakipype.llm.client import ClientSetupError, LlmEndpoint, create_client
+from flakipype.llm.connection import (
+    ConnectionFailed,
+    ConnectionProblem,
+    ConnectionResult,
+    check_connection,
+)
 from flakipype.scan.service import ScanRequest, ScanService
 from flakipype.setup.daemon import Daemon, UnitOptions, installed_executable, run_command
 from flakipype.setup.doctor import KEY_IN_A_FILE, RUN_SETUP
@@ -61,7 +66,11 @@ _DOWNLOAD_TIMEOUT_SECONDS = 120
 
 
 def check_llm_endpoint(endpoint: LlmEndpoint) -> ConnectionResult:
-    return check_connection(create_client(endpoint, max_retries=0), endpoint.model)
+    try:
+        client = create_client(endpoint, max_retries=0)
+    except ClientSetupError as error:
+        return ConnectionFailed(ConnectionProblem.ENVIRONMENT, str(error))
+    return check_connection(client, endpoint.model)
 
 
 class NotReadyError(Exception):
@@ -150,8 +159,13 @@ def open_scan() -> Iterator[tuple[ScanService, Settings]]:
 def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
     agent = settings.agent
     endpoint = LlmEndpoint(settings.llm.base_url, api_key, settings.llm.model)
+    try:
+        client = create_client(endpoint)
+    except ClientSetupError as error:
+        message = f"{error}."
+        raise NotReadyError(message) from error
     return AgentConfig(
-        client=create_client(endpoint),
+        client=client,
         settings=ModelSettings(
             model=settings.llm.model,
             max_tokens=agent.max_output_tokens,

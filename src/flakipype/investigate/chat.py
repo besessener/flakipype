@@ -12,6 +12,7 @@ from typing import Any
 from flakipype.actions.watch import WatchedRun
 from flakipype.agent.orchestrator import ChatAgent, StepListener, ignore_steps
 from flakipype.agent.tools import Confirmer, Mode, PolicyGate, ToolDeclinedError, ToolError
+from flakipype.config.settings import MAX_WINDOW_DAYS
 from flakipype.flaky.findings import FindingKind
 from flakipype.github.actions import GitHubApiError
 from flakipype.investigate.chat_text import HELP, SidebarItem, sidebar_items
@@ -171,6 +172,8 @@ class ChatService:
 
     def _scan(self, arguments: list[str]) -> ChatEntry:
         days = _numbers(arguments)
+        if days and not 1 <= days[0] <= MAX_WINDOW_DAYS:
+            return ChatEntry(EntryKind.ERROR, f"Scan 1 to {MAX_WINDOW_DAYS} days, e.g. /scan 7.")
         return self._note(self._workspace.scan(days[0] if days else None, ()))
 
     def _investigate(self, arguments: list[str]) -> ChatEntry:
@@ -200,11 +203,12 @@ class ChatService:
         return self._act(tool, {"finding": numbers[0]})
 
     def _dispatch(self, arguments: list[str]) -> ChatEntry:
-        if not arguments or not arguments[0].lstrip("#").isdigit():
+        finding = _number(arguments[0]) if arguments else None
+        if finding is None:
             return ChatEntry(
                 EntryKind.ERROR, "Which finding? E.g. /dispatch 2 or /dispatch 2 main x3."
             )
-        request: dict[str, object] = {"finding": int(arguments[0].lstrip("#"))}
+        request: dict[str, object] = {"finding": finding}
         for argument in arguments[1:]:
             repeats = _REPEATS.fullmatch(argument)
             if repeats:
@@ -336,4 +340,10 @@ class ChatService:
 
 
 def _numbers(arguments: list[str]) -> list[int]:
-    return [int(argument.lstrip("#")) for argument in arguments if argument.lstrip("#").isdigit()]
+    return [number for argument in arguments if (number := _number(argument)) is not None]
+
+
+def _number(argument: str) -> int | None:
+    # str.isdigit() also accepts "²", which int() rejects.
+    digits = argument.lstrip("#")
+    return int(digits) if digits.isascii() and digits.isdigit() else None

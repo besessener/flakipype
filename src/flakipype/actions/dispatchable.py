@@ -6,13 +6,15 @@ import yaml
 
 _NOT_DISPATCHABLE = "the workflow does not declare workflow_dispatch"
 _DISPATCH = "workflow_dispatch"
+# safe_load raises more than YAMLError on values GitHub reads as plain strings (e.g. 2024-02-30).
+_UNREADABLE = (yaml.YAMLError, ValueError, KeyError, AttributeError, RecursionError)
 
 
 def triggers(workflow_text: str) -> set[str]:
     """The events that start the workflow; empty if the file is not a valid workflow."""
     try:
         document: Any = yaml.safe_load(workflow_text)
-    except yaml.YAMLError:
+    except _UNREADABLE:
         return set()
     if not isinstance(document, dict):
         return set()
@@ -29,7 +31,7 @@ def dispatch_problem(workflow_text: str) -> str | None:
     """Why the workflow cannot be dispatched without inputs, or None if it can."""
     try:
         document: Any = yaml.safe_load(workflow_text)
-    except yaml.YAMLError:
+    except _UNREADABLE:
         return "the workflow file is not valid YAML"
     if not isinstance(document, dict):
         return _NOT_DISPATCHABLE
