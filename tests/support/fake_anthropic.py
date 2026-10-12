@@ -49,6 +49,10 @@ class ScriptedModel:
     def _handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(json.loads(request.content))
         self.headers.append(dict(request.headers))
+        problem = invalid_history(self.requests[-1]["messages"])
+        if problem:
+            body = {"type": "error", "error": {"type": "invalid_request_error", "message": problem}}
+            return httpx2.Response(400, json=body)
         if not self.turns:
             return httpx2.Response(
                 500,
@@ -103,6 +107,30 @@ class ScriptedModel:
             blocks = [] if isinstance(content, str) else content
             found += [f"message {index}" for block in blocks if "cache_control" in block]
         return found
+
+
+def invalid_history(messages: list[dict[str, Any]]) -> str:
+    """Why the real API would reject these messages with a 400, or "" when it accepts them."""
+    for index, entry in enumerate(messages):
+        is_prefill = index == len(messages) - 1 and entry["role"] == "assistant"
+        if not entry["content"] and not is_prefill:
+            return f"messages.{index}: all messages must have non-empty content"
+        if entry["role"] != "assistant":
+            continue
+        following = messages[index + 1] if index + 1 < len(messages) else None
+        missing = _ids(entry, "tool_use", "id") - _ids(following, "tool_result", "tool_use_id")
+        if missing and following is not None:
+            return (
+                f"messages.{index}: tool_use ids were found without tool_result blocks "
+                f"immediately after: {', '.join(sorted(missing))}"
+            )
+    return ""
+
+
+def _ids(entry: dict[str, Any] | None, block_type: str, key: str) -> set[str]:
+    """The ids named by one message's blocks of one type."""
+    content = [] if entry is None or isinstance(entry["content"], str) else entry["content"]
+    return {block[key] for block in content if block.get("type") == block_type}
 
 
 def _events(turn: dict[str, Any]) -> bytes:

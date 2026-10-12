@@ -5,7 +5,7 @@ import pytest
 
 from flakipype.agent.tools import ActionRequest, Confirmer
 from flakipype.github.actions import GitHubApiError
-from flakipype.investigate.chat import ChatService, EntryKind
+from flakipype.investigate.chat import ChatEntry, ChatService, EntryKind
 from flakipype.store.database import ScanCache
 
 from support.fake_actions import FakeActions
@@ -26,6 +26,10 @@ def runs() -> FakeRuns:
 
 def roles(model: ScriptedModel, request_index: int) -> list[str]:
     return [entry["role"] for entry in model.requests[request_index]["messages"]]
+
+
+def answered(entries: list[ChatEntry]) -> tuple[EntryKind, str]:
+    return entries[-1].kind, entries[-1].text
 
 
 def test_a_save_during_a_turn_stores_only_finished_turns(cache: ScanCache) -> None:
@@ -50,11 +54,12 @@ def test_a_save_during_a_turn_stores_only_finished_turns(cache: ScanCache) -> No
     later = ScriptedModel([message(text("Hello."))])
     resumed = chat_service(cache, later, runs=runs())
     resumed.handle("/resume 1")
-    resumed.handle("Hi")
+    follow_up = resumed.handle("Hi")
 
     assert stored["entries"][-1]["text"].startswith("R1: CI passed on attempt 2")
     assert stored["history"] == []
     assert roles(later, 0) == ["user"]
+    assert answered(follow_up) == (EntryKind.ASSISTANT, "Hello.")
 
 
 def test_a_github_failure_during_a_question_leaves_the_session_usable(cache: ScanCache) -> None:
@@ -69,11 +74,24 @@ def test_a_github_failure_during_a_question_leaves_the_session_usable(cache: Sca
     chat: ChatService = chat_service(cache, model, actions=broken)
 
     (_, answer) = chat.handle("Scan my repositories")
-    chat.handle("Logged in again, scan")
+    follow_up = chat.handle("Logged in again, scan")
 
     assert answer.kind is EntryKind.ASSISTANT
+    assert answered(follow_up) == (EntryKind.ASSISTANT, "Scanned.")
     assert roles(model, 2) == ["user", "assistant", "user", "assistant", "user"]
     assert chat.tokens == 3 * 1_200
+
+
+def test_an_empty_answer_leaves_the_session_usable(cache: ScanCache) -> None:
+    model = ScriptedModel([message(), message(text("Hello."))])
+    chat = chat_service(cache, model)
+
+    (_, answer) = chat.handle("What does zizmor report?")
+    follow_up = chat.handle("Hi")
+
+    assert answered(follow_up) == (EntryKind.ASSISTANT, "Hello.")
+    assert answer.kind is EntryKind.ERROR
+    assert roles(model, 1) == ["user"]
 
 
 def test_new_and_resume_count_only_the_sessions_own_tokens(cache: ScanCache) -> None:

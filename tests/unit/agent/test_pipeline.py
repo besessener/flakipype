@@ -182,10 +182,8 @@ def test_a_reviewer_answering_in_prose_is_nudged_once() -> None:
     [
         [message(text("Looks fine to me.")), message(text("Really fine."))],
         [message(call("toolu_r", "submit_review", {"decision": "approve"}))],
-        [{**message(), "stop_reason": "refusal"}],
-        [message()],
     ],
-    ids=["prose", "invalid", "refusal", "empty"],
+    ids=["prose", "invalid"],
 )
 def test_unusable_reviews_raise(answers: list[dict[str, Any] | int]) -> None:
     model = ScriptedModel(answers)
@@ -208,6 +206,19 @@ def test_the_verdict_review_request_is_wrapped_and_masked() -> None:
     assert content.endswith("}\n</verdict>\n\nReview this verdict and answer with submit_review.")
     assert SECRET not in content
     assert "Leaked [masked: configured secret] in the log." in content
+
+
+@pytest.mark.parametrize(
+    "answer", [{**message(), "stop_reason": "refusal"}, message()], ids=["refusal", "empty"]
+)
+def test_a_refused_or_empty_review_is_not_nudged(answer: dict[str, Any]) -> None:
+    model = ScriptedModel([answer, review("accept")])
+    verdict = Verdict.model_validate(verdict_input(QUOTE, "toolu_1"))
+
+    with pytest.raises(ReviewUnavailableError, match="declined to answer or gave an empty"):
+        reviewer_for(model).review("finding", verdict, Masker())
+
+    assert len(model.requests) == 1
 
 
 def test_review_decisions_are_complete() -> None:
