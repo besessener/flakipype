@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 _MIN_KNOWN_SECRET = 8
+MASK_MARKER = "[masked: "
 
 # Ordered: specific token formats first, generic assignments last. Group "keep" is preserved.
 _PATTERNS = (
@@ -43,7 +44,7 @@ class Masker:
 
     def mask(self, text: str) -> str:
         for secret in self.known_secrets:
-            text = text.replace(secret, "[masked: configured secret]")
+            text = text.replace(secret, f"{MASK_MARKER}configured secret]")
         for kind, pattern in _PATTERNS:
-            text = pattern.sub(rf"\g<keep>[masked: {kind}]", text)
+            text = pattern.sub(rf"\g<keep>{MASK_MARKER}{kind}]", text)
         return text

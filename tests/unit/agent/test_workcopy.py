@@ -31,7 +31,13 @@ def test_paths_are_normalised(given: str, normal: str) -> None:
     assert normal_path(given) == normal
 
 
-@pytest.mark.parametrize("given", ["", "/etc/passwd", "../x", "a/../../x", ".git/config", " . "])
+@pytest.mark.parametrize(
+    "given",
+    [
+        "", "/etc/passwd", "../x", "a/../../x", ".git/config", " . ",
+        "tests/helper.sh\x1b[2K", "tests/a.py\nWarnings: none", "a\x7fb", "a\x9bb",
+    ],
+)  # fmt: skip
 def test_paths_outside_the_repository_are_refused(given: str) -> None:
     with pytest.raises(ToolError, match="not a file path inside the repository"):
         normal_path(given)
@@ -67,6 +73,19 @@ def test_edits_keep_the_files_line_endings() -> None:
     assert (readme.added, readme.removed) == (["line 2", "line 3"], ["line two"])
     assert new.before is None
     assert new.diff_lines()[:2] == ["--- /dev/null", "+++ b/NEW.md"]
+
+
+def test_masked_placeholders_are_never_written_back() -> None:
+    files = FakeFiles()
+    copy = working_copy(files)
+    original = copy.read(E2E_TEST) or ""
+
+    with pytest.raises(ToolError, match="Leave masked lines unchanged"):
+        copy.write(E2E_TEST, original + "token = [masked: secret]\n")
+    with pytest.raises(ToolError, match="Leave masked lines unchanged"):
+        copy.replace(E2E_TEST, "waitForTimeout(500)", "[masked: secret]")
+
+    assert copy.changes() == []
 
 
 def test_unchanged_edits_are_no_changes() -> None:

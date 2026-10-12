@@ -1,16 +1,20 @@
 """The fixer's working copy: edits kept in memory over one pinned commit, never on disk."""
 
 import difflib
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Protocol
 
+from flakipype.agent.masking import MASK_MARKER
 from flakipype.agent.tools import ToolError
 from flakipype.github.actions import GitHubApiError
 from flakipype.github.pulls import FileTree
 
 _CRLF = "\r\n"
+# C0 and C1 control characters; a path holding one could rewrite the confirmation dialog.
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 class RepositoryFiles(Protocol):
@@ -51,10 +55,11 @@ def unified_diff(changes: list[FileChange]) -> str:
 
 
 def normal_path(path: str) -> str:
-    """A repository-relative path; refuses absolute paths, `..` and the `.git` directory."""
+    """A repository-relative path; refuses absolute paths, `..`, `.git` and control characters."""
     cleaned = path.strip().replace("\\", "/")
     parts = [part for part in cleaned.split("/") if part not in {"", "."}]
-    if not parts or cleaned.startswith("/") or ".." in parts or parts[0] == ".git":
+    invalid = not parts or cleaned.startswith("/") or ".." in parts or parts[0] == ".git"
+    if invalid or _CONTROL.search(cleaned):
         message = f"{path!r} is not a file path inside the repository"
         raise ToolError(message)
     return str(PurePosixPath(*parts))
@@ -90,6 +95,7 @@ class WorkingCopy:
     def write(self, path: str, content: str) -> None:
         name = normal_path(path)
         original = self._original(name)
+        _refuse_mask_markers(name, original, content)
         self._edited[name] = _with_line_endings_of(original or "", content)
 
     def replace(self, path: str, old: str, new: str) -> None:
@@ -105,6 +111,7 @@ class WorkingCopy:
             message = f"The text to replace is {found} in {name}; give exactly one occurrence"
             raise ToolError(message)
         replaced = text.replace(wanted, new.replace(_CRLF, "\n"))
+        _refuse_mask_markers(name, self._original(name), replaced)
         self._edited[name] = _with_line_endings_of(current, replaced)
 
     def apply(self, changes: list[FileChange]) -> None:
@@ -125,6 +132,17 @@ class WorkingCopy:
             raw = _github(lambda: self._files.file_bytes(self.repository, name, self.commit))
             self._originals[name] = None if raw is None else _text(name, raw)
         return self._originals[name]
+
+
+def _refuse_mask_markers(name: str, original: str | None, text: str) -> None:
+    """The model sees secrets masked; writing a placeholder back would replace real code."""
+    if text.count(MASK_MARKER) > (original or "").count(MASK_MARKER):
+        message = (
+            f"The new text of {name} contains `{MASK_MARKER}...]`, which hides real content "
+            "that you cannot see. Leave masked lines unchanged: edit only the other lines "
+            "with replace_in_file."
+        )
+        raise ToolError(message)
 
 
 def _text(name: str, raw: bytes) -> str:

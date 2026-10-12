@@ -1,5 +1,6 @@
 """The dialog that confirms an action; its text comes from code, never from the model."""
 
+import re
 from typing import ClassVar
 
 from rich.text import Text
@@ -14,16 +15,23 @@ from flakipype.agent.tools import ActionRequest
 
 _RULE_WIDTH = 70
 _DIFF_STYLES = {"+": "green", "-": "red", "@": "cyan"}
+# C0 and C1 control characters except tab and newline: an escape sequence could hide a line.
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
 
 def _rule(label: str) -> Text:
     return Text(f"── {label} ".ljust(_RULE_WIDTH, "─"))
 
 
+def visible(text: str) -> str:
+    """Control characters as escapes such as `\\x1b`, so the terminal shows them, not runs them."""
+    return _CONTROL.sub(lambda match: f"\\x{ord(match.group(0)):02x}", text)
+
+
 def diff_text(diff: str) -> Text:
     """The diff as plain text, coloured by line; its content is never read as markup."""
     text = Text()
-    for line in diff.splitlines():
+    for line in visible(diff).splitlines():
         if text:
             text.append("\n")
         header = line.startswith(("+++", "---"))
@@ -75,14 +83,14 @@ class ConfirmScreen(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         request = self._request
         with Vertical(id="dialog"):
-            yield Static(Text(request.title), id="dialog-title")
+            yield Static(Text(visible(request.title)), id="dialog-title")
             # Names of repositories, workflows and refs are shown as they are, never as markup.
-            yield Static(Text("\n".join(request.details)), id="dialog-details")
+            yield Static(Text(visible("\n".join(request.details))), id="dialog-details")
             if request.model_text or request.diff:
                 with VerticalScroll(id="dialog-change"):
                     if request.model_text:
                         yield Static(_rule("written by the model"), classes="dialog-rule")
-                        yield Static(Text(request.model_text), id="dialog-model-text")
+                        yield Static(Text(visible(request.model_text)), id="dialog-model-text")
                     if request.diff:
                         yield Static(_rule("diff"), classes="dialog-rule")
                         yield Static(diff_text(request.diff), id="dialog-diff")

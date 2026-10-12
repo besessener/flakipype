@@ -30,6 +30,16 @@ def test_the_size_caps_are_errors() -> None:
     ]
 
 
+def test_a_masked_placeholder_written_back_is_an_error() -> None:
+    before = "token = [masked: secret]\nx = 1\n"
+    kept = edit("tests/test_login.py", "token = [masked: secret]\nx = 2\n", before)
+    added = edit("tests/test_login.py", "token = [masked: secret]\nx = 1\n", "token = t()\n")
+
+    assert change_errors([kept], LIMITS) == []
+    (error,) = change_errors([added], LIMITS)
+    assert error.startswith("tests/test_login.py adds `[masked: ...]`: masked lines hide")
+
+
 @pytest.mark.parametrize(
     ("path", "after", "problem"),
     [
@@ -114,8 +124,27 @@ def test_reaching_out_is_a_warning(added: str, found: str) -> None:
     assert warning == f"reaches out: scripts/setup.sh ({found})"
 
 
+@pytest.mark.parametrize(
+    ("added", "found"),
+    [
+        ("u = 'http://localhost@evil.example/'", "adds `http://localhost@`"),
+        ("u = 'http://localhost:1@evil.example/'", "adds `http://localhost:1@`"),
+        ("u = 'https://localhost.evil.example/'", "adds `https://`"),
+        ("u = 'http://127.0.0.1.nip.io/'", "adds `http://`"),
+        ("u = 'HTTPS://example.com'", "adds `HTTPS://`"),
+    ],
+)
+def test_a_host_that_only_starts_like_localhost_is_reaching_out(added: str, found: str) -> None:
+    (warning,) = change_warnings([edit("tests/conftest.py", f"{added}\n")])
+
+    assert warning == f"reaches out: tests/conftest.py ({found})"
+
+
 def test_localhost_is_not_reaching_out() -> None:
-    after = "url = 'http://localhost:3000'\nother = 'http://127.0.0.1:80'\n"
+    after = (
+        "url = 'http://localhost:3000'\nother = 'http://127.0.0.1:80/health'\n"
+        'v6 = "http://[::1]:8080"\nbare = http://localhost\n'
+    )
 
     assert change_warnings([edit("tests/e2e/config.ts", after)]) == []
 

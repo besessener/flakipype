@@ -97,6 +97,27 @@ async def test_the_change_pane_shows_only_what_there_is(
             assert shown(dialog, present) == "[b]Why[/b]"
 
 
+async def test_control_characters_are_shown_not_run() -> None:
+    request = ActionRequest(
+        "Push?\x1b[2J",
+        ("⚠ reaches out: tests/helper.sh\x1b[2K\x1b[8m",),
+        model_text="Why\x9b8m",
+        diff="+\x1b[8mhidden\x1b[28m\n+\x1b[1A\x1b[2Kerased\r\n+\tkept",
+    )
+    app = DialogApp(request)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        dialog = app.screen
+
+        assert shown(dialog, "#dialog-title") == "Push?\\x1b[2J"
+        assert shown(dialog, "#dialog-details").endswith("helper.sh\\x1b[2K\\x1b[8m")
+        assert shown(dialog, "#dialog-model-text") == "Why\\x9b8m"
+        assert shown(dialog, "#dialog-diff") == (
+            "+\\x1b[8mhidden\\x1b[28m\n+\\x1b[1A\\x1b[2Kerased\\x0d\n+\tkept"
+        )
+
+
 def test_markup_in_a_diff_stays_text() -> None:
     text = diff_text("--- a/x\n+++ b/x\n@@ -1 +1 @@\n-[red]old\n+[bold]new\n context")
 

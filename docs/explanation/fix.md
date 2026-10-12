@@ -80,7 +80,9 @@ Plus the investigator's tools (`failure_excerpt`, `log_range`,
 risk `read`: they change only memory. The one `critical` action is the push
 (below), confirmed once with the full diff. Only UTF-8 text files can be
 edited, and only inside the finding's repository; paths are normalised and
-`.git/` and absolute or `..` paths are refused.
+`.git/`, absolute or `..` paths and paths with control characters are
+refused. The fixer reads files with secrets masked, so an edit that would
+write a `[masked: …]` placeholder back into a file is refused.
 
 ## Checks in code
 
@@ -91,11 +93,12 @@ Deterministic, before the reviewer and before any dialog:
 | Not empty | At least one changed line |
 | Size | At most 10 files and 400 changed lines (`fix.max_files`, `fix.max_changed_lines`) |
 | Still parses | Changed `.yml`, `.yaml`, `.json`, `.toml` files parse; workflow files still have `on` and `jobs` |
+| Nothing masked | No file gains a `[masked: …]` placeholder; masked lines hide real content |
 | Hides failures | Adds `continue-on-error: true`, `if: always()`, a test skip or focus marker (`pytest.skip(`, `@pytest.mark.skip`/`xfail`, `@unittest.skip`, `.skip(`, `xit(`, `.only(`, `@Disabled`, `@Ignore`, `t.Skip`) or removes more test declarations than it adds |
-| Reaches out | Adds a `secrets.` reference, `github.token`, an environment dump (`env`, `printenv`), `curl`, `wget`, `nc`, `ncat`, or an `http(s)://` URL other than localhost |
+| Reaches out | Adds a `secrets.` reference, `github.token`, an environment dump (`env`, `printenv`), `curl`, `wget`, `nc`, `ncat`, or an `http(s)://` URL other than localhost (the host must be exactly `localhost`, `127.0.0.1` or `[::1]`; any URL with `user@` counts) |
 | Touches `.github/` | Changes workflows or composite actions under `.github/` |
 
-The first three are errors: the fix goes back to the fixer. The last three
+The first four are errors: the fix goes back to the fixer. The last three
 are **warnings**: in `ask` mode they are shown at the top of the
 confirmation and in the pull request; in `auto` mode a fix with any of them
 is not pushed (see [modes](#modes)).
@@ -119,7 +122,8 @@ and the reason, so you can still ask for changes.
 
 The push is one `critical` action. The dialog shows facts from code at the
 top, the model's text clearly labelled, and the full diff in a scrollable
-pane:
+pane. Nothing in it is read as markup, and control characters are shown as
+escapes such as `\x1b`, so no content can hide or rewrite a line:
 
 ```text
 ╭──────────────────────────────────────────────────────────────────────────╮
