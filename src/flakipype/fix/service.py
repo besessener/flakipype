@@ -132,10 +132,9 @@ class FixService:
         if not proposal.accepted:
             message = (
                 f"No pull request for #{finding.number}: the review {proposal.review}. "
-                "Ask for changes, or /fix N --fresh to start over. The diff:\n"
-                + unified_diff(list(proposal.changes))
+                "Ask for changes, or /fix N --fresh to start over. The diff:"
             )
-            raise FixNotMadeError(message)
+            raise FixNotMadeError(message, unified_diff(list(proposal.changes)))
         return self._prepared(proposal)
 
     def adopt(self, pulls: list[OpenedPull]) -> None:

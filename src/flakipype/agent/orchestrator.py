@@ -237,7 +237,8 @@ class ChatAgent:
             self._declined = True
             return {**result, "content": str(error), "is_error": True}
         except ToolError as error:
-            return {**result, "content": self._masker.mask(str(error)), "is_error": True}
+            data = f"\n{data_block('tool-data', error.data, tool=use.name)}" if error.data else ""
+            return {**result, "content": self._masker.mask(f"{error}{data}"), "is_error": True}
         finally:
             self._tool_seconds += self._clock() - started
         return {

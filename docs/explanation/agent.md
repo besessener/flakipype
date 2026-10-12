@@ -181,7 +181,9 @@ next to — never instead of — the scan's facts.
 - **Data, not instructions.** Logs, code, commit messages and file contents
   are untrusted (anyone who can push writes them). They only appear inside
   data elements; the system prompt says so, and actions only ever come from
-  you or the configured mode. Investigators have no tool that changes
+  you or the configured mode. A tool error that carries repository content,
+  such as the diff of a fix the review did not accept, sends it to the chat
+  model inside a `tool-data` element. Investigators have no tool that changes
   anything.
 - **Masking before sending.** Everything that goes to the model passes the
   masking step first.

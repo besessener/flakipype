@@ -33,7 +33,17 @@ _REFUSALS = frozenset({Answer.DECLINED, Answer.NEEDS_PERSON, Answer.REPORT_ONLY}
 
 
 class ToolError(Exception):
-    """The tool could not do what was asked; the message goes back to the model."""
+    """The tool could not do what was asked; the message goes back to the model.
+
+    `data` is repository content that goes along with it, always marked as untrusted data.
+    """
+
+    def __init__(self, message: str, data: str = "") -> None:
+        super().__init__(message)
+        self.data = data
+
+    def for_person(self) -> str:
+        return f"{self}\n{self.data}" if self.data else str(self)
 
 
 class ToolDeclinedError(ToolError):
