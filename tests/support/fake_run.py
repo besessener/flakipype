@@ -2,13 +2,12 @@
 
 from dataclasses import dataclass, field
 
-from flakipype.actions.service import ActionService, Origin
 from flakipype.agent.budget import RunBudget
 from flakipype.agent.investigator import Status
 from flakipype.agent.pipeline import FindingResult
 from flakipype.agent.tools import HeadlessGate, Mode
 from flakipype.agent.verdict import Verdict
-from flakipype.config.settings import ActionSettings, FixSettings
+from flakipype.config.settings import FixSettings, GitHubSettings, Settings
 from flakipype.fix.delivery import Delivery
 from flakipype.fix.service import FixService
 from flakipype.fix.verify import Verifier, VerifyGitHub
@@ -17,7 +16,7 @@ from flakipype.investigate.service import InvestigationService
 from flakipype.investigate.workspace import ChatWorkspace
 from flakipype.scan.service import ScanService
 from flakipype.store.database import ScanCache
-from flakipype.unattended.limits import RunLimits, Usage
+from flakipype.unattended.limits import RunLimits, Usage, run_actions, run_fix_settings
 from flakipype.unattended.service import RunClock, RunService
 
 from support.builders import START
@@ -92,10 +91,10 @@ class RunWorld:
         investigations = InvestigationService(
             scan=scan, cache=self.cache, investigate=self.agent, run_tokens=10**6, parallel=1
         )
-        actions = ActionService(
-            runs=self.runs, files=self.runs, audit=self.cache.audit,
-            settings=ActionSettings().model_copy(update={"max_per_session": self.limits.actions}),
-            owner=SCAN.owner, now=self.clock, origin=Origin.RUN,
+        settings = Settings(github=GitHubSettings(owner=SCAN.owner), fix=self.fix_settings)
+        actions = run_actions(
+            runs=self.runs, files=self.runs, audit=self.cache.audit, settings=settings,
+            limits=self.limits, now=self.clock,
         )  # fmt: skip
         verifier = Verifier(
             github=VerifyGitHub(runs=self.github, logs=self.source, comments=self.github),
@@ -105,10 +104,7 @@ class RunWorld:
             pulls=self.github, delivery=Delivery(pulls=self.github, verifier=verifier,
                                                  now=self.clock),
             verifier=verifier, actions=actions, audit=self.cache.audit, propose=self.fixer,
-            settings=self.fix_settings.model_copy(
-                update={"max_prs_per_session": self.limits.pull_requests}
-            ),
-            now=self.clock,
+            settings=run_fix_settings(settings, self.limits), now=self.clock,
         )  # fmt: skip
         workspace = ChatWorkspace(investigations, SCAN, actions=actions, fixes=fixes)
         return RunService(

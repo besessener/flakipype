@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx2
 import keyring
 
-from flakipype.actions.service import ActionService, Origin
+from flakipype.actions.service import ActionService
 from flakipype.agent.budget import Limits
 from flakipype.agent.fix_pipeline import FixConfig, propose_fix
 from flakipype.agent.masking import Masker
@@ -60,7 +60,7 @@ from flakipype.setup.doctor import KEY_IN_A_FILE, RUN_SETUP
 from flakipype.setup.service import SetupService
 from flakipype.store.database import ScanCache
 from flakipype.store.lock import run_lock
-from flakipype.unattended.limits import DAY, day_usage, run_limits
+from flakipype.unattended.limits import run_actions, run_fix_settings, run_limits_for
 from flakipype.unattended.service import RunClock, RunService
 
 _DOWNLOAD_TIMEOUT_SECONDS = 120
@@ -319,21 +319,16 @@ def open_run(mode: Mode, request_for: Callable[[Settings], ScanRequest]) -> Gene
         check_run_owner(request.owner, settings.github.owner)
         check_logged_in(agentic.gh, settings.github.host)
         now = partial(datetime.now, UTC)
-        since = (now() - DAY).isoformat()
-        limits = run_limits(
-            settings, day_usage(cache.audit.since(since), cache.sessions.run_tokens_since(since))
-        )
-        actions = ActionService(
+        limits = run_limits_for(settings, cache, now())
+        actions = run_actions(
             runs=RunControl(agentic.gh), files=ContentsClient(agentic.gh), audit=cache.audit,
-            settings=settings.actions.model_copy(update={"max_per_session": limits.actions}),
-            owner=settings.github.owner, now=now, origin=Origin.RUN,
+            settings=settings, limits=limits, now=now,
         )  # fmt: skip
-        fix = settings.fix.model_copy(update={"max_prs_per_session": limits.pull_requests})
         workspace = ChatWorkspace(
             agentic.service,
             request,
             actions=actions,
-            fixes=_fix_service(agentic, actions, now, fix=fix),
+            fixes=_fix_service(agentic, actions, now, fix=run_fix_settings(settings, limits)),
         )
         yield RunService(
             workspace=workspace, gate=HeadlessGate(mode), cache=cache, limits=limits,
