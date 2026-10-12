@@ -8,7 +8,7 @@ from typing import Protocol
 from flakipype.fix.state import OpenedPull, Proposal
 from flakipype.fix.texts import commit_body
 from flakipype.fix.verify import Stage, Verification, Verifier
-from flakipype.github.actions import GitHubApiError
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import CommitRequest, PullRequest, PullRequestText
 
 _HTTP_FORBIDDEN = 403
@@ -35,6 +35,8 @@ class PushedWithoutPullError(DeliveryError):
 
 
 def fix_refusal(error: GitHubApiError) -> str:
+    if isinstance(error, ApiRateLimitError):
+        return error.next_step()
     if error.status == _HTTP_FORBIDDEN:
         return (
             f"GitHub refused: {error}. A fix needs the repo and workflow scopes for a classic "

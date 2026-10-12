@@ -6,7 +6,8 @@ from flakipype.agent.workcopy import FileChange
 from flakipype.fix.delivery import DeliveryError
 from flakipype.fix.state import Proposal
 from flakipype.fix.verify import Stage
-from flakipype.github.actions import GitHubApiError
+from flakipype.github.actions import GitHubApiError, api_error
+from flakipype.github.gh import GhResult
 from flakipype.store.database import ScanCache
 
 from support.fake_fix import (
@@ -24,6 +25,11 @@ from support.fake_runs import E2E
 FORBIDDEN = GitHubApiError("Resource not accessible by integration (HTTP 403)", 403)
 SERVER_ERROR = GitHubApiError("Server Error (HTTP 500)", 500)
 LEFT = "The branch was left as it is; flakipype never deletes branches."
+PRIMARY_LIMIT = "gh: API rate limit exceeded for user ID 1234. (HTTP 403)"
+SECONDARY_LIMIT = (
+    "gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try "
+    "again. (HTTP 403)"
+)
 
 
 def proposal(*changes: FileChange) -> Proposal:
@@ -89,6 +95,22 @@ def test_a_refused_branch_says_which_permission_is_missing(cache: ScanCache) -> 
 
     assert str(raised.value).startswith("GitHub refused: Resource not accessible")
     assert "'Contents', 'Pull requests' and 'Workflows: read and write'" in str(raised.value)
+
+
+@pytest.mark.parametrize("stderr", [PRIMARY_LIMIT, SECONDARY_LIMIT])
+@pytest.mark.parametrize("step", ["create_branch", "open_draft"])
+def test_a_rate_limit_says_to_wait_not_which_permission_is_missing(
+    cache: ScanCache, step: str, stderr: str
+) -> None:
+    world = FixWorld(cache)
+    world.github.errors[step] = api_error(GhResult(1, "", stderr))
+
+    with pytest.raises(DeliveryError) as raised:
+        world.delivery.deliver(proposal())
+
+    assert f"GitHub's API rate limit for this token is reached: {stderr}." in str(raised.value)
+    assert "try again after it resets" in str(raised.value)
+    assert "Workflows" not in str(raised.value)
 
 
 def test_a_failed_commit_says_the_branch_exists(cache: ScanCache) -> None:

@@ -174,7 +174,7 @@ def test_open_pulls_and_comments(fake_gh: FakeGh) -> None:
         },
     ]
     fake_gh.record(
-        ["api", f"repos/{REPO}/pulls?state=open&per_page=100"], stdout=json.dumps(listed)
+        ["api", f"repos/{REPO}/pulls?state=open&per_page=100&page=1"], stdout=json.dumps(listed)
     )
     fake_gh.record(["api", "-X", "POST", f"repos/{REPO}/issues/4/comments", "--input", "-"])
     pulls = PullRequests(fake_gh.cli())
@@ -186,6 +186,21 @@ def test_open_pulls_and_comments(fake_gh: FakeGh) -> None:
         (3, "", ""), (4, "marker", "fork/app")
     ]  # fmt: skip
     assert json.loads(fake_gh.invocations()[-1]["stdin"]) == {"body": "verified"}
+
+
+def test_open_pulls_reads_every_page(fake_gh: FakeGh) -> None:
+    def listed(first: int, amount: int) -> str:
+        numbers = range(first, first + amount)
+        return json.dumps([{"number": n, "html_url": "u", "head": {"ref": "x"}} for n in numbers])
+
+    path = f"repos/{REPO}/pulls?state=open&per_page=100"
+    fake_gh.record(["api", f"{path}&page=1"], stdout=listed(300, 100))
+    fake_gh.record(["api", f"{path}&page=2"], stdout=listed(200, 100))
+    fake_gh.record(["api", f"{path}&page=3"], stdout="[]")
+
+    found = PullRequests(fake_gh.cli()).open_pulls(REPO)
+
+    assert [pull.number for pull in found] == [*range(300, 400), *range(200, 300)]
 
 
 def test_failed_reads_raise(fake_gh: FakeGh) -> None:

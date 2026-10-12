@@ -5,7 +5,12 @@ from flakipype.github.auth import Authenticated, NotAuthenticated, refresh_scope
 from flakipype.github.release import MINIMUM_GH_VERSION, format_version
 from flakipype.llm.client import endpoint_kind
 from flakipype.llm.connection import ConnectionFailed
-from flakipype.setup.service import InvalidSetupError, SetupDraft, SetupService
+from flakipype.setup.service import (
+    GH_NOT_INSTALLED,
+    InvalidSetupError,
+    SetupDraft,
+    SetupService,
+)
 
 RUN_SETUP = "Run `flakipype setup`."
 KEY_IN_A_FILE = (
@@ -74,8 +79,11 @@ def gh_check(service: SetupService) -> Check:
 
 
 def github_check(service: SetupService, host: str) -> Check:
-    status = service.github_auth(host)
     name = f"GitHub login ({host})"
+    binary = service.find_gh()
+    if binary is None:
+        return Check(name, CheckStatus.FAILED, GH_NOT_INSTALLED, RUN_SETUP)
+    status = service.github_auth(host)
     if isinstance(status, NotAuthenticated):
         return Check(name, CheckStatus.FAILED, "Not logged in.", RUN_SETUP)
     if not isinstance(status, Authenticated):
@@ -87,7 +95,6 @@ def github_check(service: SetupService, host: str) -> Check:
     if status.missing_scopes:
         missing = ", ".join(sorted(status.missing_scopes))
         detail = f"{status.login}, missing scopes: {missing}"
-        return Check(
-            name, CheckStatus.FAILED, detail, refresh_scopes_command(host, status.missing_scopes)
-        )
+        hint = refresh_scopes_command(gh=binary.path, host=host, missing=status.missing_scopes)
+        return Check(name, CheckStatus.FAILED, detail, hint)
     return Check(name, CheckStatus.OK, f"{status.login}, scopes {', '.join(sorted(status.scopes))}")

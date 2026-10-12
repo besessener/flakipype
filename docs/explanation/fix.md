@@ -166,6 +166,8 @@ All through `gh api`, against the configured owner and host only. Right
 before the branch, flakipype looks for an open flakipype pull request for the
 finding once more, since the chat or a run may have opened one while the
 fixer worked; if there is one, nothing is pushed and the message links it.
+Both looks read every page of the repository's open pull requests, so an
+older flakipype pull request behind many newer ones is still found.
 
 1. **Branch.** `POST /repos/{o}/{r}/git/refs` creates
    `refs/heads/flakipype/fix-<workflow>-<hash>` at the pinned commit (the
@@ -311,7 +313,10 @@ The `repo` and `workflow` scopes flakipype already asks for cover branches,
 commits (including workflow files) and pull requests. A fine-grained token
 needs **Contents**, **Pull requests** and **Workflows: read and write**, plus
 **Actions: read and write** for verification. A `403` explains which
-permission is missing, and nothing is retried.
+permission is missing, and nothing is retried. A `403` from GitHub's rate
+limit says so instead and asks to try again after the limit resets. When
+GitHub gives reasons for a refusal (a `422` such as "Draft pull requests are
+not supported in this repository"), the message includes them.
 
 ## Where it lives
 

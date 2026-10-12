@@ -19,6 +19,8 @@ from flakipype.github.payloads import (
 )
 
 _HTTP_NOT_FOUND = 404
+_TAG_OBJECT = "tag"
+_COMMIT_OBJECT = "commit"
 _JOBS_SHOWN = 100
 _DISPATCHED_RUNS_LISTED = 20
 
@@ -134,15 +136,20 @@ class RunControl:
         return parse_answer(RepositoryDetailsPayload.model_validate_json, output).default_branch
 
     def ref_commit(self, repository: str, ref: str) -> str | None:
-        """The commit a branch or tag points to; None if it is neither."""
+        """The commit a branch or tag points to; None if it is neither or tags no commit."""
         name = quote(ref, safe="")
         branch = self._get_or_none(f"repos/{repository}/branches/{name}")
         if branch is not None:
             return parse_answer(BranchPayload.model_validate_json, branch).commit.sha
         tag = self._get_or_none(f"repos/{repository}/git/ref/tags/{name}")
-        if tag is not None:
-            return parse_answer(GitRefPayload.model_validate_json, tag).object.sha
-        return None
+        if tag is None:
+            return None
+        target = parse_answer(GitRefPayload.model_validate_json, tag).object
+        # An annotated tag points to a tag object; follow it, and any tag it tags, to the commit.
+        while target.type == _TAG_OBJECT:
+            output = self._get(f"repos/{repository}/git/tags/{target.sha}")
+            target = parse_answer(GitRefPayload.model_validate_json, output).object
+        return target.sha if target.type == _COMMIT_OBJECT else None
 
     def _post(self, path: str, *fields: str) -> str:
         result = self._gh.run(["api", "-X", "POST", path, *fields])

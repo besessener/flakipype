@@ -42,7 +42,9 @@ which is why each one needs your confirmation.
 - `/rerun N --all` reruns the finding's newest run, whatever its result.
 - `/dispatch N` dispatches the finding's workflow on the repository's
   default branch, or on `ref` if you give one. `xK` repeats it K times
-  (1–10), and each repeat counts against the budget.
+  (1–10), and each repeat counts against the budget. A branch or tag ref is
+  resolved to its commit first; an annotated tag is followed to the commit
+  it tags, which the dialog, the audit log and the Runs list show.
 
 `R` is the short number a started run gets in the Runs list (`R1`, `R2`, …).
 The model's tools can also name a specific run id, but only one of the
@@ -176,8 +178,11 @@ flakipype updates or deletes it, apart from deleting the cache file.
 Rerunning, dispatching and cancelling need write access to Actions. A classic
 token or a `gh auth login` needs the `repo` scope, which is the default. A
 fine-grained token needs **Actions: read and write**. `doctor` reports
-missing scopes where GitHub shows them (classic tokens). Otherwise a `403`
-explains which permission is missing, and nothing is retried.
+missing scopes where GitHub shows them (classic tokens), with a
+`gh auth refresh` command that names the `gh` flakipype uses. Otherwise a
+`403` explains which permission is missing, and nothing is retried. A `403`
+from GitHub's rate limit says so instead and asks to try again after the
+limit resets.
 
 Other GitHub errors become tool errors with GitHub's message, so the model
 and you see what went wrong.

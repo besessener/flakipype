@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -128,9 +129,20 @@ def test_browser_login_requests_the_required_scopes() -> None:
 
 
 def test_refresh_hint() -> None:
-    hint = refresh_scopes_command("github.com", frozenset({"workflow", "read:org"}))
+    gh = Path("/home/me/.local/share/flakipype/bin/gh")
+    hint = refresh_scopes_command(
+        gh=gh, host="github.com", missing=frozenset({"workflow", "read:org"})
+    )
 
-    assert hint == "gh auth refresh --hostname github.com --scopes read:org,workflow"
+    assert hint == f"{gh} auth refresh --hostname github.com --scopes read:org,workflow"
+
+
+def test_refresh_hint_quotes_a_path_with_spaces() -> None:
+    hint = refresh_scopes_command(
+        gh=Path("/opt/my tools/gh"), host="github.com", missing=frozenset({"workflow"})
+    )
+
+    assert hint.startswith("'/opt/my tools/gh' auth refresh")
 
 
 @pytest.mark.skipif(os.pathsep != ":", reason="POSIX PATH separator")

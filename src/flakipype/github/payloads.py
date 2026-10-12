@@ -188,10 +188,19 @@ class BranchPayload(BaseModel):
     commit: ShaPayload
 
 
-class GitRefPayload(BaseModel):
+class GitObjectPayload(BaseModel):
     model_config = _IGNORE_EXTRA
 
-    object: ShaPayload
+    sha: str
+    type: str
+
+
+class GitRefPayload(BaseModel):
+    """A ref (`git/ref/…`) or an annotated tag (`git/tags/…`): both name what they point to."""
+
+    model_config = _IGNORE_EXTRA
+
+    object: GitObjectPayload
 
 
 class RepositoryDetailsPayload(BaseModel):

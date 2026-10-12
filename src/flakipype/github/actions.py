@@ -41,6 +41,13 @@ class GitHubApiError(Exception):
 class ApiRateLimitError(GitHubApiError):
     """GitHub's API rate limit for this token is used up."""
 
+    def next_step(self) -> str:
+        return (
+            f"GitHub's API rate limit for this token is reached: {self}. Nothing was retried; "
+            "try again after it resets (a primary limit within the hour, a secondary one "
+            "within minutes)."
+        )
+
 
 @dataclass(frozen=True)
 class Repository:
@@ -76,11 +83,27 @@ def _iso(moment: datetime) -> str:
 def api_error(result: GhResult) -> GitHubApiError:
     """The typed error for a failed gh call: rate limit, authentication or other."""
     detail = result.stderr.strip() or f"gh exited with code {result.exit_code}"
+    reasons = [reason for reason in _error_reasons(result.stdout) if reason not in detail]
+    if reasons:
+        detail = f"{detail}: {'; '.join(reasons)}"
     match = _HTTP_STATUS.search(detail)
     status = int(match.group(1)) if match else None
     if _RATE_LIMIT.search(detail):
         return ApiRateLimitError(detail, status)
     return GitHubApiError(detail, status)
+
+
+def _error_reasons(body: str) -> list[str]:
+    """GitHub's `errors[].message` from a failed REST call; gh prints only the status to stderr."""
+    try:
+        answer = json.loads(body)
+    except (ValueError, RecursionError):
+        return []
+    errors = answer.get("errors") if isinstance(answer, dict) else None
+    if not isinstance(errors, list):
+        return []
+    messages = [error.get("message") if isinstance(error, dict) else error for error in errors]
+    return [message for message in messages if isinstance(message, str)]
 
 
 class ActionsClient:
