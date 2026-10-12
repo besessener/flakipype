@@ -94,7 +94,8 @@
           Requires Linux (x86_64 or aarch64, glibc) with <code>curl</code>, <code>tar</code> and <code>git</code>. The script installs
           <a href="https://docs.astral.sh/uv/">uv</a> if you have none, checked against its published SHA-256.
         </p>
-        <pre><code>tmp="$(mktemp -d)" &amp;&amp; curl -fsSL -o "$tmp/install.sh" https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh &amp;&amp; sh "$tmp/install.sh"; rm -rf "$tmp"</code></pre>
+        <pre><code>curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
+sh install.sh</code></pre>
         <ol class="steps">
           <li><strong>Set up.</strong> <code>flakipype setup</code> asks for the model endpoint, downloads and verifies <code>gh</code> if needed and logs in to GitHub.</li>
           <li><strong>Scan.</strong> <code>flakipype scan</code> finds and ranks the flaky jobs of your user or organisation.</li>
