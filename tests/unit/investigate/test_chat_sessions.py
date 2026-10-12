@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -10,6 +11,7 @@ from flakipype.store.database import ScanCache
 from support.fake_actions import FakeActions
 from support.fake_anthropic import ScriptedModel, call, message, text
 from support.fake_chat import chat_service
+from support.fake_investigation import SCAN
 from support.fake_runs import DISPATCHABLE, E2E, FakeRuns, state
 
 
@@ -72,3 +74,57 @@ def test_a_github_failure_during_a_question_leaves_the_session_usable(cache: Sca
     assert answer.kind is EntryKind.ASSISTANT
     assert roles(model, 2) == ["user", "assistant", "user", "assistant", "user"]
     assert chat.tokens == 3 * 1_200
+
+
+def test_new_and_resume_count_only_the_sessions_own_tokens(cache: ScanCache) -> None:
+    chat = chat_service(cache, ScriptedModel([]))
+    chat.handle("/investigate 1")
+    assert chat.tokens == 1_000
+
+    chat.handle("/new")
+    assert chat.tokens == 0
+    chat.handle("/help")
+    later = chat_service(cache, ScriptedModel([]))
+    later.handle("/resume 1")
+
+    assert later.tokens == 1_000
+    assert (later.handle("/resume 2")[0].kind, later.tokens) == (EntryKind.NOTE, 0)
+
+
+def test_an_empty_selection_and_new_scan_every_repository_again(cache: ScanCache) -> None:
+    model = ScriptedModel(
+        [
+            message(call("t1", "scan", {"days": 90, "repositories": ["app"]})),
+            message(text("Scanned app.")),
+            message(call("t2", "scan", {"repositories": []})),
+            message(text("Scanned all.")),
+        ]
+    )
+    chat = chat_service(cache, model)
+
+    chat.handle("Scan only app over 90 days")
+    assert chat.workspace.request.repositories == ("app",)
+    chat.handle("Now scan all repositories")
+    assert chat.workspace.request.repositories == ()
+    chat.workspace.scan(None, ("app",))
+    chat.handle("/new")
+
+    assert chat.workspace.request == SCAN
+
+
+def test_resume_keeps_the_configured_owner_and_host(cache: ScanCache) -> None:
+    chat = chat_service(cache, ScriptedModel([]))
+    chat.handle("/scan 7")
+    document = json.loads(cache.sessions.load(1) or "{}")
+    document["scan"] |= {"owner": "other-org", "host": "ghe.example.com"}
+    cache.sessions.update(1, now="2026-10-09T08:00:00", data=json.dumps(document))
+
+    (note,) = chat.handle("/resume 1")
+
+    assert note.text == (
+        "Resumed session 1. The next action rescans. It was saved for other-org on "
+        "ghe.example.com; this chat stays on octo-org on github.com."
+    )
+    assert chat.workspace.request == replace(SCAN, window_days=7)
+    chat.handle("/new")
+    assert chat.workspace.request == SCAN

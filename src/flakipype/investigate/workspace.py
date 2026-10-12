@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from flakipype.actions.service import ActionService
+from flakipype.actions.targets import check_owner
 from flakipype.agent.tools import PreparedAction, ToolError
 from flakipype.fix.service import FixService, FixTarget
 from flakipype.flaky.findings import Finding
@@ -38,6 +39,7 @@ class ChatWorkspace:
         fixes: FixService,
     ) -> None:
         self._service = service
+        self.configured = request
         self.request = request
         self.actions = actions
         self.fixes = fixes
@@ -50,10 +52,24 @@ class ChatWorkspace:
         self.request = replace(
             self.request,
             window_days=days or self.request.window_days,
-            repositories=repositories or self.request.repositories,
+            # The tool promises that an empty selection scans every repository again.
+            repositories=repositories or self.configured.repositories,
         )
         report = self._run_scan()
         return scan_summary(report) + "\n\n" + findings_text(report.findings)
+
+    def start_over(self) -> None:
+        """Back to the configured scan, with no results and no tokens spent."""
+        self.request = self.configured
+        self.report = None
+        self.results = {}
+        self.tokens = 0
+
+    def resume(self, *, window_days: int, repositories: tuple[str, ...], tokens: int) -> None:
+        """A stored session's scan options on the configured owner and host; rescans when used."""
+        self.start_over()
+        self.request = replace(self.configured, window_days=window_days, repositories=repositories)
+        self.tokens = tokens
 
     def findings(self) -> str:
         return findings_text(self._report().findings)
@@ -106,6 +122,7 @@ class ChatWorkspace:
         """The fix for a finding with a reviewed verdict; investigates first if there is none."""
         report = self._report()
         target = _finding(report, finding)
+        check_owner(target.key.repository, self.actions.owner)
         if finding not in self.results:
             self.investigate((finding,), fresh=False)
         result = self.results.get(finding)
