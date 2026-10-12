@@ -8,7 +8,8 @@ scan.
 ## 1. Install
 
 ```bash
-tmp="$(mktemp -d)" && curl -fsSL -o "$tmp/install.sh" https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh && sh "$tmp/install.sh"; rm -rf "$tmp"
+curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
+sh install.sh
 flakipype --version
 ```
 
