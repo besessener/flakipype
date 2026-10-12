@@ -45,8 +45,9 @@ Merging stays your decision.
    it investigates first. `real_bug`, `fixed`, `unclear` and unreviewed
    verdicts are refused with the reason. If an open flakipype pull request
    for the finding exists, `/fix` links it instead of opening a second one;
-   it is found by a hidden marker (a hash of the finding) in the pull
-   request body, on a branch under `flakipype/`.
+   it is found by a hidden marker (a hash of the finding) on the first line
+   of the pull request body, on a branch under `flakipype/` in the
+   repository itself; a fork's pull request never counts.
 2. **Push access.** flakipype reads the repository's `permissions.push`
    before the fixer starts. Without it, `/fix` stops and says so. No forks.
 3. **Fixer.** A fresh agent per fix, like an investigator: the finding, the
@@ -73,7 +74,7 @@ run.
 | `replace_in_file(path, old, new)` | Replaces one exact, unique occurrence; an ambiguous or missing `old` is an error | `read` |
 | `write_file(path, content)` | Creates a new file or replaces a whole file | `read` |
 | `show_diff()` | Unified diff of the working copy against the pinned commit | `read` |
-| `submit_fix(title, explanation)` | Ends the fix | – |
+| `submit_fix(title, explanation)` | Ends the fix; runs after the response's other calls, and goes back to the fixer if one of them failed | – |
 
 Plus the investigator's tools (`failure_excerpt`, `log_range`,
 `run_history`, `compare_commits`, `file_diff`, `workflow_file`). Edits are
@@ -82,7 +83,10 @@ risk `read`: they change only memory. The one `critical` action is the push
 edited, and only inside the finding's repository; paths are normalised and
 `.git/`, absolute or `..` paths and paths with control characters are
 refused. The fixer reads files with secrets masked, so an edit that would
-write a `[masked: …]` placeholder back into a file is refused.
+write a `[masked: …]` placeholder back into a file is refused. Symbolic
+links and submodules cannot be edited (a commit would replace the link, not
+its target). A rewrite keeps the file's final newline; the diff compares
+line endings too, so a changed final newline or CRLF shows up in it.
 
 ## Checks in code
 
@@ -94,7 +98,7 @@ Deterministic, before the reviewer and before any dialog:
 | Size | At most 10 files and 400 changed lines (`fix.max_files`, `fix.max_changed_lines`) |
 | Still parses | Changed `.yml`, `.yaml`, `.json`, `.toml` files parse; workflow files still have `on` and `jobs` |
 | Nothing masked | No file gains a `[masked: …]` placeholder; masked lines hide real content |
-| Hides failures | Adds `continue-on-error: true`, `if: always()`, a test skip or focus marker (`pytest.skip(`, `@pytest.mark.skip`/`xfail`, `@unittest.skip`, `.skip(`, `xit(`, `.only(`, `@Disabled`, `@Ignore`, `t.Skip`) or removes more test declarations than it adds |
+| Hides failures | Adds `continue-on-error: true`, `if: always()`, a test skip or focus marker (`pytest.skip(`, `pytest.xfail(`, `pytest.mark.skip`/`xfail` with or without `@`, `@unittest.skip`, `.skipTest(`, `SkipTest`, `.skip(`, `xit(`, `.only(`, `@Disabled`, `@Ignore`, `t.Skip`) or removes more test declarations (including `async def test_`) than it adds |
 | Reaches out | Adds a `secrets.` reference, `github.token`, an environment dump (`env`, `printenv`), `curl`, `wget`, `nc`, `ncat`, or an `http(s)://` URL other than localhost (the host must be exactly `localhost`, `127.0.0.1` or `[::1]`; any URL with `user@` counts) |
 | Touches `.github/` | Changes workflows or composite actions under `.github/` |
 
@@ -185,7 +189,9 @@ failed: … The branch was left as it is; flakipype never deletes branches."
 If verification cannot start (for example the workflow file cannot be
 read), the pull request stays open and the outcome says why.
 
-The pull request body:
+The pull request body. The code-written warnings come before any model
+text, and the model's text is a block quote with HTML comments escaped, so
+it cannot hide the sections code writes:
 
 ```markdown
 <!-- flakipype:finding=3f9c2a71b0d4 -->
@@ -195,13 +201,16 @@ The pull request body:
 
 - the finding's facts from the scan, one per line
 
-**Verdict** (model's assessment, reviewed): flaky_test, high confidence. …
-
-### The change (written by the model)
-…
-
 ### Warnings
 none
+
+**Verdict** (model's assessment, reviewed): flaky_test, high confidence.
+
+> the verdict's summary
+
+### The change (written by the model)
+
+> the fixer's explanation
 
 ### Verification
 Pending: flakipype reruns E2E on this branch 3 times.

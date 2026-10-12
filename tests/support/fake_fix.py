@@ -157,7 +157,7 @@ class FakePullRequests:
         number = 12 + len(self.drafts) - 1
         return PullRequest(
             number=number, url=f"https://github.com/{repository}/pull/{number}",
-            branch=pull.head, body=pull.body,
+            branch=pull.head, body=pull.body, head_repository=repository,
         )  # fmt: skip
 
 

@@ -234,6 +234,7 @@ class TreeEntryPayload(BaseModel):
 
     path: str
     type: str
+    mode: str = ""
 
 
 class TreePayload(BaseModel):
@@ -243,10 +244,18 @@ class TreePayload(BaseModel):
     tree: list[TreeEntryPayload]
 
 
+class HeadRepositoryPayload(BaseModel):
+    model_config = _IGNORE_EXTRA
+
+    full_name: str
+
+
 class PullHeadPayload(BaseModel):
     model_config = _IGNORE_EXTRA
 
     ref: str
+    # None when the fork the pull request came from was deleted.
+    repo: HeadRepositoryPayload | None = None
 
 
 class PullPayload(BaseModel):

@@ -79,7 +79,16 @@ def test_files_that_parse_pass(path: str, after: str) -> None:
         ("continue-on-error: true", "adds `continue-on-error: true`"),
         ("if: ${{ always() }}", "adds `if: ${{ always()`"),
         ("test.skip('slow', () => {})", "adds `.skip(`"),
-        ("@pytest.mark.xfail", "adds `@pytest.mark.xfail`"),
+        ("@pytest.mark.xfail", "adds `pytest.mark.xfail`"),
+        ("@pytest.mark.skipif(True, reason='x')", "adds `pytest.mark.skip`"),
+        ("pytestmark = [pytest.mark.xfail(strict=False)]", "adds `pytest.mark.xfail`"),
+        ("pytestmark = pytest.mark.skip", "adds `pytest.mark.skip`"),
+        ("pytest.param(1, marks=pytest.mark.xfail)", "adds `pytest.mark.xfail`"),
+        ("pytest.skip('flaky')", "adds `pytest.skip(`"),
+        ("pytest.xfail('flaky')", "adds `pytest.xfail(`"),
+        ("self.skipTest('flaky')", "adds `.skipTest(`"),
+        ("raise unittest.SkipTest('flaky')", "adds `SkipTest`"),
+        ("@unittest.skip('flaky')", "adds `@unittest.skip`"),
         ("@Disabled", "adds `@Disabled`"),
         ("t.Skip()", "adds `t.Skip(`"),
     ],
@@ -90,8 +99,9 @@ def test_hidden_failures_are_warnings(added: str, found: str) -> None:
     assert warning == f"hides failures: tests/test_app.py ({found})"
 
 
-def test_a_removed_test_is_a_warning() -> None:
-    before = "def test_one():\n    pass\ndef test_two():\n    pass\n"
+@pytest.mark.parametrize("removed", ["def test_two():", "async def test_two():"])
+def test_a_removed_test_is_a_warning(removed: str) -> None:
+    before = f"def test_one():\n    pass\n{removed}\n    pass\n"
     after = "def test_one():\n    pass\n"
 
     assert change_warnings([edit("tests/test_app.py", after, before)]) == [

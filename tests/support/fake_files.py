@@ -29,6 +29,7 @@ def repository_files() -> dict[str, bytes]:
 class FakeFiles:
     files: dict[str, bytes] = field(default_factory=repository_files)
     truncated: bool = False
+    links: tuple[str, ...] = ()
     reads: list[str] = field(default_factory=list)
     error: Exception | None = None
 
@@ -36,7 +37,7 @@ class FakeFiles:
         del repository, commit
         if self.error is not None:
             raise self.error
-        return FileTree(tuple(sorted(self.files)), self.truncated)
+        return FileTree(tuple(sorted(self.files)), self.truncated, self.links)
 
     def file_bytes(self, repository: str, path: str, commit: str) -> bytes | None:
         del repository, commit

@@ -185,7 +185,11 @@ class FixService:
     def _check_no_open_pull(self, repository: str, identity: str, number: int) -> None:
         marker = identity_marker(identity)
         for pull in self._pulls.open_pulls(repository):
-            if pull.branch.startswith(BRANCH_PREFIX) and marker in pull.body:
+            # Only a branch in the repository itself with the marker code writes first counts;
+            # anyone can open a fork pull request with the same branch name and marker.
+            own = pull.head_repository.lower() == repository.lower()
+            first_line = pull.body.splitlines()[:1]
+            if own and pull.branch.startswith(BRANCH_PREFIX) and first_line == [marker]:
                 message = f"An open flakipype pull request for #{number} exists: {pull.url}"
                 raise ToolError(message)
 

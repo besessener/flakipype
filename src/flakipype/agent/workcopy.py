@@ -13,6 +13,7 @@ from flakipype.github.actions import GitHubApiError
 from flakipype.github.pulls import FileTree
 
 _CRLF = "\r\n"
+_NO_FINAL_NEWLINE = "\\ No newline at end of file"
 # C0 and C1 control characters; a path holding one could rewrite the confirmation dialog.
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
@@ -31,15 +32,18 @@ class FileChange:
     after: str
 
     def diff_lines(self) -> list[str]:
-        return list(
-            difflib.unified_diff(
-                (self.before or "").splitlines(),
-                self.after.splitlines(),
-                fromfile="/dev/null" if self.before is None else f"a/{self.path}",
-                tofile=f"b/{self.path}",
-                lineterm="",
-            )
-        )
+        """Lines compare with their endings, so a changed final newline or CRLF is a change too."""
+        lines: list[str] = []
+        for line in difflib.unified_diff(
+            _lines_with_endings(self.before or ""),
+            _lines_with_endings(self.after),
+            fromfile="/dev/null" if self.before is None else f"a/{self.path}",
+            tofile=f"b/{self.path}",
+        ):
+            lines.append(line.removesuffix("\n").removesuffix("\r"))
+            if not line.endswith("\n"):
+                lines.append(_NO_FINAL_NEWLINE)
+        return lines
 
     @property
     def added(self) -> list[str]:
@@ -48,6 +52,12 @@ class FileChange:
     @property
     def removed(self) -> list[str]:
         return [line[1:] for line in self.diff_lines()[2:] if line.startswith("-")]
+
+
+def _lines_with_endings(text: str) -> list[str]:
+    parts = text.split("\n")
+    lines = [f"{part}\n" for part in parts[:-1]]
+    return [*lines, parts[-1]] if parts[-1] else lines
 
 
 def unified_diff(changes: list[FileChange]) -> str:
@@ -84,7 +94,8 @@ class WorkingCopy:
         if self._tree is None:
             self._tree = _github(lambda: self._files.file_tree(self.repository, self.commit))
         new = tuple(path for path in self._edited if path not in self._tree.paths)
-        return FileTree(tuple(sorted({*self._tree.paths, *new})), self._tree.truncated)
+        paths = tuple(sorted({*self._tree.paths, *new}))
+        return FileTree(paths, self._tree.truncated, self._tree.links)
 
     def read(self, path: str) -> str | None:
         name = normal_path(path)
@@ -96,6 +107,9 @@ class WorkingCopy:
         name = normal_path(path)
         original = self._original(name)
         _refuse_mask_markers(name, original, content)
+        # read_file shows numbered lines, so the model cannot see a final newline to keep.
+        if original and original.endswith("\n") and content and not content.endswith("\n"):
+            content += "\n"
         self._edited[name] = _with_line_endings_of(original or "", content)
 
     def replace(self, path: str, old: str, new: str) -> None:
@@ -129,6 +143,12 @@ class WorkingCopy:
 
     def _original(self, name: str) -> str | None:
         if name not in self._originals:
+            if name in self.tree().links:
+                message = (
+                    f"{name} is a symbolic link or a submodule and cannot be edited; "
+                    "edit the file it points to instead"
+                )
+                raise ToolError(message)
             raw = _github(lambda: self._files.file_bytes(self.repository, name, self.commit))
             self._originals[name] = None if raw is None else _text(name, raw)
         return self._originals[name]

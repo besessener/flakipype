@@ -88,15 +88,33 @@ def test_github_errors_before_the_fixer_say_what_is_missing(cache: ScanCache) ->
 def test_an_open_flakipype_pull_request_is_linked_instead(cache: ScanCache) -> None:
     world = FixWorld(cache)
     marker = finding_marker(e2e_finding())
+    url, repository = "https://github.com/octo-org/app/pull", "octo-org/app"
     world.github.open = [
-        PullRequest(3, "https://github.com/octo-org/app/pull/3", "feature/x", marker),
-        PullRequest(4, "https://github.com/octo-org/app/pull/4", "flakipype/fix-ci-1", "other"),
-        PullRequest(5, "https://github.com/octo-org/app/pull/5", "flakipype/fix-e2e-1", marker),
+        PullRequest(3, f"{url}/3", "feature/x", marker, repository),
+        PullRequest(4, f"{url}/4", "flakipype/fix-ci-1", "other", repository),
+        PullRequest(5, f"{url}/5", "flakipype/fix-e2e-1", f"{marker}\n## Flaky", "Octo-Org/app"),
     ]
 
     with pytest.raises(ToolError, match=r"An open flakipype pull request for #2 exists: .+/pull/5"):
         world.fixes.prepare(target())
     assert world.fixer.requests == []
+
+
+def test_an_outsiders_pull_request_with_the_marker_does_not_block_the_fix(
+    cache: ScanCache,
+) -> None:
+    world = FixWorld(cache)
+    marker = finding_marker(e2e_finding())
+    url = "https://github.com/octo-org/app/pull"
+    world.github.open = [
+        PullRequest(77, f"{url}/77", "flakipype/fix-e2e-000000", marker, "outsider/app"),
+        PullRequest(78, f"{url}/78", "flakipype/fix-e2e-000001", marker, ""),
+        PullRequest(79, f"{url}/79", "flakipype/fix-e2e-000002", f"x\n{marker}", "octo-org/app"),
+    ]
+
+    prepared = world.fixes.prepare(target())
+
+    assert prepared.request.diff
 
 
 def test_the_confirmation_shows_facts_the_model_text_and_the_diff(cache: ScanCache) -> None:
@@ -330,7 +348,7 @@ def test_a_pull_request_opened_meanwhile_stops_the_push(cache: ScanCache) -> Non
     world.github.open = [
         PullRequest(
             9, "https://github.com/octo-org/app/pull/9", "flakipype/fix-e2e-2",
-            finding_marker(e2e_finding()),
+            finding_marker(e2e_finding()), "octo-org/app",
         )
     ]  # fmt: skip
 

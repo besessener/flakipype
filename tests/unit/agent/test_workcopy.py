@@ -88,6 +88,34 @@ def test_masked_placeholders_are_never_written_back() -> None:
     assert copy.changes() == []
 
 
+def test_a_rewrite_keeps_the_final_newline() -> None:
+    copy = working_copy()
+
+    copy.write(E2E_TEST, "test('archives', async () => {});")
+
+    assert copy.read(E2E_TEST) == "test('archives', async () => {});\n"
+
+
+NO_NEWLINE = "\\ No newline at end of file"
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "shown"),
+    [
+        ("x = 1\ny = 2", "x = 1\ny = 2\n", ["-y = 2", NO_NEWLINE, "+y = 2"]),
+        ("x = 1\ny = 2\n", "x = 1\ny = 2", ["-y = 2", "+y = 2", NO_NEWLINE]),
+        ("x = 1\r\ny = 2\n", "x = 1\r\ny = 2\r\n", ["-y = 2", "+y = 2"]),
+    ],
+)
+def test_final_newline_and_line_ending_changes_show_in_the_diff(
+    before: str, after: str, shown: list[str]
+) -> None:
+    change = FileChange("a.py", before, after)
+
+    assert change.diff_lines()[-len(shown) :] == shown
+    assert (change.added, change.removed) == (["y = 2"], ["y = 2"])
+
+
 def test_unchanged_edits_are_no_changes() -> None:
     copy = working_copy()
     original = copy.read(E2E_TEST) or ""
@@ -101,6 +129,18 @@ def test_unchanged_edits_are_no_changes() -> None:
 def test_binary_and_non_utf8_files_cannot_be_edited(path: str, reason: str) -> None:
     with pytest.raises(ToolError, match=reason):
         working_copy().read(path)
+
+
+def test_symbolic_links_and_submodules_cannot_be_edited() -> None:
+    copy = working_copy(FakeFiles(links=(E2E_TEST, "vendor/lib")))
+
+    with pytest.raises(ToolError, match="symbolic link or a submodule"):
+        copy.replace(E2E_TEST, "waitForTimeout(500)", "waitFor()")
+    with pytest.raises(ToolError, match="symbolic link or a submodule"):
+        copy.write("vendor/lib", "x\n")
+
+    assert copy.tree().links == (E2E_TEST, "vendor/lib")
+    assert copy.changes() == []
 
 
 def test_replacing_in_a_missing_file_points_to_write_file() -> None:

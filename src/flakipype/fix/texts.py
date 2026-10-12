@@ -96,16 +96,18 @@ def pull_request_body(facts: PullRequestFacts, explanation: str) -> str:
 
 {facts_list}
 
-**Verdict** (model's assessment, reviewed): {verdict.classification.value}, \
-{verdict.confidence.value} confidence. {verdict.summary}
-
-### The change (written by the model)
-
-{explanation}
-
 ### Warnings
 
 {warnings}
+
+**Verdict** (model's assessment, reviewed): {verdict.classification.value}, \
+{verdict.confidence.value} confidence.
+
+{_quoted(verdict.summary)}
+
+### The change (written by the model)
+
+{_quoted(explanation)}
 
 ### Verification
 
@@ -114,6 +116,12 @@ Pending: flakipype reruns {key.workflow_name} on this branch {facts.verify_runs}
 ---
 Opened by flakipype as a draft. Merging is up to you.
 """
+
+
+def _quoted(text: str) -> str:
+    """Model text as a block quote: no HTML comment or open tag in it reaches past the quote."""
+    lines = text.replace("<!--", "&lt;!--").splitlines() or [""]
+    return "\n".join(f"> {line}".rstrip() for line in lines)
 
 
 def commit_body(explanation: str) -> str:
