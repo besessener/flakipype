@@ -70,8 +70,11 @@ as instructions. Actions come only from your request or the configured mode.
 
 Everything sent to the model passes secret masking first
 (`agent/masking.py`): the configured API key itself, GitHub, Anthropic, AWS
-and Slack tokens, JWTs, private key blocks, credentials in URLs, bearer
-tokens and `password=`/`token:`-style assignments become `[masked: …]`.
+and Slack tokens, JWTs, private key blocks (PEM and PGP), credentials in
+URLs, bearer tokens and `password=`/`token:`-style assignments (also with
+aligned spacing) become `[masked: …]`. A private key header without its END
+line masks only the key body after it, never the rest of the prompt. Every
+pattern runs in linear time, so a crafted log line cannot stall masking.
 GitHub's own `***` stays as it is. The API key is stored in the system
 keyring, or a `0600` file where no keyring exists; the GitHub token stays in
 `gh`'s own login.

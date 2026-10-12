@@ -242,7 +242,7 @@ class ChatService:
         except ToolDeclinedError as error:
             return self._note("Not run." if self._gate.mode is Mode.ASK else str(error))
         except ToolError as error:
-            return ChatEntry(EntryKind.ERROR, str(error))
+            return ChatEntry(EntryKind.ERROR, error.for_person())
 
     def _guarded(self, action: Callable[[], ChatEntry]) -> ChatEntry:
         try:

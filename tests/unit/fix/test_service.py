@@ -201,7 +201,9 @@ def test_a_rejected_fix_shows_the_review_and_the_diff(cache: ScanCache) -> None:
 
     message = str(raised.value)
     assert message.startswith("No pull request for #2: the review rejected: it only waits longer.")
-    assert "+await rows.waitFor()" in message
+    assert message.endswith("The diff:")
+    assert "+await rows.waitFor()" in raised.value.data
+    assert raised.value.for_person() == f"{message}\n{raised.value.data}"
 
 
 def test_a_confirmed_fix_is_delivered_and_audited(cache: ScanCache) -> None:
