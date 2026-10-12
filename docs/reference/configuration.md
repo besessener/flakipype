@@ -78,7 +78,7 @@ store = "auto"
 | `agent.max_seconds_per_investigation` | `300` | 30–3600 |
 | `agent.max_tokens_per_run` | `1000000` | 10k–20M for all investigations of one `investigate` run; reaching it stops starting new ones |
 | `agent.parallel` | `3` | 1–8 investigations at once (GitHub calls still go one at a time) |
-| `agent.max_output_tokens` | `16000` | 1k–64k per model call |
+| `agent.max_output_tokens` | `16000` | 1k–64k per model call; calls are streamed, so the whole range works |
 | `agent.thinking` | `adaptive` | `adaptive`, `enabled` (uses `thinking_budget`) or `off`. Newer models only accept `adaptive`; the others are for older models |
 | `agent.thinking_budget` | `8000` | 1,024–60k; only with `thinking = "enabled"`, must be below `max_output_tokens` |
 | `agent.excerpt_lines` | `120` | 20–400 lines in a log excerpt |

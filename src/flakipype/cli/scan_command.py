@@ -8,7 +8,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 
 from flakipype.cli import wiring
 from flakipype.cli.scan_report import render_report
-from flakipype.config.settings import Settings
+from flakipype.config.settings import MAX_WINDOW_DAYS, Settings
 from flakipype.github.actions import GitHubApiError
 from flakipype.investigate.service import EventKind, InvestigationEvent
 from flakipype.scan import progress
@@ -97,7 +97,8 @@ class ProgressView:
 def scan(  # noqa: PLR0913 - Typer maps every command line option to one parameter
     *,
     days: Annotated[
-        int | None, typer.Option(min=1, max=400, help="Days to look back (default: config).")
+        int | None,
+        typer.Option(min=1, max=MAX_WINDOW_DAYS, help="Days to look back (default: config)."),
     ] = None,
     repo: Annotated[
         list[str] | None, typer.Option(help="Only this repository; repeat for more.")

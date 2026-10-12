@@ -56,6 +56,10 @@ class ScriptedModel:
         if isinstance(turn, int):
             body = {"type": "error", "error": {"type": "api_error", "message": f"status {turn}"}}
             return httpx2.Response(turn, json=body)
+        if self.requests[-1].get("stream"):
+            return httpx2.Response(
+                200, headers={"content-type": "text/event-stream"}, content=_events(turn)
+            )
         return httpx2.Response(200, json=turn)
 
     def client(self) -> Anthropic:
@@ -97,6 +101,38 @@ class ScriptedModel:
             blocks = [] if isinstance(content, str) else content
             found += [f"message {index}" for block in blocks if "cache_control" in block]
         return found
+
+
+def _events(turn: dict[str, Any]) -> bytes:
+    """The message as the server-sent events of a streamed answer."""
+    events: list[dict[str, Any]] = [
+        {"type": "message_start", "message": {**turn, "content": [], "stop_reason": None}}
+    ]
+    for index, block in enumerate(turn["content"]):
+        start, deltas = _streamed(block)
+        events.append({"type": "content_block_start", "index": index, "content_block": start})
+        events += [{"type": "content_block_delta", "index": index, "delta": d} for d in deltas]
+        events.append({"type": "content_block_stop", "index": index})
+    delta = {"stop_reason": turn["stop_reason"], "stop_sequence": None}
+    events.append({"type": "message_delta", "delta": delta, "usage": turn["usage"]})
+    events.append({"type": "message_stop"})
+    lines = [f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events]
+    return "".join(lines).encode()
+
+
+def _streamed(block: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """A content block's start event and the deltas that complete it, as the API sends them."""
+    if block["type"] == "text":
+        return {**block, "text": ""}, [{"type": "text_delta", "text": block["text"]}]
+    if block["type"] == "tool_use":
+        partial = {"type": "input_json_delta", "partial_json": json.dumps(block["input"])}
+        return {**block, "input": {}}, [partial]
+    if block["type"] == "thinking":
+        return {**block, "thinking": "", "signature": ""}, [
+            {"type": "thinking_delta", "thinking": block["thinking"]},
+            {"type": "signature_delta", "signature": block["signature"]},
+        ]
+    return block, []
 
 
 def verdict_input(

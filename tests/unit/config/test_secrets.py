@@ -93,6 +93,14 @@ def test_file_store_is_only_readable_by_the_owner(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
+def test_a_file_that_is_not_utf8_is_a_secret_store_error(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.json"
+    path.write_bytes('{"a": "Größe"}'.encode("latin-1"))
+
+    with pytest.raises(SecretStoreError, match="Cannot read"):
+        FileSecretStore(path).get("llm-api-key")
+
+
 @pytest.mark.parametrize("content", ["not json", "[1, 2]"])
 def test_unreadable_file_is_a_secret_store_error(tmp_path: Path, content: str) -> None:
     path = tmp_path / "secrets.json"

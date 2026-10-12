@@ -239,7 +239,12 @@ class InvestigationService:
                 0,
             )
         on_event(InvestigationEvent(EventKind.STARTED, finding, 0, total))
-        outcome = self._investigate(finding, evidence=evidence, run_budget=budget)
+        try:
+            outcome = self._investigate(finding, evidence=evidence, run_budget=budget)
+        # One finding's unexpected error must not discard the batch; its tokens are in budget.
+        except Exception as error:  # noqa: BLE001 - reported as this finding's failed result
+            detail = f"Investigation failed: {type(error).__name__}: {error}"
+            return InvestigationResult(finding, Status.FAILED, None, "", detail, 0, 0)
         return InvestigationResult(
             finding, outcome.status, outcome.verdict, outcome.review, outcome.detail,
             outcome.tokens, outcome.rounds,

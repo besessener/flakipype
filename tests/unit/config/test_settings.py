@@ -71,6 +71,14 @@ def test_invalid_toml_is_a_settings_error(tmp_path: Path) -> None:
         load_settings(path)
 
 
+def test_a_file_that_is_not_utf8_is_a_settings_error(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_bytes("# Größe\n".encode("latin-1"))
+
+    with pytest.raises(SettingsError, match="Cannot read"):
+        load_settings(path)
+
+
 def test_unknown_keys_are_a_settings_error(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text('[llm]\nbase_url = "https://api.anthropic.com"\napi_key = "x"\n')

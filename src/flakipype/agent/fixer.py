@@ -22,6 +22,7 @@ from flakipype.agent.messages import (
 )
 from flakipype.agent.prompts import FIXER_SYSTEM
 from flakipype.agent.tools import Mode, PolicyGate, Tool, ToolError, deny_all
+from flakipype.llm.client import create_message
 
 SUBMIT_FIX = "submit_fix"
 _CORRECTIONS = 2
@@ -168,7 +169,7 @@ class Fixer:
             "messages": cached_messages(self._messages),
             **self._settings.thinking_parameter(),
         }
-        response: Message = self._client.messages.create(**request)
+        response: Message = create_message(self._client, request)
         return response
 
     def _handle(self, use: ToolUseBlock, turn: _Turn) -> FixOutcome | None:

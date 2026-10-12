@@ -40,3 +40,5 @@ sends one request with a single output token. Typical results:
 | bad request | The endpoint rejected the request, usually the model name. |
 | rate limited | Quota or rate limit reached; try again later. |
 | unreachable / timeout | URL, proxy, DNS or firewall. |
+| unexpected answer | Something answered, but not like the Messages API: often a sign-in page or the wrong base URL path. |
+| environment | `ANTHROPIC_FOUNDRY_RESOURCE` is set and conflicts with the base URL; unset it. |

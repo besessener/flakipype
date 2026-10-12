@@ -20,9 +20,14 @@ runner = CliRunner()
 
 class RecordingApp:
     opened: ClassVar[list[tuple[ChatService, str]]] = []
+    ends_with: ClassVar[int | None] = None
 
     def __init__(self, service: ChatService, subtitle: str) -> None:
         self.opened.append((service, subtitle))
+
+    @property
+    def return_code(self) -> int | None:
+        return self.ends_with
 
     def run(self) -> None:
         return None
@@ -40,6 +45,7 @@ def in_terminal(monkeypatch: pytest.MonkeyPatch, error: Exception | None = None)
             )
 
     RecordingApp.opened = []
+    RecordingApp.ends_with = None
     monkeypatch.setattr(chat_command, "is_interactive_terminal", lambda: True)
     monkeypatch.setattr(chat_command, "ChatApp", RecordingApp)
     monkeypatch.setattr(wiring, "open_chat", open_chat)
@@ -72,3 +78,12 @@ def test_problems_before_the_chat_opens(
     assert result.exit_code == code
     assert shown in click.unstyle(result.output)
     assert RecordingApp.opened == []
+
+
+def test_a_chat_that_crashed_does_not_exit_as_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    in_terminal(monkeypatch)
+    RecordingApp.ends_with = 1
+
+    result = runner.invoke(app, [])
+
+    assert result.exit_code == 1

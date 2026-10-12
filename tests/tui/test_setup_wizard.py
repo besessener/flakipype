@@ -110,16 +110,25 @@ async def test_existing_settings_are_loaded(tmp_path: Path, fake_gh: FakeGh) -> 
         assert "stored" in app.query_one("#api-key", Input).placeholder
 
 
-async def test_broken_config_is_shown(tmp_path: Path, fake_gh: FakeGh) -> None:
+@pytest.mark.parametrize(
+    ("config", "shown"),
+    [
+        ("broken = = toml", "Cannot read"),
+        ("[scan]\nwindow_days = 500\n", "input_value=500"),
+    ],
+)
+async def test_broken_config_is_shown(
+    tmp_path: Path, fake_gh: FakeGh, config: str, shown: str
+) -> None:
     logged_in(fake_gh)
     world = setup_world(tmp_path, fake_gh)
     world.paths.config_dir.mkdir(parents=True)
-    world.paths.config_file.write_text("broken = = toml", encoding="utf-8")
+    world.paths.config_file.write_text(config, encoding="utf-8")
     app = SetupWizard(world.service)
 
     async with app.run_test(size=SIZE) as pilot:
         await settle(pilot)
-        assert "Cannot read" in str(app.query_one("#save-status", Static).render())
+        assert shown in str(app.query_one("#save-status", Static).render())
 
 
 async def test_connection_test_success_and_failure(tmp_path: Path, fake_gh: FakeGh) -> None:

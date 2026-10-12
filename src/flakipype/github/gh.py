@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 _DEFAULT_TIMEOUT_SECONDS = 60
+_TIMED_OUT = 124
 _WSL_DRIVE = re.compile(r"^/mnt/[a-z](?:/|$)")
 
 
@@ -46,15 +47,21 @@ class GhCli:
             return self._run(arguments, stdin_text)
 
     def _run(self, arguments: Sequence[str], stdin_text: str) -> GhResult:
-        completed = subprocess.run(  # noqa: S603 - argument list, never a shell
-            [*self._command, *arguments],
-            input=stdin_text,
-            capture_output=True,
-            text=True,
-            timeout=_DEFAULT_TIMEOUT_SECONDS,
-            check=False,
-            env=self._environment(),
-        )
+        try:
+            completed = subprocess.run(  # noqa: S603 - argument list, never a shell
+                [*self._command, *arguments],
+                input=stdin_text,
+                capture_output=True,
+                encoding="utf-8",
+                # Files and logs are not always UTF-8; a stray byte must not end the run.
+                errors="replace",
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+                check=False,
+                env=self._environment(),
+            )
+        except subprocess.TimeoutExpired:
+            detail = f"gh did not answer within {_DEFAULT_TIMEOUT_SECONDS} s; check the network"
+            return GhResult(_TIMED_OUT, "", detail)
         return GhResult(completed.returncode, completed.stdout, completed.stderr)
 
     def run_interactive(self, arguments: Sequence[str]) -> int:
@@ -72,6 +79,8 @@ class GhCli:
             "PATH": without_windows_drives(os.environ.get("PATH", "")),
             "GH_HOST": self._host,
             "NO_COLOR": "1",
+            # gh lets CLICOLOR_FORCE win over NO_COLOR; colour codes would break every JSON answer.
+            "CLICOLOR_FORCE": "0",
             "GH_NO_UPDATE_NOTIFIER": "1",
         }
 

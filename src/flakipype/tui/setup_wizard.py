@@ -1,5 +1,6 @@
 from typing import ClassVar
 
+from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult, SuspendNotSupported
 from textual.binding import Binding, BindingType
@@ -32,7 +33,7 @@ class StatusLine(Static):
     def show(self, status: str, text: str) -> None:
         self.remove_class(*_STATUS_CLASSES)
         self.add_class(status)
-        self.update(text)
+        self.update(Text(text))
 
     def show_check(self, check: Check) -> None:
         # Inside the wizard its buttons are the next step, so "run setup" would be circular.
@@ -112,7 +113,8 @@ class SetupWizard(App[bool]):
         if state.has_api_key:
             self.query_one("#api-key", Input).placeholder = "stored - leave empty to keep it"
         if state.problem:
-            self.query_one("#save-status", Static).update(state.problem)
+            # Validation errors quote input in brackets; shown as markup they would crash.
+            self.query_one("#save-status", Static).update(Text(state.problem))
         self.refresh_github()
 
     def draft(self) -> SetupDraft:
@@ -273,7 +275,7 @@ class SetupWizard(App[bool]):
         try:
             self._service.save(self.draft())
         except InvalidSetupError as error:
-            self.query_one("#save-status", Static).update(f"Cannot save: {error}")
+            self.query_one("#save-status", Static).update(Text(f"Cannot save: {error}"))
             return
         self.exit(result=True)
 

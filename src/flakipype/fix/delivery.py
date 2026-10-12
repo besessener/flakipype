@@ -97,7 +97,8 @@ class Delivery:
                 )
                 text = raw.decode("utf-8", errors="replace") if raw else ""
             return self._verifier.begin(verification, text)
-        except GitHubApiError as error:
+        # The pull request is open: it must still be counted and audited, whatever went wrong.
+        except Exception as error:  # noqa: BLE001 - becomes the verification's outcome
             return replace(
                 verification, stage=Stage.DONE, outcome=f"Verification could not start: {error}"
             )

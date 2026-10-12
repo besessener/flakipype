@@ -1,11 +1,18 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx2
 from anthropic import Anthropic, AnthropicFoundry
+from anthropic.types import Message
 
 _FOUNDRY_HOST_SUFFIX = ".services.ai.azure.com"
+
+
+class ClientSetupError(Exception):
+    """The SDK client cannot be built for this endpoint in this environment."""
 
 
 class EndpointKind(StrEnum):
@@ -34,15 +41,29 @@ def create_client(
     max_retries: int = 2,
 ) -> Anthropic:
     if endpoint_kind(endpoint.base_url) is EndpointKind.FOUNDRY:
-        return AnthropicFoundry(
-            base_url=endpoint.base_url,
-            api_key=endpoint.api_key,
-            http_client=http_client,
-            max_retries=max_retries,
-        )
+        try:
+            return AnthropicFoundry(
+                base_url=endpoint.base_url,
+                api_key=endpoint.api_key,
+                http_client=http_client,
+                max_retries=max_retries,
+            )
+        # The SDK also reads ANTHROPIC_FOUNDRY_RESOURCE and refuses it next to a base URL.
+        except ValueError as error:
+            message = (
+                "ANTHROPIC_FOUNDRY_RESOURCE is set in the environment and conflicts with "
+                f"llm.base_url ({error}); unset it"
+            )
+            raise ClientSetupError(message) from error
     return Anthropic(
         base_url=endpoint.base_url,
         api_key=endpoint.api_key,
         http_client=http_client,
         max_retries=max_retries,
     )
+
+
+def create_message(client: Anthropic, request: Mapping[str, Any]) -> Message:
+    """One model turn, streamed: the SDK refuses non-streaming calls with a large max_tokens."""
+    with client.messages.stream(**request) as stream:
+        return stream.get_final_message()

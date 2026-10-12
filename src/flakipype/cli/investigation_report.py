@@ -27,6 +27,7 @@ _STATUS_TEXT = {
     Status.LOOP: "stopped: repeated itself",
     Status.NO_VERDICT: "no verdict",
     Status.MODEL_ERROR: "model error",
+    Status.FAILED: "failed",
 }
 
 
@@ -69,7 +70,11 @@ def _verdict_body(verdict: Verdict) -> Text:
 
 def _panel(result: InvestigationResult) -> Panel:
     key = result.finding.key
-    title = f"[bold]#{result.finding.number}[/] {key.repository} › {key.workflow_name} › {key.job}"
+    # Names and the review come from the repository and the model: plain text, never markup.
+    title = Text.assemble(
+        (f"#{result.finding.number}", "bold"),
+        f" {key.repository} › {key.workflow_name} › {key.job}",
+    )
     if result.verdict is None:
         body = Text(_STATUS_TEXT.get(result.status, result.status.value), style="bold red")
         body.append(f"\n{result.detail}")
@@ -85,7 +90,7 @@ def _panel(result: InvestigationResult) -> Panel:
         body,
         title=title,
         title_align="left",
-        subtitle=" · ".join(footer),
+        subtitle=Text(" · ".join(footer)),
         subtitle_align="left",
         border_style="cyan" if result.verdict else "red",
     )

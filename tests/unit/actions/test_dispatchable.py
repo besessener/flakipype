@@ -29,6 +29,7 @@ def test_dispatchable_workflows(workflow: str) -> None:
         ("on:\n  push:\n", NOT_DISPATCHABLE),
         ("- just a list\n", NOT_DISPATCHABLE),
         ("on: [unclosed\n", "the workflow file is not valid YAML"),
+        ("on: push\nenv:\n  SNAPSHOT: 2024-02-30\n", "the workflow file is not valid YAML"),
         (
             (
                 "on:\n  workflow_dispatch:\n    inputs:\n      b:\n        required: true\n"
@@ -52,6 +53,9 @@ def test_workflows_that_cannot_be_dispatched_without_inputs(workflow: str, probl
         ("on: 3\n", set()),
         ("- just a list\n", set()),
         ("on: [unclosed\n", set()),
+        ("on: push\nenv:\n  SNAPSHOT: 2024-02-30\n", set()),
+        ("on: push\nenv:\n  A: !!bool on1\n", set()),
+        ("[" * 600, set()),
     ],
 )  # fmt: skip
 def test_triggers(workflow: str, events: set[str]) -> None:

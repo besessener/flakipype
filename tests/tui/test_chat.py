@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Callable
 
 from textual.pilot import Pilot
@@ -62,6 +63,19 @@ async def test_scan_fills_the_sidebar_and_a_click_proposes_a_command(cache: Scan
         await pilot.pause()
 
         assert app.query_one("#prompt", Input).value == "/investigate 2"
+
+
+async def test_activity_shows_job_names_as_text_not_markup(cache: ScanCache) -> None:
+    app, chat = app_for(cache)
+
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(pilot)
+        await send(pilot, "/scan")
+        # The workspace reports activity from the chat's worker thread.
+        await asyncio.to_thread(chat.workspace.on_activity, "Investigating #1 unit [/]")
+        await pilot.pause()
+
+        assert activity(app) == "Investigating #1 unit [/]"
 
 
 async def test_questions_show_tool_activity_and_answers(cache: ScanCache) -> None:
