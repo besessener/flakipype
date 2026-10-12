@@ -1,7 +1,21 @@
 # flakipype
 
+![Python](https://img.shields.io/badge/python-%3E%3D3.12-3776AB?logo=python&logoColor=white)
+![uv](https://img.shields.io/badge/packaging-uv-DE5FE9?logo=uv&logoColor=white)
+![Textual](https://img.shields.io/badge/TUI-Textual-5a4fcf)
+![Typer](https://img.shields.io/badge/CLI-Typer-009688)
+![Pydantic](https://img.shields.io/badge/validation-Pydantic-E92063?logo=pydantic&logoColor=white)
+![Anthropic](https://img.shields.io/badge/LLM-Anthropic%20Messages%20API-191919?logo=anthropic&logoColor=white)
+![gh](https://img.shields.io/badge/GitHub-gh%20CLI-181717?logo=github&logoColor=white)
+![Ruff](https://img.shields.io/badge/lint-Ruff-D7FF64?logo=ruff&logoColor=black)
+![mypy](https://img.shields.io/badge/types-mypy%20strict-2A6DB2)
+![import-linter](https://img.shields.io/badge/architecture-import--linter-orange)
+![pytest](https://img.shields.io/badge/tested%20with-pytest-0A9EDC?logo=pytest&logoColor=white)
+![Gitleaks](https://img.shields.io/badge/secrets-Gitleaks-blue?logo=git&logoColor=white)
+![zizmor](https://img.shields.io/badge/workflow%20security-zizmor-blue?logo=githubactions&logoColor=white)
 [![CI](https://github.com/besessener/flakipype/actions/workflows/ci.yml/badge.svg)](https://github.com/besessener/flakipype/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/besessener/flakipype/actions/workflows/codeql.yml/badge.svg)](https://github.com/besessener/flakipype/actions/workflows/codeql.yml)
+[![Last commit](https://img.shields.io/github/last-commit/besessener/flakipype)](https://github.com/besessener/flakipype/commits/main)
 [![License: MIT](https://img.shields.io/github/license/besessener/flakipype)](LICENSE)
 
 ***Find, explain and fix flaky GitHub Actions pipelines.***
@@ -60,7 +74,13 @@ Details: [development setup](docs/tutorials/development-setup.md) and
 
 ## Documentation
 
-[docs/](docs/README.md), organised by [Diátaxis](https://diataxis.fr/).
+Website: <https://besessener.github.io/flakipype/>. The full documentation is in
+[docs/](docs/README.md), organised by [Diátaxis](https://diataxis.fr/):
+
+- **[Tutorials](docs/README.md#tutorials)** – step by step to a first success, e.g. [getting started](docs/tutorials/getting-started.md)
+- **[How-to guides](docs/README.md#how-to-guides)** – reach one goal, e.g. [connect a model](docs/how-to/connect-a-model.md) or [run on a schedule](docs/how-to/run-on-a-schedule.md)
+- **[Reference](docs/README.md#reference)** – look up exact behaviour, e.g. [commands](docs/reference/commands.md) or [configuration](docs/reference/configuration.md)
+- **[Explanation](docs/README.md#explanation)** – understand why, e.g. [architecture](docs/explanation/architecture.md) or [safety model](docs/explanation/safety-model.md)
 
 ## License
 
