@@ -2,13 +2,13 @@
 # Installs flakipype for the current user: uv first if there is none (checksum verified),
 # then flakipype with `uv tool install`. Needs no root.
 #
-#   curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
+#   curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.2.0/install.sh
 #   sh install.sh
 #
 # FLAKIPYPE_SOURCE installs from somewhere else, e.g. a local checkout (used by the smoke tests).
 set -eu
 
-FLAKIPYPE_VERSION="v0.1.0"
+FLAKIPYPE_VERSION="v0.2.0"
 UV_VERSION="0.13.0"
 REPOSITORY="https://github.com/besessener/flakipype"
 BIN_DIR="${HOME}/.local/bin"
