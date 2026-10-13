@@ -26,9 +26,14 @@ job and step is, explains the likely cause with an Anthropic model and fixes it
 through a pull request — verified by rerunning the fix branch before you
 review it.
 
-- **Chat** in a rich terminal UI with slash commands (`/scan`, `/flaky`, `/fix`, …).
-- **Headless** commands and a systemd timer for unattended scans.
-- **Safe by design**: never touches the default branch; every fix is a draft PR.
+- **Finds flaky jobs** – ranks jobs that failed and then passed on rerun or on the
+  same commit, with error signatures that group alike failures.
+- **Explains them with evidence** – an agent reads logs, commits and files and
+  cites them; a reviewer checks the verdict before you see it.
+- **Chat or timer** – a rich terminal UI with slash commands (`/scan`, `/flaky`,
+  `/fix`, …), or headless commands and a systemd timer for unattended runs.
+- **Safe by design** – never touches the default branch; every fix is a draft
+  pull request ([safety model](docs/explanation/safety-model.md)).
 
 > **Status:** pre-alpha. Setup, scanning, agent investigations, the chat,
 > confirmed reruns and dispatches, fixes as draft pull requests and unattended
@@ -47,6 +52,9 @@ sh install.sh
 ```
 
 With uv already installed: `uv tool install git+https://github.com/besessener/flakipype@v0.1.0`.
+Step by step: [getting started](docs/tutorials/getting-started.md).
+
+## Usage
 
 ```bash
 flakipype setup     # model endpoint, gh (downloaded and verified if missing), GitHub login
@@ -58,7 +66,11 @@ flakipype run           # unattended: scan, investigate, open draft pull request
 flakipype daemon install    # run it daily from a systemd user timer
 ```
 
-Step by step: [getting started](docs/tutorials/getting-started.md).
+Next steps: [connect a model](docs/how-to/connect-a-model.md),
+[find flaky pipelines](docs/how-to/find-flaky-pipelines.md),
+[use the chat](docs/how-to/chat.md) and
+[run on a schedule](docs/how-to/run-on-a-schedule.md); every command:
+[commands](docs/reference/commands.md).
 
 ## Development
 
@@ -82,6 +94,16 @@ Website: <https://besessener.github.io/flakipype/>. The full documentation is in
 - **[How-to guides](docs/README.md#how-to-guides)** – reach one goal, e.g. [connect a model](docs/how-to/connect-a-model.md) or [run on a schedule](docs/how-to/run-on-a-schedule.md)
 - **[Reference](docs/README.md#reference)** – look up exact behaviour, e.g. [commands](docs/reference/commands.md) or [configuration](docs/reference/configuration.md)
 - **[Explanation](docs/README.md#explanation)** – understand why, e.g. [architecture](docs/explanation/architecture.md) or [safety model](docs/explanation/safety-model.md)
+
+## Related projects
+
+flakipype, PlayMonkey and Archivist started from the same agentic idea and
+share their ground rules, quality gates and documentation layout:
+
+- [PlayMonkey](https://github.com/besessener/PlayMonkey) – let a seeded monkey
+  loose on a website in a test environment and get reproducible bugs.
+- [Archivist](https://github.com/besessener/Archivist) – a personal, agentic AI
+  archivist for Windows (in German).
 
 ## License
 
