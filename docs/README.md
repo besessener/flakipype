@@ -1,52 +1,52 @@
-# flakipype documentation
+# flakipype-Dokumentation
 
-Organised by [Diátaxis](https://diataxis.fr/): by what you need right now.
+Die Dokumentation folgt [Diátaxis](https://diataxis.fr/): Sie ist nach dem
+geordnet, was du gerade brauchst.
 
-|  | For learning | For working |
+|  | Zum Lernen | Für die Arbeit |
 | --- | --- | --- |
-| **Practice** | [Tutorials](#tutorials) – step by step to a first success | [How-to guides](#how-to-guides) – reach one concrete goal |
-| **Knowledge** | [Explanation](#explanation) – understand why it is so | [Reference](#reference) – look up exactly how it is |
+| **Praxis** | [Tutorials](#tutorials) – Schritt für Schritt zum ersten Erfolg | [Anleitungen](#anleitungen) – ein konkretes Ziel erreichen |
+| **Wissen** | [Hintergrund](#hintergrund) – verstehen, warum es so ist | [Referenz](#referenz) – nachschlagen, wie es genau ist |
 
 ## Tutorials
 
-- [Getting started](tutorials/getting-started.md) – install, set up, check.
-- [Development setup](tutorials/development-setup.md) – from clone to all gates green.
+- [Erste Schritte](tutorials/erste-schritte.md) – installieren, einrichten, prüfen.
+- [Entwicklungsumgebung aufsetzen](tutorials/entwicklungsumgebung.md) – vom Klonen, bis alle Qualitätsprüfungen grün sind.
 
-## How-to guides
+## Anleitungen
 
-**Using flakipype**
+**flakipype benutzen**
 
-- [Find flaky pipelines](how-to/find-flaky-pipelines.md) – `flakipype scan`, options, scripts.
-- [Investigate findings](how-to/investigate-findings.md) – let the agent explain them with evidence.
-- [Use the chat](how-to/chat.md) – ask questions, scan and investigate interactively, sessions.
-- [Connect a model](how-to/connect-a-model.md) – Anthropic API, Azure AI Foundry or a proxy.
-- [Set up a headless machine](how-to/set-up-headless.md) – servers, containers, SSH.
-- [Run on a schedule](how-to/run-on-a-schedule.md) – `flakipype run` and the systemd user timer.
+- [Instabile Pipelines finden](how-to/instabile-pipelines-finden.md) – `flakipype scan`, Optionen, Skripte.
+- [Befunde untersuchen](how-to/befunde-untersuchen.md) – sie vom Agenten mit Belegen erklären lassen.
+- [Den Chat nutzen](how-to/chat-nutzen.md) – Fragen stellen, interaktiv scannen und untersuchen, Sitzungen.
+- [Ein Modell verbinden](how-to/modell-verbinden.md) – Anthropic API, Azure AI Foundry oder ein Proxy.
+- [Einen Rechner headless einrichten](how-to/headless-einrichten.md) – Server, Container, SSH.
+- [Zeitgesteuert ausführen](how-to/zeitgesteuert-ausfuehren.md) – `flakipype run` und der systemd-Benutzer-Timer.
 
-**Developing flakipype**
+**flakipype entwickeln**
 
-- [Contributing](../CONTRIBUTING.md) – set up, work, open a pull request, release.
-- [Run CI locally with act](how-to/run-ci-locally.md) – the Linux gate on Windows.
-- [Maintain the website](how-to/maintain-the-website.md) – `site/`, screenshots and the Pages workflow.
+- [Mitmachen](../CONTRIBUTING.md) – einrichten, arbeiten, Pull Request öffnen, veröffentlichen.
+- [CI lokal mit act ausführen](how-to/ci-lokal-ausfuehren.md) – die Linux-Prüfung unter Windows.
+- [Webseite pflegen](how-to/webseite-pflegen.md) – `site/`, Screenshots und der Pages-Workflow.
 
-## Reference
+## Referenz
 
-- [Commands](reference/commands.md) – `poe` tasks and the `flakipype` CLI.
-- [Configuration](reference/configuration.md) – files, settings, secrets and `gh`.
-- [Scan JSON](reference/scan-json.md) – the `flakipype scan --json` format.
-- [Quality gates](reference/quality.md) – tests, linters, CI jobs and what each one enforces.
+- [Befehle](reference/befehle.md) – `poe`-Tasks und die `flakipype`-CLI.
+- [Konfiguration](reference/konfiguration.md) – Dateien, Einstellungen, Secrets und `gh`.
+- [Scan-JSON](reference/scan-json.md) – das Format von `flakipype scan --json`.
+- [Qualitätsprüfungen](reference/qualitaetssicherung.md) – Tests, Linter, CI-Jobs und was jeder davon durchsetzt.
 
-## Explanation
+## Hintergrund
 
-- [Architecture](explanation/architecture.md) – packages, layers and data flow.
-- [How flakiness is detected](explanation/flake-detection.md) – signals, rates and error signatures.
-- [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts, budgets and the chat.
-- [Actions](explanation/actions.md) – reruns, dispatches, confirmation and the live run view.
-- [Fixes](explanation/fix.md) – fixer agent, diff checks, draft pull requests and verification.
-- [Unattended runs and release](explanation/unattended.md) – `flakipype run`, the systemd timer, the install script and smoke tests.
-- [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
-- [Roadmap](explanation/roadmap.md) – scope and milestones.
+- [Architektur](explanation/architektur.md) – Pakete, Schichten und Datenfluss.
+- [Wie Instabilität erkannt wird](explanation/flake-erkennung.md) – Signale, Raten und Fehlersignaturen.
+- [Der Agent](explanation/agent.md) – Investigators, Reviewer, Werkzeuge, Urteile, Budgets und der Chat.
+- [Aktionen](explanation/aktionen.md) – Reruns, Dispatches, Bestätigung und die Live-Ansicht der Läufe.
+- [Korrekturen](explanation/korrekturen.md) – Fixer-Agent, Diff-Prüfungen, Draft-PRs und Verifikation.
+- [Unbeaufsichtigte Läufe und Release](explanation/unbeaufsichtigte-laeufe.md) – `flakipype run`, der systemd-Timer, das Installationsskript und die Smoke-Tests.
+- [Sicherheitsmodell](explanation/sicherheitsmodell.md) – Modi, Risikostufen, Pull Requests und Budgets.
 
-Related projects with the same idea and the same documentation layout:
-[PlayMonkey](https://github.com/besessener/PlayMonkey/blob/main/docs/README.md) and
-[Archivist](https://github.com/besessener/Archivist/blob/main/docs/README.md) (in German).
+Verwandte Projekte mit derselben Idee und demselben Aufbau der Dokumentation:
+[PlayMonkey](https://github.com/besessener/PlayMonkey/blob/main/docs/README.md) und
+[Archivist](https://github.com/besessener/Archivist/blob/main/docs/README.md).

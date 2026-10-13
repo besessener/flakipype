@@ -18,44 +18,48 @@
 [![Last commit](https://img.shields.io/github/last-commit/besessener/flakipype)](https://github.com/besessener/flakipype/commits/main)
 [![License: MIT](https://img.shields.io/github/license/besessener/flakipype)](LICENSE)
 
-***Find, explain and fix flaky GitHub Actions pipelines.***
+***Instabile GitHub-Actions-Pipelines finden, erklären und beheben.***
 
-flakipype is an agentic command line tool for Linux. Point it at a GitHub user
-or organisation and it scans the workflow runs, scores how flaky each workflow,
-job and step is, explains the likely cause with an Anthropic model and fixes it
-through a pull request — verified by rerunning the fix branch before you
-review it.
+flakipype ist ein agentisches Kommandozeilenwerkzeug für Linux. Richte es auf
+einen GitHub-Benutzer oder eine Organisation, und es durchsucht die
+Workflow-Läufe, bewertet, wie instabil jeder Workflow, Job und Schritt ist,
+erklärt die wahrscheinliche Ursache mit einem Anthropic-Modell und behebt sie
+per Pull Request – überprüft durch erneutes Ausführen des Fix-Branches, bevor
+du ihn reviewst.
 
-- **Finds flaky jobs** – ranks jobs that failed and then passed on rerun or on the
-  same commit, with error signatures that group alike failures.
-- **Explains them with evidence** – an agent reads logs, commits and files and
-  cites them; a reviewer checks the verdict before you see it.
-- **Chat or timer** – a rich terminal UI with slash commands (`/scan`, `/flaky`,
-  `/fix`, …), or headless commands and a systemd timer for unattended runs.
-- **Safe by design** – never touches the default branch; every fix is a draft
-  pull request ([safety model](docs/explanation/safety-model.md)).
+- **Findet instabile Jobs** – bringt Jobs, die fehlschlugen und dann beim
+  Rerun oder auf demselben Commit durchliefen, in eine Rangfolge, mit
+  Fehlersignaturen, die gleichartige Fehlschläge gruppieren.
+- **Erklärt sie mit Belegen** – ein Agent liest Logs, Commits und Dateien und
+  zitiert sie; ein Reviewer prüft das Urteil, bevor du es siehst.
+- **Chat oder Timer** – eine reichhaltige Terminal-Oberfläche mit
+  Slash-Befehlen (`/scan`, `/flaky`, `/fix`, …) oder headless Befehle und ein
+  systemd-Timer für unbeaufsichtigte Läufe.
+- **Sicher von Grund auf** – fasst den Standardbranch nie an; jede Korrektur
+  ist ein Draft-PR
+  ([Sicherheitsmodell](docs/explanation/sicherheitsmodell.md)).
 
-> **Status:** pre-alpha. Setup, scanning, agent investigations, the chat,
-> confirmed reruns and dispatches, fixes as draft pull requests and unattended
-> runs from a systemd timer work, see the
-> [roadmap](docs/explanation/roadmap.md).
+> **Stand:** Version 0.1.0. Einrichtung, Scannen, Untersuchungen durch den
+> Agenten, der Chat, bestätigte Reruns und Dispatches, Korrekturen als
+> Draft-PRs und unbeaufsichtigte Läufe per systemd-Timer funktionieren.
 
 ## Installation
 
-Requires Linux (x86_64 or aarch64, glibc) with `curl`, `tar` and `git`. The
-script installs [uv](https://docs.astral.sh/uv/) if you have none, checked
-against its published SHA-256, and then flakipype for your user:
+Voraussetzungen: Linux (x86_64 oder aarch64, glibc) mit `curl`, `tar` und
+`git`. Das Skript installiert [uv](https://docs.astral.sh/uv/), falls du es
+noch nicht hast, geprüft gegen dessen veröffentlichte SHA-256-Prüfsumme, und
+danach flakipype für deinen Benutzer:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
 sh install.sh
 ```
 
-With uv already installed: `uv tool install git+https://github.com/besessener/flakipype@v0.1.0`.
-Step by step: [getting started](docs/tutorials/getting-started.md).
-Releases and changes: [GitHub Releases](https://github.com/besessener/flakipype/releases).
+Mit bereits installiertem uv: `uv tool install git+https://github.com/besessener/flakipype@v0.1.0`.
+Schritt für Schritt: [Erste Schritte](docs/tutorials/erste-schritte.md).
+Releases und Änderungen: [GitHub Releases](https://github.com/besessener/flakipype/releases).
 
-## Usage
+## Benutzung
 
 ```bash
 flakipype setup     # model endpoint, gh (downloaded and verified if missing), GitHub login
@@ -67,45 +71,49 @@ flakipype run           # unattended: scan, investigate, open draft pull request
 flakipype daemon install    # run it daily from a systemd user timer
 ```
 
-Next steps: [connect a model](docs/how-to/connect-a-model.md),
-[find flaky pipelines](docs/how-to/find-flaky-pipelines.md),
-[use the chat](docs/how-to/chat.md) and
-[run on a schedule](docs/how-to/run-on-a-schedule.md); every command:
-[commands](docs/reference/commands.md).
+Weiter geht es mit [Ein Modell verbinden](docs/how-to/modell-verbinden.md),
+[Instabile Pipelines finden](docs/how-to/instabile-pipelines-finden.md),
+[Den Chat nutzen](docs/how-to/chat-nutzen.md) und
+[Zeitgesteuert ausführen](docs/how-to/zeitgesteuert-ausfuehren.md); jeder
+Befehl: [Befehle](docs/reference/befehle.md).
 
-## Development
+## Entwicklung
 
-Requirements: [uv](https://docs.astral.sh/uv/); for the Linux gate on Windows
-also Docker and [act](https://nektosact.com/).
+Voraussetzungen: [uv](https://docs.astral.sh/uv/); für die Linux-Prüfung unter
+Windows außerdem Docker und [act](https://nektosact.com/).
 
 ```bash
 uv sync
 uv run poe check
 ```
 
-Details: [development setup](docs/tutorials/development-setup.md),
-[commands](docs/reference/commands.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Ausführlich:
+[Entwicklungsumgebung aufsetzen](docs/tutorials/entwicklungsumgebung.md),
+[Befehle](docs/reference/befehle.md) und [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Documentation
+## Dokumentation
 
-Website: <https://besessener.github.io/flakipype/>. The full documentation is in
-[docs/](docs/README.md), organised by [Diátaxis](https://diataxis.fr/):
+Webseite: <https://besessener.github.io/flakipype/>. Die vollständige
+Dokumentation liegt unter [docs/](docs/README.md), gegliedert nach
+[Diátaxis](https://diataxis.fr/):
 
-- **[Tutorials](docs/README.md#tutorials)** – step by step to a first success, e.g. [getting started](docs/tutorials/getting-started.md)
-- **[How-to guides](docs/README.md#how-to-guides)** – reach one goal, e.g. [connect a model](docs/how-to/connect-a-model.md) or [run on a schedule](docs/how-to/run-on-a-schedule.md)
-- **[Reference](docs/README.md#reference)** – look up exact behaviour, e.g. [commands](docs/reference/commands.md) or [configuration](docs/reference/configuration.md)
-- **[Explanation](docs/README.md#explanation)** – understand why, e.g. [architecture](docs/explanation/architecture.md) or [safety model](docs/explanation/safety-model.md)
+- **[Tutorials](docs/README.md#tutorials)** – Schritt für Schritt zum ersten Erfolg, z. B. [Erste Schritte](docs/tutorials/erste-schritte.md)
+- **[Anleitungen](docs/README.md#anleitungen)** – konkrete Aufgaben lösen, z. B. [Ein Modell verbinden](docs/how-to/modell-verbinden.md) oder [Zeitgesteuert ausführen](docs/how-to/zeitgesteuert-ausfuehren.md)
+- **[Referenz](docs/README.md#referenz)** – genaues Verhalten nachschlagen, z. B. [Befehle](docs/reference/befehle.md) oder [Konfiguration](docs/reference/konfiguration.md)
+- **[Hintergrund](docs/README.md#hintergrund)** – verstehen, warum es so ist, z. B. [Architektur](docs/explanation/architektur.md) oder [Sicherheitsmodell](docs/explanation/sicherheitsmodell.md)
 
-## Related projects
+## Verwandte Projekte
 
-flakipype, PlayMonkey and Archivist started from the same agentic idea and
-share their ground rules, quality gates and documentation layout:
+flakipype, PlayMonkey und Archivist sind aus derselben agentischen Idee
+entstanden und teilen Grundregeln, Qualitätsprüfungen und den Aufbau der
+Dokumentation:
 
-- [PlayMonkey](https://github.com/besessener/PlayMonkey) – let a seeded monkey
-  loose on a website in a test environment and get reproducible bugs.
-- [Archivist](https://github.com/besessener/Archivist) – a personal, agentic AI
-  archivist for Windows (in German).
+- [PlayMonkey](https://github.com/besessener/PlayMonkey) – lässt einen Monkey
+  mit festem Seed auf eine Website in einer Testumgebung los und liefert
+  reproduzierbare Fehler.
+- [Archivist](https://github.com/besessener/Archivist) – ein persönlicher,
+  agentischer KI-Archivar für Windows.
 
-## License
+## Lizenz
 
-MIT, see [LICENSE](LICENSE).
+MIT, siehe [LICENSE](LICENSE).

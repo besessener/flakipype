@@ -1,27 +1,29 @@
-# The agent
+# Der Agent
 
-> Status: implemented. Headless investigations (`flakipype investigate`, M3a)
-> and the chat (`flakipype` without a command, M3b). Where the implementation
-> differs from the first design, this page describes the implementation.
+> Stand: umgesetzt. Headless-Untersuchungen (`flakipype investigate`) und
+> der Chat (`flakipype` ohne Befehl). Wo die Umsetzung vom ersten Entwurf
+> abweicht, beschreibt diese Seite die Umsetzung.
 
-The scan (M2) delivers facts: proven flaky events, one-offs, fixes and
-recurring errors, with error signatures. It deliberately stops where
-judgement starts. Is a recurring error a flaky test nobody reran, or the same
-bug caught twice? Was a "seen once" event an outage? What exactly causes the
-E2E timeout, and what would fix it? Those questions need reading logs, code
-and history the way an engineer would. That is the agent's job.
+Der Scan liefert Fakten: nachgewiesene instabile Ereignisse, Einzelfälle,
+Korrekturen und wiederkehrende Fehler, mit Fehlersignaturen. Er hört bewusst
+dort auf, wo das Urteilen beginnt. Ist ein wiederkehrender Fehler ein
+instabiler Test, den niemand erneut ausgeführt hat, oder derselbe Bug, zweimal
+erwischt? War ein „einmal gesehenes“ Ereignis ein Ausfall? Was genau
+verursacht den E2E-Timeout, und was würde ihn beheben? Für diese Fragen muss
+man Logs, Code und Verlauf so lesen, wie es ein Entwickler täte. Das ist die
+Aufgabe des Agenten.
 
-## Scope of M3
+## Umfang
 
-- **In**: investigating findings and explaining them with cited evidence; a
-  chat to ask about them; a headless `flakipype investigate` for scripts.
-- **Out**: changing code or opening pull requests; since M5 a separate
-  fixer does that, see [fixes](fix.md). Investigators only read. The chat
-  model can also rerun and dispatch workflows (M4, see
-  [actions](actions.md)) and ask for fixes (M5), each confirmed by you in
-  `ask` mode.
+- **Enthalten**: Befunde untersuchen und mit zitierten Belegen erklären; ein
+  Chat, um danach zu fragen; ein headless `flakipype investigate` für Skripte.
+- **Nicht enthalten**: Code ändern oder Pull Requests öffnen; das übernimmt
+  ein eigener Fixer, siehe [Korrekturen](korrekturen.md). Investigators lesen
+  nur. Das Chat-Modell kann außerdem Workflows erneut ausführen und starten
+  (siehe [Aktionen](aktionen.md)) und Korrekturen anfordern; jede davon
+  bestätigst du im Modus `ask`.
 
-## Roles
+## Rollen
 
 ```text
              ┌──────────────────────────────┐
@@ -43,67 +45,71 @@ and history the way an engineer would. That is the agent's job.
   └──────────────────────────────────┘
 ```
 
-**Investigator.** One per finding, with a fresh, small context: the finding
-from the scan (citable as `finding`), the tools, and nothing about other
-findings, so one case cannot bias the next. It decides itself which tools to call and in which
-order, and finishes by calling `submit_verdict`. Several investigators run in
-parallel (default 3).
+**Investigator.** Einer pro Befund, mit frischem, kleinem Kontext: der Befund
+aus dem Scan (zitierbar als `finding`), die Werkzeuge und nichts über andere
+Befunde, damit ein Fall den nächsten nicht beeinflussen kann. Er entscheidet
+selbst, welche Werkzeuge er in welcher Reihenfolge aufruft, und schließt mit
+einem Aufruf von `submit_verdict` ab. Mehrere Investigators laufen parallel
+(Standard 3).
 
-**Citation check.** Deterministic code, not a model: each evidence item must
-point to a tool result of this investigation, and its quote must appear in
-that result (whitespace is normalised; a quote of several lines may leave out
-the line numbers or `+mm:ss` offsets the tools put in front of each line). A
-verdict with invented evidence or an
-invalid shape goes back to the investigator with the list of problems, at
-most twice; then the investigation ends without a verdict.
+**Zitatprüfung.** Deterministischer Code, kein Modell: Jeder Beleg muss auf
+ein Werkzeugergebnis dieser Untersuchung verweisen, und sein Zitat muss in
+diesem Ergebnis vorkommen (Leerraum wird normalisiert; ein mehrzeiliges Zitat
+darf die Zeilennummern oder `+mm:ss`-Versätze weglassen, die die Werkzeuge
+jeder Zeile voranstellen). Ein Urteil mit erfundenen Belegen oder ungültiger
+Form geht mit der Liste der Probleme an den Investigator zurück, höchstens
+zweimal; danach endet die Untersuchung ohne Urteil.
 
-**Reviewer.** A second model call with only the finding, the verdict and the
-cited evidence (not the whole investigation). It checks the reasoning against
-the rules below and answers `accept`, `revise` (with concrete questions; the
-investigator continues once with them) or `downgrade` (lower confidence or
-`unclear`, with a reason). The reviewer never upgrades a verdict; code
-enforces that. A second `revise` after the one round trip counts as low
-confidence. If no review comes back, the verdict is shown as not reviewed.
+**Reviewer.** Ein zweiter Modellaufruf, der nur den Befund, das Urteil und
+die zitierten Belege bekommt (nicht die ganze Untersuchung). Er prüft die
+Begründung gegen die Regeln unten und antwortet mit `accept`, `revise` (mit
+konkreten Fragen; der Investigator macht damit einmal weiter) oder
+`downgrade` (niedrigere Sicherheit oder `unclear`, mit Begründung). Der
+Reviewer stuft ein Urteil nie hoch; das erzwingt der Code. Ein zweites
+`revise` nach der einen Runde zählt als niedrige Sicherheit. Kommt kein
+Review zurück, wird das Urteil als nicht geprüft angezeigt.
 
-**Orchestrator.** In the chat: a model with its own conversation and four
-reading tools — `scan`, `list_findings`, `investigate` (findings by number)
-and `show_verdict` — that answers your questions and starts investigators
-through them. Its action tools (`rerun_failed`, `rerun_run`, `dispatch`,
-`cancel`, and `watched_runs` to read their state) are described in
-[actions](actions.md), its `fix` tool (risk `critical`, with optional
-`instructions` for changes to a fix it showed) in [fixes](fix.md). Slash
-commands do the same without the model. Headless,
-`flakipype investigate` has no orchestrator model: it investigates the
-selected findings and prints the verdicts. Neither has `flakipype run`:
-its steps are fixed in code ([unattended runs](unattended.md)).
+**Orchestrator.** Im Chat: ein Modell mit eigener Unterhaltung und vier
+lesenden Werkzeugen – `scan`, `list_findings`, `investigate` (Befunde nach
+Nummer) und `show_verdict` –, das deine Fragen beantwortet und darüber
+Investigators startet. Seine Aktionswerkzeuge (`rerun_failed`, `rerun_run`,
+`dispatch`, `cancel` und `watched_runs`, um ihren Zustand zu lesen) sind in
+[Aktionen](aktionen.md) beschrieben, sein Werkzeug `fix` (Risiko `critical`,
+mit optionalen `instructions` für Änderungen an einer gezeigten Korrektur) in
+[Korrekturen](korrekturen.md). Slash-Befehle tun dasselbe ohne das Modell.
+Headless hat `flakipype investigate` kein Orchestrator-Modell: Es untersucht
+die ausgewählten Befunde und gibt die Urteile aus. Auch `flakipype run` hat
+keines: Seine Schritte stehen fest im Code
+([unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)).
 
-## What the investigator can use
+## Was der Investigator nutzen kann
 
-All tools are read-only in M3 (risk level `read`, see the
-[safety model](safety-model.md)). GitHub calls go through one serial queue,
-as the scan does, even when investigators run in parallel; only model calls
-run concurrently.
+Die Werkzeuge des Investigators lesen nur (Risikostufe `read`, siehe
+[Sicherheitsmodell](sicherheitsmodell.md)). GitHub-Aufrufe laufen wie beim
+Scan durch eine einzige serielle Warteschlange, auch wenn Investigators
+parallel laufen; nur Modellaufrufe laufen gleichzeitig.
 
-| Tool | Returns | Source |
+| Werkzeug | Liefert | Quelle |
 | --- | --- | --- |
-| `failure_excerpt(job_id)` | Prepared excerpt of the failed step (below) | job log, cached |
-| `log_range(job_id, from_line, to_line)` | More raw lines, max 200 per call, cleaned and masked | job log, cached |
-| `run_history(limit)` | Timeline of this workflow: run, commit, branch, event, result, signature per failed job | scan cache + run list |
-| `compare_commits(base, head)` | Commits (sha, author, date, subject) and changed files with line counts; no full diff | `gh api …/compare/base...head` |
-| `file_diff(base, head, path)` | Unified diff of one file, max 300 lines | `gh api …/compare` (per-file patch) |
-| `read_file(path, ref)` | File content at a commit, max 400 lines with line numbers; ranges for longer files | `gh api …/contents` |
-| `workflow_file(ref)` | The workflow YAML of the finding at a commit | `gh api …/contents` |
-| `submit_verdict(...)` | Ends the investigation | — |
+| `failure_excerpt(job_id)` | Aufbereiteter Auszug des fehlgeschlagenen Schritts (unten) | Job-Log, zwischengespeichert |
+| `log_range(job_id, from_line, to_line)` | Weitere Rohzeilen, höchstens 200 pro Aufruf, bereinigt und maskiert | Job-Log, zwischengespeichert |
+| `run_history(limit)` | Zeitleiste dieses Workflows: Lauf, Commit, Branch, Ereignis, Ergebnis, Signatur pro fehlgeschlagenem Job | Scan-Cache + Laufliste |
+| `compare_commits(base, head)` | Commits (SHA, Autor, Datum, Betreff) und geänderte Dateien mit Zeilenzahlen; kein vollständiger Diff | `gh api …/compare/base...head` |
+| `file_diff(base, head, path)` | Unified Diff einer Datei, höchstens 300 Zeilen | `gh api …/compare` (Patch pro Datei) |
+| `read_file(path, ref)` | Dateiinhalt zu einem Commit, höchstens 400 Zeilen mit Zeilennummern; Bereiche für längere Dateien | `gh api …/contents` |
+| `workflow_file(ref)` | Die Workflow-YAML des Befunds zu einem Commit | `gh api …/contents` |
+| `submit_verdict(...)` | Beendet die Untersuchung | — |
 
-No local clone; everything comes from GitHub's API. Job logs are cached
-per investigation. An investigation only sees its finding's repository and
-the jobs of that workflow the scan read; other job ids are refused. Calling
-the same tool with the same input twice in a row ends the investigation.
+Kein lokaler Klon; alles kommt aus der GitHub-API. Job-Logs werden pro
+Untersuchung zwischengespeichert. Eine Untersuchung sieht nur das Repository
+ihres Befunds und die Jobs dieses Workflows, die der Scan gelesen hat; andere
+Job-IDs werden abgelehnt. Ruft sie dasselbe Werkzeug zweimal hintereinander
+mit derselben Eingabe auf, endet die Untersuchung.
 
-## Logs, prepared for reading
+## Logs, zum Lesen aufbereitet
 
-A raw job log is long and noisy (the Archivist E2E log has 1,151 lines). The
-agent gets an excerpt instead:
+Ein rohes Job-Log ist lang und unübersichtlich (das E2E-Log von Archivist hat
+1.151 Zeilen). Der Agent bekommt stattdessen einen Auszug:
 
 ```text
 <log job="112720402394" job_name="e2e" step="E2E (Electron under Xvfb)"
@@ -124,160 +130,183 @@ agent gets an excerpt instead:
 </log>
 ```
 
-How it is built:
+So entsteht er:
 
-1. Only the failed step: the log is cut along gh's `##[group]` markers.
-2. Every `##[error]` with 20 lines before and 15 after; overlapping windows
-   merge. A generic exit-code error (`Process completed with exit code N`)
-   gets the 40 lines before it instead.
-3. Timestamps become offsets from the first stamped line of the excerpt;
-   repeated lines collapse to
-   `[… N identical lines …]`.
-4. Escape sequences and control characters are removed; secrets are masked
-   (tokens, keys, connection strings, `***` from GitHub stays as it is).
-5. The whole excerpt is capped (default 120 lines); `log_range` gives more.
-6. It is wrapped in a `<log>` element whose attributes the code sets; the
-   model is told that everything inside is data.
+1. Nur der fehlgeschlagene Schritt: Das Log wird an den `##[group]`-Markern
+   von gh zerschnitten.
+2. Jedes `##[error]` mit 20 Zeilen davor und 15 danach; überlappende Fenster
+   werden zusammengeführt. Ein allgemeiner Exit-Code-Fehler
+   (`Process completed with exit code N`) bekommt stattdessen die 40 Zeilen
+   davor.
+3. Zeitstempel werden zu Versätzen ab der ersten Zeile des Auszugs mit
+   Zeitstempel; wiederholte Zeilen werden zu
+   `[… N identical lines …]` zusammengefasst.
+4. Escape-Sequenzen und Steuerzeichen werden entfernt; Secrets werden
+   maskiert (Tokens, Schlüssel, Verbindungszeichenfolgen; `***` von GitHub
+   bleibt, wie es ist).
+5. Der ganze Auszug ist begrenzt (Standard 120 Zeilen); `log_range` liefert
+   mehr.
+6. Er wird in ein `<log>`-Element verpackt, dessen Attribute der Code setzt;
+   dem Modell wird gesagt, dass alles darin Daten sind.
 
-`compare_commits`, `read_file` and `run_history` results are prepared the same
-way: compact, line-numbered where it helps citing, marked as data.
+Die Ergebnisse von `compare_commits`, `read_file` und `run_history` werden
+genauso aufbereitet: kompakt, mit Zeilennummern, wo das beim Zitieren hilft,
+als Daten markiert.
 
-## The verdict
+## Das Urteil
 
-`submit_verdict` has a strict schema; the code validates it with pydantic and
-returns validation errors to the model. Schema and citation problems share
-at most two corrections; then the investigation ends without a verdict.
+`submit_verdict` hat ein strenges Schema; der Code validiert es mit pydantic
+und gibt Validierungsfehler an das Modell zurück. Schema- und Zitatprobleme
+teilen sich höchstens zwei Korrekturen; danach endet die Untersuchung ohne
+Urteil.
 
-| Field | Content |
+| Feld | Inhalt |
 | --- | --- |
-| `classification` | `flaky_test`, `flaky_infrastructure` (runner, network, registry), `real_bug`, `configuration` (settings, secrets, workflow setup), `fixed`, `unclear` |
+| `classification` | `flaky_test`, `flaky_infrastructure` (Runner, Netzwerk, Registry), `real_bug`, `configuration` (Einstellungen, Secrets, Workflow-Aufbau), `fixed`, `unclear` |
 | `confidence` | `high`, `medium`, `low` |
-| `summary` | Two or three sentences for a human |
-| `cause` | What goes wrong, as specifically as the evidence allows |
-| `evidence[]` | `kind` (`log`, `commit`, `file`, `history`, `scan`), `ref` (tool call id plus job, sha or path and lines), `quote`, `why_it_matters` |
-| `counter_evidence[]` | What speaks against the classification, same shape |
-| `suggested_fix` | What to change and where (file and lines if known), or "none" for outages |
-| `open_questions[]` | What could not be determined |
+| `summary` | Zwei oder drei Sätze für einen Menschen |
+| `cause` | Was schiefgeht, so genau, wie die Belege es erlauben |
+| `evidence[]` | `kind` (`log`, `commit`, `file`, `history`, `scan`), `ref` (ID des Werkzeugaufrufs plus Job, SHA oder Pfad und Zeilen), `quote`, `why_it_matters` |
+| `counter_evidence[]` | Was gegen die Einordnung spricht, gleiche Form |
+| `suggested_fix` | Was wo zu ändern ist (Datei und Zeilen, wenn bekannt), oder „none“ bei Ausfällen |
+| `open_questions[]` | Was sich nicht klären ließ |
 
-Rules the prompts state and the reviewer checks:
+Regeln, die die Prompts nennen und der Reviewer prüft:
 
-- **Flaky needs same-code evidence or a convincing mechanism.** A timing
-  dependence in the test, a race, a network call without retry — cited from
-  the code or the log, not assumed.
-- **Real bug needs a change.** Cite the commit (`compare_commits`) that broke
-  or fixed it, ideally touching the failing test or the code under test.
-- **Configuration needs the error saying so** (e.g. "Pages not enabled",
-  "Resource not accessible by integration").
-- **Unclear is a valid answer** and better than a guess.
-- Counter-evidence is mandatory to consider; an empty list must be a
-  conscious claim.
-- At least one evidence item must quote a log, history, commit or file
-  result; quotes from the finding (kind `scan`) alone are rejected, because
-  they only repeat the scan. Enforced by the citation check.
+- **Instabil braucht Belege bei gleichem Code oder einen überzeugenden
+  Mechanismus.** Eine Zeitabhängigkeit im Test, eine Race Condition, ein
+  Netzwerkaufruf ohne Wiederholung – zitiert aus dem Code oder dem Log, nicht
+  angenommen.
+- **Ein echter Bug braucht eine Änderung.** Zitiere den Commit
+  (`compare_commits`), der ihn eingeführt oder behoben hat, am besten einen,
+  der den fehlschlagenden Test oder den getesteten Code berührt.
+- **Konfiguration braucht einen Fehler, der das sagt** (z. B. „Pages not
+  enabled“, „Resource not accessible by integration“).
+- **Unklar ist eine gültige Antwort** und besser als eine Vermutung.
+- Gegenbelege müssen erwogen werden; eine leere Liste muss eine bewusste
+  Aussage sein.
+- Mindestens ein Beleg muss ein Log-, Verlaufs-, Commit- oder Dateiergebnis
+  zitieren; Zitate allein aus dem Befund (Art `scan`) werden abgelehnt, weil
+  sie nur den Scan wiederholen. Das erzwingt die Zitatprüfung.
 
-Verdicts are shown as the **model's assessment, with its evidence**, always
-next to — never instead of — the scan's facts.
+Urteile werden als **Einschätzung des Modells mit seinen Belegen** angezeigt,
+immer neben – nie statt – den Fakten des Scans.
 
-## Safety
+## Sicherheit
 
-- **Data, not instructions.** Logs, code, commit messages and file contents
-  are untrusted (anyone who can push writes them). They only appear inside
-  data elements; the system prompt says so, and actions only ever come from
-  you or the configured mode. A tool error that carries repository content,
-  such as the diff of a fix the review did not accept, sends it to the chat
-  model inside a `tool-data` element. Investigators have no tool that changes
-  anything.
-- **Masking before sending.** Everything that goes to the model passes the
-  masking step first.
-- **Policy gate in code.** The tool registry declares each tool's risk level;
-  the gate runs before every call. A `write` or `critical` tool must hand the
-  gate an action request built by code, which you confirm in `ask` mode
-  ([actions](actions.md)).
+- **Daten, keine Anweisungen.** Logs, Code, Commit-Nachrichten und
+  Dateiinhalte sind nicht vertrauenswürdig (jeder, der pushen darf, schreibt
+  sie). Sie erscheinen nur innerhalb von Datenelementen; der System-Prompt
+  sagt das, und Aktionen kommen immer nur von dir oder aus dem eingestellten
+  Modus. Ein Werkzeugfehler, der Repository-Inhalt enthält, etwa den Diff
+  einer Korrektur, die das Review nicht angenommen hat, gibt ihn dem
+  Chat-Modell innerhalb eines `tool-data`-Elements. Investigators haben kein
+  Werkzeug, das etwas ändert.
+- **Maskierung vor dem Senden.** Alles, was an das Modell geht, durchläuft
+  zuerst die Maskierung.
+- **Policy-Gate im Code.** Die Werkzeugregistrierung legt die Risikostufe
+  jedes Werkzeugs fest; das Gate läuft vor jedem Aufruf. Ein Werkzeug mit
+  `write` oder `critical` muss dem Gate eine vom Code gebaute
+  Aktionsanfrage übergeben, die du im Modus `ask` bestätigst
+  ([Aktionen](aktionen.md)).
 
 ## Budgets
 
-Hard limits, configurable, with these defaults; reaching one ends the work
-with a summary of what was done and what is missing:
+Harte Limits, konfigurierbar, mit diesen Standardwerten; ist eines erreicht,
+endet die Arbeit mit einer Zusammenfassung dessen, was erledigt ist und was
+fehlt:
 
-| Limit | Default |
+| Limit | Standard |
 | --- | --- |
-| Tool rounds per investigation | 12 |
-| Tokens per investigation (input incl. cache, output incl. thinking) | 200,000 |
-| Wall-clock time per investigation | 5 minutes |
-| Reviewer round trips | 1 |
-| Parallel investigations | 3 |
-| Tokens per `investigate` run, and per investigation call in the chat | 1,000,000 |
-| Rounds, tokens and time of the chat model per question | as per investigation (12, 200,000, 5 minutes); tokens count only what the question adds |
+| Werkzeugrunden pro Untersuchung | 12 |
+| Tokens pro Untersuchung (Eingabe inkl. Cache, Ausgabe inkl. Thinking) | 200.000 |
+| Laufzeit pro Untersuchung | 5 Minuten |
+| Runden mit dem Reviewer | 1 |
+| Parallele Untersuchungen | 3 |
+| Tokens pro `investigate`-Lauf und pro Untersuchungsaufruf im Chat | 1.000.000 |
+| Runden, Tokens und Zeit des Chat-Modells pro Frage | wie pro Untersuchung (12, 200.000, 5 Minuten); Tokens zählen nur, was die Frage hinzufügt |
 
-Token limits count every token a model call reports: fresh input, output
-(with thinking), cache writes and cache reads. Cache reads cost about a tenth
-of fresh input, but count in full, so a limit means the same number of tokens
-whether or not the cache was hit.
+Token-Limits zählen jedes Token, das ein Modellaufruf meldet: frische
+Eingabe, Ausgabe (mit Thinking), Cache-Schreib- und Cache-Lesezugriffe.
+Cache-Lesezugriffe kosten etwa ein Zehntel frischer Eingabe, zählen aber
+voll, damit ein Limit dieselbe Zahl Tokens bedeutet, ob der Cache getroffen
+wurde oder nicht.
 
-A chat question is the exception. Every request sends the whole conversation
-again, so counting it each round would stop every question of a long session.
-Its limits count each round's output plus how much the prompt grew since the
-question's first request; the session's total in `/budget` still counts every
-token billed.
+Eine Chat-Frage ist die Ausnahme. Jede Anfrage schickt die ganze
+Unterhaltung erneut, sie in jeder Runde zu zählen, würde also jede Frage
+einer langen Sitzung stoppen. Ihre Limits zählen die Ausgabe jeder Runde plus
+das, um was der Prompt seit der ersten Anfrage der Frage gewachsen ist; die
+Gesamtsumme der Sitzung in `/budget` zählt weiterhin jedes abgerechnete
+Token.
 
-Loop detection: the same tool with the same arguments twice in a row ends the
-investigation without a verdict (status `loop`, reported as "stopped: repeated
-itself"); nothing is cached. Token usage is shown per investigation and in total
-and in the summary.
+Schleifenerkennung: Dasselbe Werkzeug mit denselben Argumenten zweimal
+hintereinander beendet die Untersuchung ohne Urteil (Status `loop`, gemeldet
+als „stopped: repeated itself“); nichts wird zwischengespeichert. Der
+Token-Verbrauch wird pro Untersuchung und insgesamt sowie in der
+Zusammenfassung angezeigt.
 
-In the chat, time spent inside a tool (a scan, investigations) does not count
-against the question's time limit, because those have their own limits. When
-a limit or a model error ends a question, the chat says so and the unfinished
-question is dropped from the model's conversation; verdicts found on the way
-are kept. The same happens when the model declines or answers with nothing
-(an empty answer in the conversation would make every later request fail),
-and when a tool fails unexpectedly. A GitHub error inside a tool goes back to
-the model as an error result, marked as data, so it can say what failed.
-Closing the window stops the question and the investigations and fixes it
-started at their next model call.
+Im Chat zählt die Zeit innerhalb eines Werkzeugs (ein Scan, Untersuchungen)
+nicht gegen das Zeitlimit der Frage, weil diese eigene Limits haben. Beendet
+ein Limit oder ein Modellfehler eine Frage, sagt der Chat das, und die
+unfertige Frage wird aus der Unterhaltung des Modells entfernt; unterwegs
+gefundene Urteile bleiben erhalten. Dasselbe passiert, wenn das Modell
+ablehnt oder mit nichts antwortet (eine leere Antwort in der Unterhaltung
+würde jede spätere Anfrage scheitern lassen) und wenn ein Werkzeug
+unerwartet fehlschlägt. Ein GitHub-Fehler innerhalb eines Werkzeugs geht als
+Fehlerergebnis an das Modell zurück, als Daten markiert, damit es sagen kann,
+was fehlgeschlagen ist. Schließt du das Fenster, stoppen die Frage und die
+von ihr gestarteten Untersuchungen und Korrekturen bei ihrem nächsten
+Modellaufruf.
 
-## Model use
+## Modellnutzung
 
-- Anthropic Messages API (api.anthropic.com or Azure AI Foundry), the
-  configured model for all roles; a cheaper model for the reviewer can be
-  configured later if evaluations show it is good enough.
-- Tool use with `tool_choice: auto` everywhere; parallel tool calls allowed.
-  Newer models refuse `any` and forced tools, so a model that stops without
-  calling `submit_verdict` or `submit_review` is nudged once.
-- Thinking for investigator and reviewer: `adaptive` by default. `enabled`
-  (with a token budget) and `off` exist for older models; newer ones, like
-  the one flakipype was first run against, only accept `adaptive`.
-- Prompt caching for the system prompt and tool definitions, which are the
-  same for every investigation, and for the conversation of the investigator,
-  the fixer and the chat: each request moves one breakpoint to the last block
-  of the newest message, so the next request reads every earlier turn from the
-  cache instead of sending it again. That is three of the four breakpoints the
-  API allows; the stored history (and a saved chat session) carries none.
-- Context editing in the chat: the API clears old tool results once the
-  prompt is large (`clear_tool_uses`, a beta on api.anthropic.com and Azure AI
-  Foundry). flakipype keeps the full history itself, because thinking blocks
-  are bound to the conversation that produced them: changing or deleting an
-  earlier turn would make the API reject them.
-- A saved chat session stores a fingerprint of the system prompt, the tools
-  and the model. When it differs on resume, after an upgrade or a model
-  change, every thinking block is removed from the restored history, which
-  the API allows; the conversation stays, the model's earlier reasoning does
-  not.
+- Anthropic Messages API (api.anthropic.com oder Azure AI Foundry), das
+  konfigurierte Modell für alle Rollen; ein günstigeres Modell für den
+  Reviewer lässt sich später einstellen, wenn Evaluierungen zeigen, dass es
+  gut genug ist.
+- Werkzeugnutzung überall mit `tool_choice: auto`; parallele
+  Werkzeugaufrufe sind erlaubt. Neuere Modelle lehnen `any` und erzwungene
+  Werkzeuge ab, deshalb wird ein Modell, das aufhört, ohne `submit_verdict`
+  oder `submit_review` aufzurufen, einmal daran erinnert.
+- Thinking für Investigator und Reviewer: standardmäßig `adaptive`.
+  `enabled` (mit Token-Budget) und `off` gibt es für ältere Modelle; neuere,
+  wie das, mit dem flakipype zuerst lief, akzeptieren nur `adaptive`.
+- Prompt-Caching für den System-Prompt und die Werkzeugdefinitionen, die für
+  jede Untersuchung gleich sind, und für die Unterhaltung von Investigator,
+  Fixer und Chat: Jede Anfrage verschiebt einen Breakpoint auf den letzten
+  Block der neuesten Nachricht, sodass die nächste Anfrage jede frühere Runde
+  aus dem Cache liest, statt sie erneut zu senden. Das sind drei der vier
+  Breakpoints, die die API erlaubt; der gespeicherte Verlauf (und eine
+  gespeicherte Chat-Sitzung) trägt keinen.
+- Context Editing im Chat: Die API räumt alte Werkzeugergebnisse ab, sobald
+  der Prompt groß ist (`clear_tool_uses`, eine Beta auf api.anthropic.com und
+  Azure AI Foundry). flakipype behält den vollständigen Verlauf selbst, weil
+  Thinking-Blöcke an die Unterhaltung gebunden sind, die sie erzeugt hat:
+  Würde eine frühere Runde geändert oder gelöscht, würde die API sie
+  ablehnen.
+- Eine gespeicherte Chat-Sitzung speichert einen Fingerabdruck von
+  System-Prompt, Werkzeugen und Modell. Weicht er beim Fortsetzen ab, nach
+  einem Upgrade oder einem Modellwechsel, wird jeder Thinking-Block aus dem
+  wiederhergestellten Verlauf entfernt, was die API erlaubt; die
+  Unterhaltung bleibt, die frühere Begründung des Modells nicht.
 
-## Caching verdicts
+## Urteile zwischenspeichern
 
-A verdict is stored per finding identity (kind, repository, workflow file,
-job, step, plus the error fingerprint for recurring errors) together with the
-time of the finding's newest failure. It is reused until a newer failure of
-that finding appears or its kind changes (flaky to fixed, for example); `/investigate --fresh` forces a new one. That keeps repeat
-runs cheap and stable. Only verdicts the reviewer answered are kept: when the
-review could not run (an HTTP error, for example), the next investigation
-starts over, and verdicts older versions kept that way are not reused.
-Investigations without a verdict are not kept either; only
-[unattended runs](unattended.md) remember them, so they do not pay for the
-same dead end every day.
+Ein Urteil wird pro Befundidentität gespeichert (Art, Repository,
+Workflow-Datei, Job, Schritt, bei wiederkehrenden Fehlern zusätzlich der
+Fehler-Fingerabdruck), zusammen mit dem Zeitpunkt des neuesten Fehlschlags
+des Befunds. Es wird wiederverwendet, bis ein neuerer Fehlschlag dieses
+Befunds auftaucht oder sich seine Art ändert (etwa von instabil zu behoben);
+`/investigate --fresh` erzwingt ein neues. Das hält wiederholte Läufe
+günstig und stabil. Nur Urteile, auf die der Reviewer geantwortet hat,
+werden behalten: Konnte das Review nicht laufen (etwa wegen eines
+HTTP-Fehlers), beginnt die nächste Untersuchung von vorn, und Urteile, die
+ältere Versionen so behalten haben, werden nicht wiederverwendet.
+Untersuchungen ohne Urteil werden ebenfalls nicht behalten; nur
+[unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md) merken sie sich, damit
+sie nicht jeden Tag für dieselbe Sackgasse bezahlen.
 
-## In the chat
+## Im Chat
 
 ```text
 /scan [days]             run the scan (progress in the activity line)
@@ -291,26 +320,30 @@ same dead end every day.
 /sessions, /resume N     list and continue stored sessions; /new starts over
 ```
 
-Free text works too ("why does the Archivist E2E test fail?"); the
-orchestrator maps it to findings and tools. The gate starts in `ask` mode:
-anything above `read` waits for your confirmation in a dialog; `/mode auto`
-lets actions run within the budgets. Sessions (conversation, the model's
-history, scan options, the sidebar, started runs and fixes) are stored in
-the cache database; a resumed session rescans on its next action. See
-[use the chat](../how-to/chat.md).
+Freier Text funktioniert auch („why does the Archivist E2E test fail?“); der
+Orchestrator ordnet ihn Befunden und Werkzeugen zu. Das Gate startet im Modus
+`ask`: Alles oberhalb von `read` wartet in einem Dialog auf deine
+Bestätigung; `/mode auto` lässt Aktionen innerhalb der Budgets laufen.
+Sitzungen (Unterhaltung, der Verlauf des Modells, Scan-Optionen, die
+Seitenleiste, gestartete Läufe und Korrekturen) werden in der
+Cache-Datenbank gespeichert; eine fortgesetzte Sitzung scannt bei ihrer
+nächsten Aktion neu. Siehe [Den Chat nutzen](../how-to/chat-nutzen.md).
 
-Headless: `flakipype investigate [--finding N | --all] [--json]` prints the
-verdicts; see [investigate findings](../how-to/investigate-findings.md).
+Headless: `flakipype investigate [--finding N | --all] [--json]` gibt die
+Urteile aus; siehe [Befunde untersuchen](../how-to/befunde-untersuchen.md).
 
-## Testing
+## Tests
 
-- **Unit**: excerpt building on the recorded logs, citation check, verdict
-  schema, budgets, loop detection, gate.
-- **Agent loop**: a local fake Anthropic server answers with scripted turns
-  (tool calls, then `submit_verdict`), including invalid citations and
-  reviewer `revise`, so the whole flow is tested without a real model. The
-  chat is tested the same way, its window with Textual Pilot and a snapshot.
-- **Evaluation** (planned, not built yet; real model, costs money, only when
-  asked): recorded cases with a known answer — Archivist E2E timeout (flaky test), the Pages
-  deployment (configuration, fixed), npm `ERESOLVE` on a Dependabot branch
-  (real problem), and the Stryker initial-test-run errors (to be determined).
+- **Unit**: Auszugsbau auf den aufgezeichneten Logs, Zitatprüfung,
+  Urteilsschema, Budgets, Schleifenerkennung, Gate.
+- **Agentenschleife**: Ein lokaler Fake-Anthropic-Server antwortet mit
+  vorgegebenen Runden (Werkzeugaufrufe, dann `submit_verdict`), einschließlich
+  ungültiger Zitate und `revise` vom Reviewer, sodass der ganze Ablauf ohne
+  echtes Modell getestet wird. Der Chat wird genauso getestet, sein Fenster
+  mit Textual Pilot und einem Snapshot.
+- **Evaluierung** (geplant, noch nicht gebaut; echtes Modell, kostet Geld,
+  nur auf Anfrage): aufgezeichnete Fälle mit bekannter Antwort – der
+  E2E-Timeout von Archivist (instabiler Test), das Pages-Deployment
+  (Konfiguration, behoben), npm `ERESOLVE` auf einem Dependabot-Branch
+  (echtes Problem) und die Fehler im initialen Testlauf von Stryker (noch zu
+  bestimmen).

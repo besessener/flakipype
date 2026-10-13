@@ -1,79 +1,80 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>flakipype – find, explain and fix flaky GitHub Actions pipelines</title>
+    <title>flakipype – instabile GitHub-Actions-Pipelines finden, erklären und beheben</title>
     <meta
       name="description"
-      content="flakipype is an agentic command line tool for Linux: it finds flaky GitHub Actions pipelines, explains them with evidence and fixes them through draft pull requests."
+      content="flakipype ist ein agentisches Kommandozeilenwerkzeug für Linux: Es findet instabile GitHub-Actions-Pipelines, erklärt sie mit Belegen und behebt sie per Draft-PR."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://besessener.github.io/flakipype/" />
-    <meta property="og:title" content="flakipype – find, explain and fix flaky GitHub Actions pipelines" />
+    <meta property="og:title" content="flakipype – instabile GitHub-Actions-Pipelines finden, erklären und beheben" />
     <meta
       property="og:description"
-      content="An agentic command line tool for Linux: it finds flaky GitHub Actions pipelines, explains them with evidence and fixes them through draft pull requests."
+      content="Ein agentisches Kommandozeilenwerkzeug für Linux: Es findet instabile GitHub-Actions-Pipelines, erklärt sie mit Belegen und behebt sie per Draft-PR."
     />
     <meta property="og:image" content="https://besessener.github.io/flakipype/img/chat.png" />
+    <meta property="og:locale" content="de_DE" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <header class="site-header">
       <a class="brand" href="#top"><img src="favicon.svg" alt="" width="28" height="28" /> flakipype</a>
-      <nav aria-label="Site navigation">
-        <a href="#features">Features</a>
-        <a href="#safety">Safety</a>
-        <a href="#start">Get started</a>
-        <a href="#docs">Documentation</a>
+      <nav aria-label="Seitennavigation">
+        <a href="#features">Funktionen</a>
+        <a href="#safety">Sicherheit</a>
+        <a href="#start">Loslegen</a>
+        <a href="#docs">Dokumentation</a>
         <a href="https://github.com/besessener/flakipype">GitHub</a>
       </nav>
     </header>
 
     <main id="top">
       <section class="hero">
-        <h1>Find, explain and fix flaky GitHub Actions pipelines</h1>
+        <h1>Instabile GitHub-Actions-Pipelines finden, erklären und beheben</h1>
         <p class="lead">
-          An agentic command line tool for Linux. Point it at a GitHub user or organisation: it scans the workflow runs, scores how flaky each job is,
-          explains the likely cause with evidence and fixes it through a draft pull request, verified by rerunning the fix branch.
+          Ein agentisches Kommandozeilenwerkzeug für Linux. Richte es auf einen GitHub-Benutzer oder eine Organisation: Es durchsucht die Workflow-Läufe,
+          bewertet, wie instabil jeder Job ist, erklärt die wahrscheinliche Ursache mit Belegen und behebt sie per Draft-PR, überprüft durch erneutes
+          Ausführen des Fix-Branches.
         </p>
         <p class="status">
-          Status: pre-alpha. Setup, scanning, agent investigations, the chat, confirmed reruns and dispatches, fixes as draft pull requests and unattended
-          runs from a systemd timer work. See the
-          <a href="https://github.com/besessener/flakipype/blob/main/docs/explanation/roadmap.md">roadmap</a>.
+          Stand: Version 0.1.0. Einrichtung, Scannen, Untersuchungen durch den Agenten, der Chat, bestätigte Reruns und Dispatches, Korrekturen als Draft-PRs
+          und unbeaufsichtigte Läufe per systemd-Timer funktionieren.
         </p>
         <p class="actions">
-          <a class="button primary" href="#start">Install</a>
-          <a class="button" href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/getting-started.md">Getting started</a>
+          <a class="button primary" href="#start">Installieren</a>
+          <a class="button" href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/erste-schritte.md">Erste Schritte</a>
         </p>
         <img
           class="shot"
           src="img/chat.png"
           width="1482"
           height="1030"
-          alt="The flakipype chat after /scan: three findings with their flaky runs, rerun counts and error signatures, listed in a sidebar."
+          alt="Der flakipype-Chat nach /scan: drei Befunde mit ihren instabilen Läufen, Rerun-Zahlen und Fehlersignaturen, aufgelistet in einer Seitenleiste."
         />
       </section>
 
       <section id="features">
-        <h2>What flakipype does for you</h2>
+        <h2>Was flakipype für dich tut</h2>
         <div class="cards">
           <article>
-            <h3>Finds flaky jobs</h3>
-            <p>Reads your workflow runs and ranks jobs that failed and then passed on rerun or on the same commit, with error signatures that group alike failures.</p>
+            <h3>Findet instabile Jobs</h3>
+            <p>Liest deine Workflow-Läufe und bringt Jobs, die fehlschlugen und dann beim Rerun oder auf demselben Commit durchliefen, in eine Rangfolge, mit Fehlersignaturen, die gleichartige Fehlschläge gruppieren.</p>
           </article>
           <article>
-            <h3>Explains them with evidence</h3>
-            <p>An agent reads logs, commits and files, cites what it found, and a reviewer checks the verdict against that evidence before you see it.</p>
+            <h3>Erklärt sie mit Belegen</h3>
+            <p>Ein Agent liest Logs, Commits und Dateien und zitiert, was er gefunden hat, und ein Reviewer prüft das Urteil anhand dieser Belege, bevor du es siehst.</p>
           </article>
           <article>
-            <h3>Fixes through pull requests</h3>
-            <p>The fixer proposes a small diff, opens it as a draft pull request and reruns CI on the fix branch to check that it holds.</p>
+            <h3>Behebt per Pull Request</h3>
+            <p>Der Fixer schlägt einen kleinen Diff vor, öffnet ihn als Draft-PR und führt die CI auf dem Fix-Branch erneut aus, um zu prüfen, dass er hält.</p>
           </article>
           <article>
-            <h3>Chat or timer</h3>
-            <p>Work in a rich terminal chat with slash commands, or let <code>flakipype run</code> scan and fix from a systemd user timer.</p>
+            <h3>Chat oder Timer</h3>
+            <p>Arbeite in einem reichhaltigen Terminal-Chat mit Slash-Befehlen, oder lass <code>flakipype run</code> per systemd-Benutzer-Timer scannen und beheben.</p>
           </article>
         </div>
         <img
@@ -82,78 +83,80 @@
           width="1482"
           height="1030"
           loading="lazy"
-          alt="The confirmation before a fix is pushed: repository, branch and budgets from code, the model's explanation and the full diff, with Push and Don't push buttons."
+          alt="Die Bestätigung, bevor eine Korrektur gepusht wird: Repository, Branch und Budgets aus dem Code, die Erklärung des Modells und der vollständige Diff, mit den Buttons „Push“ und „Don't push“."
         />
       </section>
 
       <section id="safety" class="panel">
-        <h2>Safe by design</h2>
-        <p class="section-lead">flakipype reruns pipelines and writes code in your repositories. These rules are built in, not settings.</p>
+        <h2>Sicher von Grund auf</h2>
+        <p class="section-lead">flakipype führt Pipelines erneut aus und schreibt Code in deine Repositories. Deshalb sind diese Regeln keine Einstellung, sondern fest eingebaut.</p>
         <ul class="checks">
-          <li><strong>The default branch is never written.</strong> Every fix is a branch plus a draft pull request; merging stays with you.</li>
-          <li><strong>A gate in code decides.</strong> Every tool has a fixed risk level; in ask mode you confirm every rerun, dispatch and push.</li>
-          <li><strong>Logs are data, not instructions.</strong> Job logs, workflow files and source code cannot tell the agent what to do.</li>
-          <li><strong>Nothing leaves unmasked.</strong> Secrets are masked before anything reaches the model.</li>
-          <li><strong>Budgets are hard limits.</strong> Reruns, pull requests, tokens and time per run are capped.</li>
+          <li><strong>Der Standardbranch wird nie beschrieben.</strong> Jede Korrektur ist ein Branch plus Draft-PR; das Mergen bleibt bei dir.</li>
+          <li><strong>Ein Gate im Code entscheidet.</strong> Jedes Werkzeug hat eine feste Risikostufe; im Modus „ask“ bestätigst du jeden Rerun, jeden Dispatch und jeden Push.</li>
+          <li><strong>Logs sind Daten, keine Anweisungen.</strong> Job-Logs, Workflow-Dateien und Quellcode können dem Agenten nichts befehlen.</li>
+          <li><strong>Nichts geht unmaskiert hinaus.</strong> Secrets werden maskiert, bevor irgendetwas das Modell erreicht.</li>
+          <li><strong>Budgets sind harte Limits.</strong> Reruns, Pull Requests, Tokens und Zeit je Lauf sind begrenzt.</li>
         </ul>
         <p>
-          <a href="https://github.com/besessener/flakipype/blob/main/docs/explanation/safety-model.md">More about the safety model</a>
+          <a href="https://github.com/besessener/flakipype/blob/main/docs/explanation/sicherheitsmodell.md">Mehr zum Sicherheitsmodell</a>
         </p>
       </section>
 
       <section id="start">
-        <h2>Get started</h2>
+        <h2>In drei Schritten loslegen</h2>
         <p class="section-lead">
-          Requires Linux (x86_64 or aarch64, glibc) with <code>curl</code>, <code>tar</code> and <code>git</code>. The script installs
-          <a href="https://docs.astral.sh/uv/">uv</a> if you have none, checked against its published SHA-256.
+          Du brauchst Linux (x86_64 oder aarch64, glibc) mit <code>curl</code>, <code>tar</code> und <code>git</code>. Das Skript installiert
+          <a href="https://docs.astral.sh/uv/">uv</a>, falls du es noch nicht hast, geprüft gegen dessen veröffentlichte SHA-256-Prüfsumme.
         </p>
         <pre><code>curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
 sh install.sh</code></pre>
         <ol class="steps">
-          <li><strong>Set up.</strong> <code>flakipype setup</code> asks for the model endpoint, downloads and verifies <code>gh</code> if needed and logs in to GitHub.</li>
-          <li><strong>Scan.</strong> <code>flakipype scan</code> finds and ranks the flaky jobs of your user or organisation.</li>
-          <li><strong>Fix.</strong> Run <code>flakipype</code> for the chat: investigate a finding, then <code>/fix</code> it and confirm the draft pull request.</li>
+          <li><strong>Einrichten.</strong> <code>flakipype setup</code> fragt nach dem Modell-Endpunkt, lädt und prüft <code>gh</code> bei Bedarf und meldet dich bei GitHub an.</li>
+          <li><strong>Scannen.</strong> <code>flakipype scan</code> findet die instabilen Jobs deines Benutzers oder deiner Organisation und bringt sie in eine Rangfolge.</li>
+          <li><strong>Beheben.</strong> Starte <code>flakipype</code> für den Chat: Untersuche einen Befund, behebe ihn mit <code>/fix</code> und bestätige den Draft-PR.</li>
         </ol>
         <p>
-          The <a href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/getting-started.md">getting started</a> tutorial walks you
-          through it step by step.
+          Das Tutorial <a href="https://github.com/besessener/flakipype/blob/main/docs/tutorials/erste-schritte.md">Erste Schritte</a> führt dich Schritt
+          für Schritt durch alles.
         </p>
       </section>
 
       <section id="docs">
-        <h2>Documentation</h2>
-        <p class="section-lead">Organised by what you need right now (<a href="https://diataxis.fr/">Diátaxis</a>).</p>
+        <h2>Dokumentation</h2>
+        <p class="section-lead">Geordnet nach dem, was du gerade brauchst (<a href="https://diataxis.fr/">Diátaxis</a>).</p>
         <div class="cards">
           <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#tutorials">
             <strong>Tutorials</strong>
-            <span>Step by step to a first success</span>
+            <span>Schritt für Schritt zum ersten Erfolg</span>
           </a>
-          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#how-to-guides">
-            <strong>How-to guides</strong>
-            <span>Reach one concrete goal</span>
+          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#anleitungen">
+            <strong>Anleitungen</strong>
+            <span>Ein konkretes Ziel erreichen</span>
           </a>
-          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#reference">
-            <strong>Reference</strong>
-            <span>Look up exactly how it is</span>
+          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#referenz">
+            <strong>Referenz</strong>
+            <span>Nachschlagen, wie es genau ist</span>
           </a>
-          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#explanation">
-            <strong>Explanation</strong>
-            <span>Understand why it is so</span>
+          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#hintergrund">
+            <strong>Hintergrund</strong>
+            <span>Verstehen, warum es so ist</span>
           </a>
         </div>
       </section>
 
       <section id="related">
-        <h2>Related projects</h2>
-        <p class="section-lead">Three tools that started from the same agentic idea, with the same ground rules, quality gates and documentation layout.</p>
+        <h2>Verwandte Projekte</h2>
+        <p class="section-lead">
+          Drei Werkzeuge aus derselben agentischen Idee, mit denselben Grundregeln, Qualitätsprüfungen und demselben Aufbau der Dokumentation.
+        </p>
         <div class="cards">
-          <a class="card-link" href="https://besessener.github.io/PlayMonkey/">
+          <a class="card-link" href="https://besessener.github.io/PlayMonkey/" hreflang="de">
             <strong><img src="https://besessener.github.io/PlayMonkey/favicon.svg" alt="" width="24" height="24" /> PlayMonkey</strong>
-            <span>Let a seeded monkey loose on a website in a test environment and get reproducible bugs.</span>
+            <span>Lässt einen Monkey mit festem Seed auf eine Website in einer Testumgebung los und liefert reproduzierbare Fehler.</span>
           </a>
-          <a class="card-link" href="https://besessener.github.io/Archivist/">
+          <a class="card-link" href="https://besessener.github.io/Archivist/" hreflang="de">
             <strong><img src="https://besessener.github.io/Archivist/favicon.svg" alt="" width="24" height="24" /> Archivist</strong>
-            <span>A personal, agentic AI archivist for Windows (in German).</span>
+            <span>Ein persönlicher, agentischer KI-Archivar für Windows.</span>
           </a>
         </div>
       </section>
@@ -161,10 +164,10 @@ sh install.sh</code></pre>
 
     <footer class="site-footer">
       <p>
-        flakipype is released under the <a href="https://github.com/besessener/flakipype/blob/main/LICENSE">MIT License</a>.
-        <a href="https://github.com/besessener/flakipype">Source on GitHub</a> ·
+        flakipype steht unter der <a href="https://github.com/besessener/flakipype/blob/main/LICENSE">MIT-Lizenz</a>.
+        <a href="https://github.com/besessener/flakipype">Quellcode auf GitHub</a> ·
         <a href="https://github.com/besessener/flakipype/releases">Releases</a> ·
-        <a href="https://github.com/besessener/flakipype/issues">Issues</a>
+        <a href="https://github.com/besessener/flakipype/issues">Fehler melden</a>
       </p>
     </footer>
   </body>

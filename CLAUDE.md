@@ -9,12 +9,12 @@ this repository. Read this file before writing anything.
 user or organisation, finds flaky GitHub Actions pipelines, explains them and
 fixes them through pull requests. It has a rich terminal chat (Textual) with
 slash commands and headless commands for cron and a systemd timer. Full docs:
-[docs/README.md](docs/README.md) (English, Diátaxis).
+[docs/README.md](docs/README.md) (German, Diátaxis).
 
 - **Entry point**: Typer CLI, `src/flakipype/cli.py`.
 - **Packages** under `src/flakipype/`: `tui`, `agent`, `llm`, `github`,
   `store`, `flaky`, `config`. Responsibilities and allowed imports:
-  [architecture.md](docs/explanation/architecture.md).
+  [architektur.md](docs/explanation/architektur.md).
 - **LLM**: Anthropic Messages API only (api.anthropic.com or Azure AI
   Foundry), configured with base URL, API key and model.
 - **GitHub**: only through the `gh` CLI, which flakipype downloads and
@@ -30,14 +30,13 @@ slash commands and headless commands for cron and a systemd timer. Full docs:
 
 | Area | Read first |
 | --- | --- |
-| Packages, layers, data flow | [architecture.md](docs/explanation/architecture.md) |
-| Modes, confirmations, PRs, budgets | [safety-model.md](docs/explanation/safety-model.md) |
+| Packages, layers, data flow | [architektur.md](docs/explanation/architektur.md) |
+| Modes, confirmations, PRs, budgets | [sicherheitsmodell.md](docs/explanation/sicherheitsmodell.md) |
 | Agent roles, tools, verdicts | [agent.md](docs/explanation/agent.md) |
-| Flake detection rules | [flake-detection.md](docs/explanation/flake-detection.md) |
-| Settings, secrets, gh download | [configuration.md](docs/reference/configuration.md) |
-| Scope and milestones | [roadmap.md](docs/explanation/roadmap.md) |
-| Tests, CI, quality gates | [quality.md](docs/reference/quality.md), [commands.md](docs/reference/commands.md) |
-| Running CI locally | [run-ci-locally.md](docs/how-to/run-ci-locally.md) |
+| Flake detection rules | [flake-erkennung.md](docs/explanation/flake-erkennung.md) |
+| Settings, secrets, gh download | [konfiguration.md](docs/reference/konfiguration.md) |
+| Tests, CI, quality gates | [qualitaetssicherung.md](docs/reference/qualitaetssicherung.md), [befehle.md](docs/reference/befehle.md) |
+| Running CI locally | [ci-lokal-ausfuehren.md](docs/how-to/ci-lokal-ausfuehren.md) |
 
 ## Hard rules
 
@@ -112,7 +111,9 @@ and say so; never work around it quietly. Reasoning lives in
 - **Fail fast; measure, don't assume.** Errors are typed exceptions or
   results with a category, surfaced to the user with a next step; never
   swallowed. Performance and coverage are numbers a tool prints.
-- **Language:** English everywhere — UI, prompts, docs, identifiers, logs.
+- **Language:** the website, the READMEs, `CONTRIBUTING.md` and `docs/` are
+  German and address the reader as „du“; everything else is English — UI,
+  prompts, identifiers, comments, logs and this file.
 - **Tests:** assert behaviour, not implementation. GitHub is faked with a
   `gh` stub replaying recorded JSON, the model with a local fake Anthropic
   server; TUI changes get a Textual Pilot test (and a snapshot for new views).
@@ -128,7 +129,7 @@ uv run poe --help        # list tasks
 uv run poe check         # every local quality gate
 ```
 
-All commands: [commands.md](docs/reference/commands.md).
+All commands: [befehle.md](docs/reference/befehle.md).
 
 ## Definition of done
 
