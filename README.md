@@ -33,7 +33,7 @@ review it.
 - **Chat or timer** – a rich terminal UI with slash commands (`/scan`, `/flaky`,
   `/fix`, …), or headless commands and a systemd timer for unattended runs.
 - **Safe by design** – never touches the default branch; every fix is a draft
-  pull request ([safety model](docs/explanation/safety-model.md)).
+  pull request ([safety model](docs/explanation/sicherheitsmodell.md)).
 
 > **Status:** version 0.1.0. Setup, scanning, agent investigations, the chat,
 > confirmed reruns and dispatches, fixes as draft pull requests and unattended
@@ -51,7 +51,7 @@ sh install.sh
 ```
 
 With uv already installed: `uv tool install git+https://github.com/besessener/flakipype@v0.1.0`.
-Step by step: [getting started](docs/tutorials/getting-started.md).
+Step by step: [getting started](docs/tutorials/erste-schritte.md).
 Releases and changes: [GitHub Releases](https://github.com/besessener/flakipype/releases).
 
 ## Usage
@@ -66,11 +66,11 @@ flakipype run           # unattended: scan, investigate, open draft pull request
 flakipype daemon install    # run it daily from a systemd user timer
 ```
 
-Next steps: [connect a model](docs/how-to/connect-a-model.md),
-[find flaky pipelines](docs/how-to/find-flaky-pipelines.md),
-[use the chat](docs/how-to/chat.md) and
-[run on a schedule](docs/how-to/run-on-a-schedule.md); every command:
-[commands](docs/reference/commands.md).
+Next steps: [connect a model](docs/how-to/modell-verbinden.md),
+[find flaky pipelines](docs/how-to/instabile-pipelines-finden.md),
+[use the chat](docs/how-to/chat-nutzen.md) and
+[run on a schedule](docs/how-to/zeitgesteuert-ausfuehren.md); every command:
+[commands](docs/reference/befehle.md).
 
 ## Development
 
@@ -82,18 +82,18 @@ uv sync
 uv run poe check
 ```
 
-Details: [development setup](docs/tutorials/development-setup.md),
-[commands](docs/reference/commands.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Details: [development setup](docs/tutorials/entwicklungsumgebung.md),
+[commands](docs/reference/befehle.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation
 
 Website: <https://besessener.github.io/flakipype/>. The full documentation is in
 [docs/](docs/README.md), organised by [Diátaxis](https://diataxis.fr/):
 
-- **[Tutorials](docs/README.md#tutorials)** – step by step to a first success, e.g. [getting started](docs/tutorials/getting-started.md)
-- **[How-to guides](docs/README.md#how-to-guides)** – reach one goal, e.g. [connect a model](docs/how-to/connect-a-model.md) or [run on a schedule](docs/how-to/run-on-a-schedule.md)
-- **[Reference](docs/README.md#reference)** – look up exact behaviour, e.g. [commands](docs/reference/commands.md) or [configuration](docs/reference/configuration.md)
-- **[Explanation](docs/README.md#explanation)** – understand why, e.g. [architecture](docs/explanation/architecture.md) or [safety model](docs/explanation/safety-model.md)
+- **[Tutorials](docs/README.md#tutorials)** – step by step to a first success, e.g. [getting started](docs/tutorials/erste-schritte.md)
+- **[How-to guides](docs/README.md#how-to-guides)** – reach one goal, e.g. [connect a model](docs/how-to/modell-verbinden.md) or [run on a schedule](docs/how-to/zeitgesteuert-ausfuehren.md)
+- **[Reference](docs/README.md#reference)** – look up exact behaviour, e.g. [commands](docs/reference/befehle.md) or [configuration](docs/reference/konfiguration.md)
+- **[Explanation](docs/README.md#explanation)** – understand why, e.g. [architecture](docs/explanation/architektur.md) or [safety model](docs/explanation/sicherheitsmodell.md)
 
 ## Related projects
 

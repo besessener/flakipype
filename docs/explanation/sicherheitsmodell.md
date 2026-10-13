@@ -22,13 +22,13 @@ and `/new` and `/resume` switch back to it), or on the command line with
 `flakipype run --mode auto|ask`. Without a window nobody can confirm,
 so `ask` there is a dry run: every `write` and `critical` request is
 answered `report only` and nothing is pushed
-([unattended runs](unattended.md)). Every flakipype pull request is a draft,
+([unattended runs](unbeaufsichtigte-laeufe.md)). Every flakipype pull request is a draft,
 in both modes.
 
 In `auto` mode, a fix whose diff touches `.github/`, adds something that
 could hide a failure or reaches out to the network or secrets is not pushed:
 a pushed branch runs its own workflow files with the repository's secrets
-before anyone reviews it ([fixes](fix.md#modes)).
+before anyone reviews it ([fixes](korrekturen.md#modes)).
 
 ## Risk levels, enforced in code
 
@@ -58,7 +58,7 @@ full diff, and always as plain text, so a manipulated model cannot dress up
 an action as something else. Write tools only accept targets
 the scan found or flakipype started itself. Every request is written to an
 append-only audit log, together with your answer. Details for reruns and
-dispatches: [actions](actions.md).
+dispatches: [actions](aktionen.md).
 
 ## Logs are data
 
@@ -87,7 +87,7 @@ once, pull requests (3 per chat session, `fix.max_prs_per_session`),
 files and lines per fix, tokens and wall-clock time, plus loop detection.
 Unattended runs also have daily limits across runs for pull requests,
 actions and tokens, so a short timer interval cannot multiply the per-run
-limits ([unattended runs](unattended.md#budgets)). Reaching a limit
+limits ([unattended runs](unbeaufsichtigte-laeufe.md#budgets)). Reaching a limit
 ends the run with a summary of what was done and what is left — never a
 half-finished state without explanation. No limit is unlimited by default.
 

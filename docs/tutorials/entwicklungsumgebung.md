@@ -2,7 +2,7 @@
 
 This takes you from a fresh clone to every quality gate green. It works on
 Linux, macOS and Windows; flakipype itself only targets Linux, so on Windows
-the Linux check runs through [act](../how-to/run-ci-locally.md).
+the Linux check runs through [act](../how-to/ci-lokal-ausfuehren.md).
 
 ## 1. Install the tools
 
@@ -33,7 +33,7 @@ act pull_request -j test  # Linux CI job in Docker (Windows/macOS)
 ```
 
 All three green means you are ready to open a pull request. What each gate
-checks: [quality gates](../reference/quality.md).
+checks: [quality gates](../reference/qualitaetssicherung.md).
 
 ## 4. Try the CLI
 

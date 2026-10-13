@@ -21,7 +21,7 @@ Outside poe:
 | Command | Purpose |
 | --- | --- |
 | `prek run --all-files` | gitleaks, zizmor, file hygiene hooks |
-| `act pull_request -j test` | Linux CI job in Docker, see [run CI locally](../how-to/run-ci-locally.md) |
+| `act pull_request -j test` | Linux CI job in Docker, see [run CI locally](../how-to/ci-lokal-ausfuehren.md) |
 | `act pull_request -j smoke` | `install.sh` and a first start on Ubuntu, Debian, Fedora and Arch |
 
 ## `flakipype` CLI
@@ -29,12 +29,12 @@ Outside poe:
 | Command | Purpose |
 | --- | --- |
 | `flakipype --version` | Print the installed version |
-| `flakipype` (no args) | The chat in a terminal, see [use the chat](../how-to/chat.md); otherwise the help. Exit codes: 0 left, 1 GitHub unreadable or the chat crashed, 2 not set up |
+| `flakipype` (no args) | The chat in a terminal, see [use the chat](../how-to/chat-nutzen.md); otherwise the help. Exit codes: 0 left, 1 GitHub unreadable or the chat crashed, 2 not set up |
 | `flakipype setup` | Full-screen setup wizard (needs a terminal) |
 | `flakipype setup --non-interactive [options]` | Headless setup, see below |
 | `flakipype doctor` | Check configuration, model connection, `gh` and the GitHub login |
 | `flakipype scan [options]` | Find and rank flaky jobs, see below |
-| `flakipype investigate [options]` | Let the agent explain findings with evidence; see [investigate findings](../how-to/investigate-findings.md) |
+| `flakipype investigate [options]` | Let the agent explain findings with evidence; see [investigate findings](../how-to/befunde-untersuchen.md) |
 | `flakipype run [options]` | Scan, investigate and fix without a window, see below |
 | `flakipype daemon install\|uninstall\|status` | The systemd user timer that starts `flakipype run`, see below |
 
@@ -50,7 +50,7 @@ Outside poe:
 Exit codes: 0 finished (a reached limit is a normal end), 1 something was
 incomplete (scan stopped early, GitHub or the model failed, a delivery
 failed), 2 not set up or another `--owner`, 3 another `flakipype run` is running. How it works:
-[unattended runs](../explanation/unattended.md).
+[unattended runs](../explanation/unbeaufsichtigte-laeufe.md).
 
 ### `flakipype daemon`
 
@@ -64,7 +64,7 @@ failed), 2 not set up or another `--owner`, 3 another `flakipype run` is running
 `install` and `uninstall` exit with 1 when systemd refuses, `install` with 2
 when flakipype is not set up (no configuration file, or one it cannot read)
 and with 1 when `doctor` fails in the timer's environment. `install --print`
-needs no configuration. Guide: [run on a schedule](../how-to/run-on-a-schedule.md).
+needs no configuration. Guide: [run on a schedule](../how-to/zeitgesteuert-ausfuehren.md).
 
 ### `flakipype scan`
 
@@ -78,7 +78,7 @@ needs no configuration. Guide: [run on a schedule](../how-to/run-on-a-schedule.m
 | `--json` | Print the [JSON result](scan-json.md) on stdout instead of the table |
 
 Exit codes: 0 finished, 1 stopped early or GitHub unreadable, 2 not set up.
-Guide: [find flaky pipelines](../how-to/find-flaky-pipelines.md).
+Guide: [find flaky pipelines](../how-to/instabile-pipelines-finden.md).
 
 ### `flakipype setup --non-interactive`
 

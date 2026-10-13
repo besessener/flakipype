@@ -9,42 +9,42 @@ Organised by [Diátaxis](https://diataxis.fr/): by what you need right now.
 
 ## Tutorials
 
-- [Getting started](tutorials/getting-started.md) – install, set up, check.
-- [Development setup](tutorials/development-setup.md) – from clone to all gates green.
+- [Getting started](tutorials/erste-schritte.md) – install, set up, check.
+- [Development setup](tutorials/entwicklungsumgebung.md) – from clone to all gates green.
 
 ## How-to guides
 
 **Using flakipype**
 
-- [Find flaky pipelines](how-to/find-flaky-pipelines.md) – `flakipype scan`, options, scripts.
-- [Investigate findings](how-to/investigate-findings.md) – let the agent explain them with evidence.
-- [Use the chat](how-to/chat.md) – ask questions, scan and investigate interactively, sessions.
-- [Connect a model](how-to/connect-a-model.md) – Anthropic API, Azure AI Foundry or a proxy.
-- [Set up a headless machine](how-to/set-up-headless.md) – servers, containers, SSH.
-- [Run on a schedule](how-to/run-on-a-schedule.md) – `flakipype run` and the systemd user timer.
+- [Find flaky pipelines](how-to/instabile-pipelines-finden.md) – `flakipype scan`, options, scripts.
+- [Investigate findings](how-to/befunde-untersuchen.md) – let the agent explain them with evidence.
+- [Use the chat](how-to/chat-nutzen.md) – ask questions, scan and investigate interactively, sessions.
+- [Connect a model](how-to/modell-verbinden.md) – Anthropic API, Azure AI Foundry or a proxy.
+- [Set up a headless machine](how-to/headless-einrichten.md) – servers, containers, SSH.
+- [Run on a schedule](how-to/zeitgesteuert-ausfuehren.md) – `flakipype run` and the systemd user timer.
 
 **Developing flakipype**
 
 - [Contributing](../CONTRIBUTING.md) – set up, work, open a pull request, release.
-- [Run CI locally with act](how-to/run-ci-locally.md) – the Linux gate on Windows.
-- [Maintain the website](how-to/maintain-the-website.md) – `site/`, screenshots and the Pages workflow.
+- [Run CI locally with act](how-to/ci-lokal-ausfuehren.md) – the Linux gate on Windows.
+- [Maintain the website](how-to/webseite-pflegen.md) – `site/`, screenshots and the Pages workflow.
 
 ## Reference
 
-- [Commands](reference/commands.md) – `poe` tasks and the `flakipype` CLI.
-- [Configuration](reference/configuration.md) – files, settings, secrets and `gh`.
+- [Commands](reference/befehle.md) – `poe` tasks and the `flakipype` CLI.
+- [Configuration](reference/konfiguration.md) – files, settings, secrets and `gh`.
 - [Scan JSON](reference/scan-json.md) – the `flakipype scan --json` format.
-- [Quality gates](reference/quality.md) – tests, linters, CI jobs and what each one enforces.
+- [Quality gates](reference/qualitaetssicherung.md) – tests, linters, CI jobs and what each one enforces.
 
 ## Explanation
 
-- [Architecture](explanation/architecture.md) – packages, layers and data flow.
-- [How flakiness is detected](explanation/flake-detection.md) – signals, rates and error signatures.
+- [Architecture](explanation/architektur.md) – packages, layers and data flow.
+- [How flakiness is detected](explanation/flake-erkennung.md) – signals, rates and error signatures.
 - [The agent](explanation/agent.md) – investigators, reviewer, tools, verdicts, budgets and the chat.
-- [Actions](explanation/actions.md) – reruns, dispatches, confirmation and the live run view.
-- [Fixes](explanation/fix.md) – fixer agent, diff checks, draft pull requests and verification.
-- [Unattended runs and release](explanation/unattended.md) – `flakipype run`, the systemd timer, the install script and smoke tests.
-- [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
+- [Actions](explanation/aktionen.md) – reruns, dispatches, confirmation and the live run view.
+- [Fixes](explanation/korrekturen.md) – fixer agent, diff checks, draft pull requests and verification.
+- [Unattended runs and release](explanation/unbeaufsichtigte-laeufe.md) – `flakipype run`, the systemd timer, the install script and smoke tests.
+- [Safety model](explanation/sicherheitsmodell.md) – modes, risk levels, pull requests and budgets.
 
 Related projects with the same idea and the same documentation layout:
 [PlayMonkey](https://github.com/besessener/PlayMonkey/blob/main/docs/README.md) and

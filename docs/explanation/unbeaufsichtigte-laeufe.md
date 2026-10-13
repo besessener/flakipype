@@ -1,13 +1,13 @@
 # Unattended runs and release
 
-> Status: implemented. Setup: [run on a schedule](../how-to/run-on-a-schedule.md).
+> Status: implemented. Setup: [run on a schedule](../how-to/zeitgesteuert-ausfuehren.md).
 
 The chat needs you at the keyboard. flakipype can also work on a schedule:
 `flakipype run` scans, investigates and opens draft pull requests for
 fixable findings without a window, `flakipype daemon install` runs it from a
 systemd user timer, and an install script plus smoke tests on four
 distributions make it installable. Every rule of the
-[safety model](safety-model.md) applies unchanged; nobody watching means
+[safety model](sicherheitsmodell.md) applies unchanged; nobody watching means
 tighter limits, not looser ones.
 
 ## Scope
@@ -47,7 +47,7 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    tried again next time. No investigation starts after `run.max_minutes`.
 5. **Fix** findings with a reviewed verdict classified `flaky_test`,
    `flaky_infrastructure` or `configuration`, highest ranked first, through
-   the same `fix` tool and policy gate as the chat ([fixes](fix.md)).
+   the same `fix` tool and policy gate as the chat ([fixes](korrekturen.md)).
    Skipped: findings with an open flakipype pull request or without push
    access, and findings whose fix an earlier `auto` run did not push
    (warnings, no fix, rejected by the reviewer, or a commit pushed whose pull
@@ -203,7 +203,7 @@ stored the key in the keyring) or locked. So:
 
 The GitHub token stays `gh`'s login. If `gh` keeps it in the keyring, the
 same applies to `gh`; `gh auth login --insecure-storage` keeps it in `gh`'s
-own config file instead ([run on a schedule](../how-to/run-on-a-schedule.md)).
+own config file instead ([run on a schedule](../how-to/zeitgesteuert-ausfuehren.md)).
 
 ## `flakipype daemon`
 

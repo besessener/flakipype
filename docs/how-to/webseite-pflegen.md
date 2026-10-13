@@ -15,7 +15,7 @@ to the layout or to the shared part of `style.css` goes to all three sites.
 ## Change the content
 
 1. Edit `site/index.html` or `site/style.css`. Texts are English and match
-   the [README](../../README.md) and the [safety model](../explanation/safety-model.md);
+   the [README](../../README.md) and the [safety model](../explanation/sicherheitsmodell.md);
    a claim on the page must be true of the code. Keep the status note current
    while features are missing.
 2. Open the page locally, e.g. `uv run python -m http.server -d site`, and

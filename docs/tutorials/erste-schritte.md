@@ -36,7 +36,7 @@ The wizard is a full-screen form with two sections.
 
 - **Base URL**: `https://api.anthropic.com`, your Foundry endpoint
   (`https://<resource>.services.ai.azure.com/anthropic`) or a proxy. See
-  [connect a model](../how-to/connect-a-model.md).
+  [connect a model](../how-to/modell-verbinden.md).
 - **API key**: stored in the system keyring, never in the config file.
 - **Model**: the model name, or on Foundry the deployment name.
 
@@ -78,5 +78,5 @@ Every failed line has an arrow with the next step. `doctor` exits with code
 1 when a check fails, so it also works in scripts.
 
 On a server without a terminal UI, see
-[set up a headless machine](../how-to/set-up-headless.md); to let flakipype
-work on its own, [run it on a schedule](../how-to/run-on-a-schedule.md).
+[set up a headless machine](../how-to/headless-einrichten.md); to let flakipype
+work on its own, [run it on a schedule](../how-to/zeitgesteuert-ausfuehren.md).

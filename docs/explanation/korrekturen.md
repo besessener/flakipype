@@ -15,7 +15,7 @@ Merging stays your decision.
   signed commit through GitHub's API; a draft pull request; verification
   reruns with a result comment; `/mode ask|auto` in the chat.
 - **Out**: headless fixes, which `flakipype run` makes instead (see
-  [unattended runs](unattended.md)); forks (a fix needs
+  [unattended runs](unbeaufsichtigte-laeufe.md)); forks (a fix needs
   push access to the repository); deleting files; updating a pull request
   after it was opened; merging, ever.
 
@@ -158,7 +158,7 @@ across `/resume`): `/fix N` shows it again without running the fixer,
 `/fix N --fresh` starts over, and you can ask the model for changes, which it
 passes to the `fix` tool as `instructions`; the fixer then starts from the
 earlier diff at the same pinned commit. Everything else
-follows the gate of [actions](actions.md): no second write request after a
+follows the gate of [actions](aktionen.md): no second write request after a
 decline in the same turn, and an audit log entry for every request.
 
 ## Delivery
@@ -241,7 +241,7 @@ The fix branch has to show it passes where the default branch flakes:
    inputs it requires).
 2. When the run finishes, it reruns the whole run until the workflow has
    run `fix.verify_runs` times (default 3) on the fix commit. The runs show
-   in the Runs list as in [actions](actions.md) and count against the same
+   in the Runs list as in [actions](aktionen.md) and count against the same
    action budget; the push confirmation already covers them. Watching a run
    flakipype did not start (the pull request's own) costs no budget.
 3. A run counts as passed only when the finding's job ran and passed in it.
@@ -269,7 +269,7 @@ when the scan has no runs on the default branch; like the scan, it counts
 only runs that passed or failed, not cancelled or skipped ones. The chance shown is
 `(1 − rate)^runs`, only when every run passed. Verification is polled while
 the chat is open, and its note appears in the chat; a resumed session
-continues it. A pull request an [unattended run](unattended.md) opened is
+continues it. A pull request an [unattended run](unbeaufsichtigte-laeufe.md) opened is
 polled by that run and, if it is not done in time, by the next one.
 
 ## Modes

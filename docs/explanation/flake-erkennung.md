@@ -118,7 +118,7 @@ line number or a test count.
 Logs are written by anyone who can push code, so they are untrusted:
 terminal escape sequences and control characters are removed before anything
 is stored or shown, and logs will reach the model only as data, never as
-instructions (see the [safety model](safety-model.md)).
+instructions (see the [safety model](sicherheitsmodell.md)).
 
 ## Known limits
 

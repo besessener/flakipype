@@ -64,7 +64,7 @@ version; renaming or removing one raises the version.
 }
 ```
 
-How the statuses are decided: [how flakiness is detected](../explanation/flake-detection.md).
+How the statuses are decided: [how flakiness is detected](../explanation/flake-erkennung.md).
 
 ### Top level
 

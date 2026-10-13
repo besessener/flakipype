@@ -28,7 +28,7 @@ cli                               Typer entry point, composition root (cli/wirin
   returns flaky failures, rankings and error signatures. No network,
   filesystem, `gh`, database or clock — the current time is a parameter. That
   keeps the core logic deterministic and easy to test exhaustively. How it
-  decides: [flake detection](flake-detection.md).
+  decides: [flake detection](flake-erkennung.md).
 - **`config`** reads and writes settings under `$XDG_CONFIG_HOME/flakipype`
   and keeps secrets in the system keyring, falling back to a `0600` file on
   headless machines.
@@ -78,14 +78,14 @@ cli                               Typer entry point, composition root (cli/wirin
 - **`agent`** investigates one finding: an investigator tool loop over the
   Messages API, a deterministic citation check, a reviewer pass and at most one
   revision ([the agent](agent.md)). Every tool declares a risk level and runs
-  only through the policy gate ([safety model](safety-model.md)); everything
+  only through the policy gate ([safety model](sicherheitsmodell.md)); everything
   sent to the model is masked first. It knows nothing of the scan service:
   it gets a `Finding` and the scan's `Evidence` as values. The chat
   orchestrator (`orchestrator.py`) is a tool loop too; its tools call a
   `Workspace` protocol that `investigate` implements. For fixes it has the
   fixer (`fixer.py`) with edit tools (`fix_tools.py`) on an in-memory
   working copy of one commit (`workcopy.py`), and `fix_pipeline.py` runs
-  fixer and reviewer with at most one revision ([fixes](fix.md)). Investigator
+  fixer and reviewer with at most one revision ([fixes](korrekturen.md)). Investigator
   and fixer share one tool loop (`tool_loop.py`): call, run tools, check the
   submission, correct at most twice; each brings its submit tool and checks.
 - **`actions`** prepares the chat's reruns, dispatches and cancels for the
@@ -94,7 +94,7 @@ cli                               Typer entry point, composition root (cli/wirin
   budget, records every request in the audit log, and watches started runs
   (polling, finish notes, session state). Starting a confirmed rerun or
   dispatch on GitHub lives in `starting.py`. Its GitHub collaborators are
-  protocols that `github` implements ([actions](actions.md)).
+  protocols that `github` implements ([actions](aktionen.md)).
 - **`fix`** turns a reviewed verdict into a draft pull request for the
   chat: it refuses findings that cannot be fixed, checks push access and
   open flakipype pull requests, runs the fixer through a function it is
@@ -102,7 +102,7 @@ cli                               Typer entry point, composition root (cli/wirin
   confirmation with the diff, delivers branch, commit and draft pull request
   (`delivery.py`), verifies the fix branch and comments the result
   (`verify.py`), and keeps proposals, opened pull requests and the pull
-  request budget as session state ([fixes](fix.md)).
+  request budget as session state ([fixes](korrekturen.md)).
 - **`investigate`** runs a scan, numbers the findings, picks the requested
   ones, runs investigations in parallel under one run budget and stores
   completed verdicts in the cache until a finding has a newer failure. For
@@ -119,7 +119,7 @@ cli                               Typer entry point, composition root (cli/wirin
   fixed steps on the chat's workspace, every action through the
   `HeadlessGate`, with daily limits across runs (`limits.py`), the pull
   requests carried over from the last run (`carry.py`) and a report the CLI
-  prints ([unattended runs](unattended.md)). The systemd units are rendered
+  prints ([unattended runs](unbeaufsichtigte-laeufe.md)). The systemd units are rendered
   and installed by `setup` (`daemon.py`).
 - **`cli`** wires everything together: `cli/wiring.py` is the only place that
   reads flakipype's configuration from the environment and builds real
@@ -140,7 +140,7 @@ cli                               Typer entry point, composition root (cli/wirin
 3. **Judgement**: the agent investigates findings with tools (prepared log
    excerpts, run history, commit diffs, files), marked as data, and returns
    verdicts with cited evidence that a reviewer pass checks.
-4. **Fix** ([fixes](fix.md)): the agent edits an in-memory copy of the
+4. **Fix** ([fixes](korrekturen.md)): the agent edits an in-memory copy of the
    repository, code checks the diff, a new branch with one signed commit and
    a draft PR are created through GitHub's API, and reruns of the fix branch
    are compared with the default branch's flake rate.

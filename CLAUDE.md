@@ -14,7 +14,7 @@ slash commands and headless commands for cron and a systemd timer. Full docs:
 - **Entry point**: Typer CLI, `src/flakipype/cli.py`.
 - **Packages** under `src/flakipype/`: `tui`, `agent`, `llm`, `github`,
   `store`, `flaky`, `config`. Responsibilities and allowed imports:
-  [architecture.md](docs/explanation/architecture.md).
+  [architektur.md](docs/explanation/architektur.md).
 - **LLM**: Anthropic Messages API only (api.anthropic.com or Azure AI
   Foundry), configured with base URL, API key and model.
 - **GitHub**: only through the `gh` CLI, which flakipype downloads and
@@ -30,13 +30,13 @@ slash commands and headless commands for cron and a systemd timer. Full docs:
 
 | Area | Read first |
 | --- | --- |
-| Packages, layers, data flow | [architecture.md](docs/explanation/architecture.md) |
-| Modes, confirmations, PRs, budgets | [safety-model.md](docs/explanation/safety-model.md) |
+| Packages, layers, data flow | [architektur.md](docs/explanation/architektur.md) |
+| Modes, confirmations, PRs, budgets | [sicherheitsmodell.md](docs/explanation/sicherheitsmodell.md) |
 | Agent roles, tools, verdicts | [agent.md](docs/explanation/agent.md) |
-| Flake detection rules | [flake-detection.md](docs/explanation/flake-detection.md) |
-| Settings, secrets, gh download | [configuration.md](docs/reference/configuration.md) |
-| Tests, CI, quality gates | [quality.md](docs/reference/quality.md), [commands.md](docs/reference/commands.md) |
-| Running CI locally | [run-ci-locally.md](docs/how-to/run-ci-locally.md) |
+| Flake detection rules | [flake-erkennung.md](docs/explanation/flake-erkennung.md) |
+| Settings, secrets, gh download | [konfiguration.md](docs/reference/konfiguration.md) |
+| Tests, CI, quality gates | [qualitaetssicherung.md](docs/reference/qualitaetssicherung.md), [befehle.md](docs/reference/befehle.md) |
+| Running CI locally | [ci-lokal-ausfuehren.md](docs/how-to/ci-lokal-ausfuehren.md) |
 
 ## Hard rules
 
@@ -127,7 +127,7 @@ uv run poe --help        # list tasks
 uv run poe check         # every local quality gate
 ```
 
-All commands: [commands.md](docs/reference/commands.md).
+All commands: [befehle.md](docs/reference/befehle.md).
 
 ## Definition of done
 

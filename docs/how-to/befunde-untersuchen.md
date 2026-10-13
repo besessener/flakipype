@@ -5,7 +5,7 @@ explain each one with evidence: what causes it, whether it is a flaky test,
 flaky infrastructure, a real bug, a configuration problem or already fixed,
 and what to change. It only reads; nothing in your repositories changes.
 
-It needs a model (see [connect a model](connect-a-model.md)) and costs model
+It needs a model (see [connect a model](modell-verbinden.md)) and costs model
 tokens: with the default limits at most 200,000 per finding and 1,000,000 per
 run.
 
@@ -61,7 +61,7 @@ reached, no verdict) are never stored.
 Exit codes: 0 all investigations completed, 1 one ended without a verdict or
 the scan stopped early, 2 not set up.
 
-To ask follow-up questions instead, use [the chat](chat.md). Limits are in
+To ask follow-up questions instead, use [the chat](chat-nutzen.md). Limits are in
 the `[agent]` section of the
-[configuration](../reference/configuration.md). How it works:
+[configuration](../reference/konfiguration.md). How it works:
 [the agent](../explanation/agent.md).

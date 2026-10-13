@@ -2,7 +2,7 @@
 
 `flakipype run` scans, investigates and opens draft pull requests without a
 window; a systemd user timer starts it. How it decides and what limits it:
-[unattended runs](../explanation/unattended.md).
+[unattended runs](../explanation/unbeaufsichtigte-laeufe.md).
 
 To try this end to end without touching a real project, point it at the
 sandbox [besessener/flakipype-test](https://github.com/besessener/flakipype-test),
@@ -73,7 +73,7 @@ journalctl --user -u flakipype.service        # every run's summary
 ```
 
 Limits per run and per day are in the `[run]` section of the
-[configuration](../reference/configuration.md). To stop:
+[configuration](../reference/konfiguration.md). To stop:
 
 ```bash
 flakipype daemon uninstall

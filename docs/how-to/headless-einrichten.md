@@ -36,7 +36,7 @@ printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive \
 - On machines without a system keyring the key goes to
   `~/.config/flakipype/secrets.json` with mode `0600`. Add
   `--secret-store file` to keep it there even where a keyring exists, e.g.
-  for a [timer](run-on-a-schedule.md) that runs without a desktop session.
+  for a [timer](zeitgesteuert-ausfuehren.md) that runs without a desktop session.
 - If no suitable `gh` is found, setup downloads and verifies it.
 
 Setup finishes with the same checks as `flakipype doctor` and exits with code
@@ -44,4 +44,4 @@ Setup finishes with the same checks as `flakipype doctor` and exits with code
 
 ## 3. Run it unattended
 
-[Run flakipype on a schedule](run-on-a-schedule.md) with a systemd user timer.
+[Run flakipype on a schedule](zeitgesteuert-ausfuehren.md) with a systemd user timer.

@@ -7,7 +7,7 @@ dispatches and fixes run only after you confirm each one (or within the
 budgets in `/mode auto`); a fix becomes a new branch and a draft pull
 request, never a change to the default branch.
 
-It needs a terminal and a model (see [connect a model](connect-a-model.md)).
+It needs a terminal and a model (see [connect a model](modell-verbinden.md)).
 Without a terminal, `flakipype` prints its help instead.
 
 ## A typical session
@@ -42,7 +42,7 @@ starts until you press Enter, because investigations cost tokens.
 | `/actions` | The actions (reruns, dispatches, cancels, fixes) requested in this session |
 | `/mode ask\|auto` | Confirm every action (`ask`, the default), or let them run within the budgets (`auto`); `/mode` shows the mode |
 | `/budget` | Tokens used in this session: the chat, its investigations and its fixes |
-| `/sessions` | The ten most recent sessions; those of [unattended runs](run-on-a-schedule.md) end with `· run` |
+| `/sessions` | The ten most recent sessions; those of [unattended runs](zeitgesteuert-ausfuehren.md) end with `· run` |
 | `/resume N` | Continue session N; the next action scans again, with the session's window and repositories on the configured owner and host. A run's session opens as a new chat session with its scan, verdicts and fixes not pushed; its pull requests stay with the timer |
 | `/new` | Start a new session: the configured scan, no findings, a new token count |
 | `/help` | The list of commands |
@@ -56,7 +56,7 @@ that were shown but not pushed, and opened pull requests with their
 verification. The mode is not saved, and neither is a question still being
 answered: a session closed in the middle of one resumes before it. Sessions
 live in the cache database next to the scan cache (see
-[configuration](../reference/configuration.md)).
+[configuration](../reference/konfiguration.md)).
 
 A session saved for another owner or host resumes on the configured ones and
 says so. A session saved by an older flakipype version, or under another
@@ -86,8 +86,8 @@ proven flaky event".
 
 A session allows 10 reruns and dispatches by default; `/new` starts a new
 count. Limits are in the `[actions]` section of the
-[configuration](../reference/configuration.md). The rules behind it:
-[actions](../explanation/actions.md).
+[configuration](../reference/konfiguration.md). The rules behind it:
+[actions](../explanation/aktionen.md).
 
 ## Fixes
 
@@ -107,5 +107,5 @@ The status line shows the mode. In `/mode auto`, actions run without a
 dialog within the budgets, and a fix with warnings (it hides failures,
 reaches out, or changes `.github/`) is not pushed. A session allows 3 pull
 requests by default (`[fix]` in the
-[configuration](../reference/configuration.md)). How it works:
-[fixes](../explanation/fix.md).
+[configuration](../reference/konfiguration.md)). How it works:
+[fixes](../explanation/korrekturen.md).

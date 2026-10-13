@@ -15,9 +15,9 @@ shows them live while they run.
   tag, and cancelling runs flakipype started. A live list shows them, an
   audit log records them, and a budget limits them.
 - **Out**: headless actions; unattended runs only rerun flakipype's own fix
-  branches, see [unattended runs](unattended.md). Changing code, branches or
+  branches, see [unattended runs](unbeaufsichtigte-laeufe.md). Changing code, branches or
   pull requests and `/mode auto` in the chat are covered in
-  [fixes](fix.md); in `auto` mode these actions run without a dialog within
+  [fixes](korrekturen.md); in `auto` mode these actions run without a dialog within
   the budget.
 
 None of these actions writes to a branch: reruns and dispatches run the code
@@ -164,7 +164,7 @@ resumed session polls the runs that have not finished.
 
 Every action request is stored in the cache database (table `action_log`),
 whether it ran or not. Each entry holds the time, session, tool, who asked
-(`model`, `command`, or `run` for [unattended runs](unattended.md)), the
+(`model`, `command`, or `run` for [unattended runs](unbeaufsichtigte-laeufe.md)), the
 request text, the answer (`confirmed`, `declined`, `auto`, `not run in auto
 mode` or `report only`), the outcome (GitHub's answer or the error) and the
 run id. The reruns and dispatches that verify a fix are recorded too, as

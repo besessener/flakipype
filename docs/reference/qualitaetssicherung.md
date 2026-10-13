@@ -7,7 +7,7 @@
 | Formatting | ruff format | One style, no discussion |
 | Lint | ruff (`select = ["ALL"]`) | Bugs, security (bandit rules), complexity ≤ 10 per function, at most 4 parameters (3 positional) |
 | Types | ty, plus ruff `ANN` for annotations | Fully typed `src` and `tests`; warnings fail; ignores are `# ty: ignore[<rule>]` (`type: ignore` is not honoured) |
-| Architecture | import-linter | Layer contract, see [architecture](../explanation/architecture.md) |
+| Architecture | import-linter | Layer contract, see [architecture](../explanation/architektur.md) |
 | Dependencies | deptry | No unused, missing or misplaced dependencies |
 | Dead code | vulture | No unused code |
 | Shell scripts | ShellCheck (`shellcheck-py`) | `install.sh` and the smoke test |
@@ -79,7 +79,7 @@ asked.
 | `ci.yml` → `test` | `uv sync --locked` and `poe check` on Python 3.12 and 3.14; coverage table in the job summary | PR, push to `main` |
 | `ci.yml` → `smoke` | In Ubuntu 24.04, Debian 12, Fedora and Arch containers (pinned by digest), as a user without root: `install.sh` from the checkout (with the verified `uv` download), `flakipype --version`, `doctor` without a configuration, and the unit files through `systemd-analyze verify` (`tests/smoke/smoke.sh`) | PR, push to `main` |
 | `codeql.yml` | CodeQL `security-extended` for Python and Actions | PR, push to `main`, weekly |
-| `pages.yml` | Publishes `site/` to GitHub Pages, see [maintain the website](../how-to/maintain-the-website.md) | push to `main` that changes `site/`, by hand |
+| `pages.yml` | Publishes `site/` to GitHub Pages, see [maintain the website](../how-to/webseite-pflegen.md) | push to `main` that changes `site/`, by hand |
 | `dependabot.yml` | Updates for Actions, uv dependencies and hook revisions, 7-day cooldown | weekly |
 
 **Workflow hardening**: every action is pinned to a commit SHA (the comment

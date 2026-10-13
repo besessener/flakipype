@@ -16,8 +16,8 @@ and history the way an engineer would. That is the agent's job.
 - **In**: investigating findings and explaining them with cited evidence; a
   chat to ask about them; a headless `flakipype investigate` for scripts.
 - **Out**: changing code or opening pull requests; a separate fixer does
-  that, see [fixes](fix.md). Investigators only read. The chat model can
-  also rerun and dispatch workflows (see [actions](actions.md)) and ask for
+  that, see [fixes](korrekturen.md). Investigators only read. The chat model can
+  also rerun and dispatch workflows (see [actions](aktionen.md)) and ask for
   fixes, each confirmed by you in `ask` mode.
 
 ## Roles
@@ -69,17 +69,17 @@ reading tools — `scan`, `list_findings`, `investigate` (findings by number)
 and `show_verdict` — that answers your questions and starts investigators
 through them. Its action tools (`rerun_failed`, `rerun_run`, `dispatch`,
 `cancel`, and `watched_runs` to read their state) are described in
-[actions](actions.md), its `fix` tool (risk `critical`, with optional
-`instructions` for changes to a fix it showed) in [fixes](fix.md). Slash
+[actions](aktionen.md), its `fix` tool (risk `critical`, with optional
+`instructions` for changes to a fix it showed) in [fixes](korrekturen.md). Slash
 commands do the same without the model. Headless,
 `flakipype investigate` has no orchestrator model: it investigates the
 selected findings and prints the verdicts. Neither has `flakipype run`:
-its steps are fixed in code ([unattended runs](unattended.md)).
+its steps are fixed in code ([unattended runs](unbeaufsichtigte-laeufe.md)).
 
 ## What the investigator can use
 
 Investigator tools are read-only (risk level `read`, see the
-[safety model](safety-model.md)). GitHub calls go through one serial queue,
+[safety model](sicherheitsmodell.md)). GitHub calls go through one serial queue,
 as the scan does, even when investigators run in parallel; only model calls
 run concurrently.
 
@@ -191,7 +191,7 @@ next to — never instead of — the scan's facts.
 - **Policy gate in code.** The tool registry declares each tool's risk level;
   the gate runs before every call. A `write` or `critical` tool must hand the
   gate an action request built by code, which you confirm in `ask` mode
-  ([actions](actions.md)).
+  ([actions](aktionen.md)).
 
 ## Budgets
 
@@ -273,7 +273,7 @@ runs cheap and stable. Only verdicts the reviewer answered are kept: when the
 review could not run (an HTTP error, for example), the next investigation
 starts over, and verdicts older versions kept that way are not reused.
 Investigations without a verdict are not kept either; only
-[unattended runs](unattended.md) remember them, so they do not pay for the
+[unattended runs](unbeaufsichtigte-laeufe.md) remember them, so they do not pay for the
 same dead end every day.
 
 ## In the chat
@@ -296,10 +296,10 @@ anything above `read` waits for your confirmation in a dialog; `/mode auto`
 lets actions run within the budgets. Sessions (conversation, the model's
 history, scan options, the sidebar, started runs and fixes) are stored in
 the cache database; a resumed session rescans on its next action. See
-[use the chat](../how-to/chat.md).
+[use the chat](../how-to/chat-nutzen.md).
 
 Headless: `flakipype investigate [--finding N | --all] [--json]` prints the
-verdicts; see [investigate findings](../how-to/investigate-findings.md).
+verdicts; see [investigate findings](../how-to/befunde-untersuchen.md).
 
 ## Testing
 

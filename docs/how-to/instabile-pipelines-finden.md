@@ -29,7 +29,7 @@ jobs. Then it prints a ranking, most affected runs first:
 
 - **Runs**: runs with a flaky failure of this job / finished runs of its workflow.
 - **Signal**: `↻ passed on rerun` (strong) or `≡ same commit passed` (medium);
-  see [how flakiness is detected](../explanation/flake-detection.md).
+  see [how flakiness is detected](../explanation/flake-erkennung.md).
 - **Signatures**: the error behind the failures, grouped across runs, with a
   category such as timeout, network or dependencies.
 - **latest failure ↗** is a terminal hyperlink to the job on GitHub.
@@ -43,11 +43,11 @@ Below the ranking, up to three more sections:
 - **Recurring errors**: the same error in several runs (any branch) without
   proof. Could be a flaky test nobody reran, or a real bug caught again.
 
-Why these are kept apart: [how flakiness is detected](../explanation/flake-detection.md).
+Why these are kept apart: [how flakiness is detected](../explanation/flake-erkennung.md).
 
 Every entry has a number (**#**), counted across all sections. Use it to let
 the agent explain a finding: `flakipype investigate --finding 3`; see
-[investigate findings](investigate-findings.md).
+[investigate findings](befunde-untersuchen.md).
 
 ## Narrow or widen it
 
@@ -60,7 +60,7 @@ flakipype scan --min-runs 3             # need 3 runs before calling a job flaky
 ```
 
 Defaults come from the `[scan]` section of the
-[configuration](../reference/configuration.md).
+[configuration](../reference/konfiguration.md).
 
 ## Use it in scripts
 
@@ -88,7 +88,7 @@ failures first; the next scan continues where the last one stopped, and the
 *Notes* say how many are left. Deleting the cache file only costs time for
 scan data, but it also deletes the chat and run sessions, pending
 verifications and the audit log behind the daily limits of `flakipype run`;
-see [configuration](../reference/configuration.md).
+see [configuration](../reference/konfiguration.md).
 
 ## When something goes wrong
 
