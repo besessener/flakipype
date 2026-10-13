@@ -1,8 +1,8 @@
 # Fixes: from verdict to draft pull request
 
-> Status: implemented in M5.
+> Status: implemented.
 
-An investigation explains a flaky finding and suggests a fix. M5 lets the
+An investigation explains a flaky finding and suggests a fix. flakipype lets the
 agent write that fix, shows you the diff, pushes it as a new branch, opens a
 draft pull request and reruns the fix branch to check whether it holds.
 Merging stays your decision.
@@ -14,7 +14,7 @@ Merging stays your decision.
   confirmation for push, pull request and verification; a branch plus one
   signed commit through GitHub's API; a draft pull request; verification
   reruns with a result comment; `/mode ask|auto` in the chat.
-- **Out**: headless fixes, which came with `flakipype run` in M6 (see
+- **Out**: headless fixes, which `flakipype run` makes instead (see
   [unattended runs](unattended.md)); forks (a fix needs
   push access to the repository); deleting files; updating a pull request
   after it was opened; merging, ever.

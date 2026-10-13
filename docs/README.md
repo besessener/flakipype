@@ -45,7 +45,6 @@ Organised by [Diátaxis](https://diataxis.fr/): by what you need right now.
 - [Fixes](explanation/fix.md) – fixer agent, diff checks, draft pull requests and verification.
 - [Unattended runs and release](explanation/unattended.md) – `flakipype run`, the systemd timer, the install script and smoke tests.
 - [Safety model](explanation/safety-model.md) – modes, risk levels, pull requests and budgets.
-- [Roadmap](explanation/roadmap.md) – scope and milestones.
 
 Related projects with the same idea and the same documentation layout:
 [PlayMonkey](https://github.com/besessener/PlayMonkey/blob/main/docs/README.md) and

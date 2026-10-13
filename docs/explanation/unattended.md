@@ -1,8 +1,8 @@
 # Unattended runs and release
 
-> Status: implemented in M6. Setup: [run on a schedule](../how-to/run-on-a-schedule.md).
+> Status: implemented. Setup: [run on a schedule](../how-to/run-on-a-schedule.md).
 
-The chat needs you at the keyboard. M6 lets flakipype work on a schedule:
+The chat needs you at the keyboard. flakipype can also work on a schedule:
 `flakipype run` scans, investigates and opens draft pull requests for
 fixable findings without a window, `flakipype daemon install` runs it from a
 systemd user timer, and an install script plus smoke tests on four
@@ -299,10 +299,10 @@ have `uv`.
 
 ## Release
 
-The version becomes `0.1.0` in `pyproject.toml`, and `install.sh` names the
-tag `v0.1.0`; a unit test checks that both agree. After M6 is merged, you
-create the tag `v0.1.0` on `main` and a GitHub release from it. There is no
-release workflow and no PyPI package.
+The version is `0.1.0` in `pyproject.toml`, and `install.sh` names the tag
+`v0.1.0`; a unit test checks that both agree. The tag on `main` and the
+GitHub release from it are created by hand. There is no release workflow and
+no PyPI package.
 
 ## Smoke tests
 

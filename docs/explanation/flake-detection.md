@@ -4,7 +4,7 @@ A red pipeline is not evidence of flakiness: catching real bugs is what
 pipelines are for. A test is flaky when it fails *sometimes on the same
 code*. flakipype therefore separates **proof** from **suspicion**, and only
 proof counts. Everything here is pure logic in the `flaky` package; no model
-is involved. Judging the unproven cases is the agent's job (M3).
+is involved. Judging the unproven cases is the agent's job.
 
 ## Proof: the same code both failed and passed
 
@@ -64,7 +64,7 @@ what changed between the failure and the next pass — judgement, not a rule.
 So flakipype lists **recurring errors** separately: the same job, step and
 error fingerprint in at least `min_flaky_runs` runs, on any branch, without
 proof. They are labelled "flaky or a real bug", carry no flake rate and are
-never ranked. The agent investigates them with the commit diffs in M3. An
+never ranked. The agent investigates them with the commit diffs. An
 error that the same scan proved flaky for the same job and step is not
 listed again as a recurring error.
 

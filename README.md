@@ -35,10 +35,9 @@ review it.
 - **Safe by design** – never touches the default branch; every fix is a draft
   pull request ([safety model](docs/explanation/safety-model.md)).
 
-> **Status:** pre-alpha. Setup, scanning, agent investigations, the chat,
+> **Status:** version 0.1.0. Setup, scanning, agent investigations, the chat,
 > confirmed reruns and dispatches, fixes as draft pull requests and unattended
-> runs from a systemd timer work, see the
-> [roadmap](docs/explanation/roadmap.md).
+> runs from a systemd timer work.
 
 ## Installation
 

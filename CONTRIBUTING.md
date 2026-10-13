@@ -40,8 +40,7 @@ prek run --all-files             # gitleaks, zizmor, file hygiene
 act pull_request -j test         # the Linux CI job, when you work on Windows or macOS
 ```
 
-- Keep changes focused; one topic per pull request, its milestone in the
-  title when it belongs to one ([roadmap](docs/explanation/roadmap.md)).
+- Keep changes focused; one topic per pull request.
 - Update the docs with the code: behaviour, setup, configuration or a design
   decision changes the matching file under [docs/](docs/README.md).
 - Keep the [safety model](docs/explanation/safety-model.md) intact: the

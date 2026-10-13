@@ -1,25 +1,24 @@
 # The agent
 
-> Status: implemented. Headless investigations (`flakipype investigate`, M3a)
-> and the chat (`flakipype` without a command, M3b). Where the implementation
+> Status: implemented. Headless investigations (`flakipype investigate`)
+> and the chat (`flakipype` without a command). Where the implementation
 > differs from the first design, this page describes the implementation.
 
-The scan (M2) delivers facts: proven flaky events, one-offs, fixes and
+The scan delivers facts: proven flaky events, one-offs, fixes and
 recurring errors, with error signatures. It deliberately stops where
 judgement starts. Is a recurring error a flaky test nobody reran, or the same
 bug caught twice? Was a "seen once" event an outage? What exactly causes the
 E2E timeout, and what would fix it? Those questions need reading logs, code
 and history the way an engineer would. That is the agent's job.
 
-## Scope of M3
+## Scope
 
 - **In**: investigating findings and explaining them with cited evidence; a
   chat to ask about them; a headless `flakipype investigate` for scripts.
-- **Out**: changing code or opening pull requests; since M5 a separate
-  fixer does that, see [fixes](fix.md). Investigators only read. The chat
-  model can also rerun and dispatch workflows (M4, see
-  [actions](actions.md)) and ask for fixes (M5), each confirmed by you in
-  `ask` mode.
+- **Out**: changing code or opening pull requests; a separate fixer does
+  that, see [fixes](fix.md). Investigators only read. The chat model can
+  also rerun and dispatch workflows (see [actions](actions.md)) and ask for
+  fixes, each confirmed by you in `ask` mode.
 
 ## Roles
 
@@ -79,7 +78,7 @@ its steps are fixed in code ([unattended runs](unattended.md)).
 
 ## What the investigator can use
 
-All tools are read-only in M3 (risk level `read`, see the
+Investigator tools are read-only (risk level `read`, see the
 [safety model](safety-model.md)). GitHub calls go through one serial queue,
 as the scan does, even when investigators run in parallel; only model calls
 run concurrently.
