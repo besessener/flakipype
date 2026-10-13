@@ -1,7 +1,11 @@
 # Maintain the website
 
 The website lives in `site/` as plain HTML and CSS, with no build step. It is
-published at <https://besessener.github.io/flakipype/>.
+published at <https://besessener.github.io/flakipype/>. It shares its layout,
+sections and stylesheet with the [PlayMonkey](https://besessener.github.io/PlayMonkey/)
+and [Archivist](https://besessener.github.io/Archivist/) pages; only the texts,
+images, icon and the colour tokens at the top of `style.css` differ. A change
+to the layout or to the shared part of `style.css` goes to all three sites.
 
 ## Once: switch GitHub Pages on
 
@@ -12,7 +16,8 @@ published at <https://besessener.github.io/flakipype/>.
 
 1. Edit `site/index.html` or `site/style.css`. Texts are English and match
    the [README](../../README.md) and the [safety model](../explanation/safety-model.md);
-   a claim on the page must be true of the code.
+   a claim on the page must be true of the code. Keep the status note current
+   while features are missing.
 2. Open the page locally, e.g. `uv run python -m http.server -d site`, and
    check light and dark (the system's colour scheme) and a phone-wide window.
 

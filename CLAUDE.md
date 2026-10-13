@@ -21,6 +21,10 @@ slash commands and headless commands for cron and a systemd timer. Full docs:
   checksum-verifies itself if none is installed.
 - **Target**: Linux only. Development may happen on Windows; the Linux gate
   is CI, run locally with `act`.
+- **Siblings**: [PlayMonkey](https://github.com/besessener/PlayMonkey) and
+  [Archivist](https://github.com/besessener/Archivist) share these rules, the
+  docs layout and the `site/` layout; a change to a shared rule or layout is
+  mirrored there.
 
 ## Read before you touch
 
@@ -123,6 +127,8 @@ uv sync                  # create .venv with all dev tools
 uv run poe --help        # list tasks
 uv run poe check         # every local quality gate
 ```
+
+All commands: [commands.md](docs/reference/commands.md).
 
 ## Definition of done
 

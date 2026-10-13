@@ -8,6 +8,14 @@
       name="description"
       content="flakipype is an agentic command line tool for Linux: it finds flaky GitHub Actions pipelines, explains them with evidence and fixes them through draft pull requests."
     />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://besessener.github.io/flakipype/" />
+    <meta property="og:title" content="flakipype – find, explain and fix flaky GitHub Actions pipelines" />
+    <meta
+      property="og:description"
+      content="An agentic command line tool for Linux: it finds flaky GitHub Actions pipelines, explains them with evidence and fixes them through draft pull requests."
+    />
+    <meta property="og:image" content="https://besessener.github.io/flakipype/img/chat.png" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -29,6 +37,11 @@
         <p class="lead">
           An agentic command line tool for Linux. Point it at a GitHub user or organisation: it scans the workflow runs, scores how flaky each job is,
           explains the likely cause with evidence and fixes it through a draft pull request, verified by rerunning the fix branch.
+        </p>
+        <p class="status">
+          Status: pre-alpha. Setup, scanning, agent investigations, the chat, confirmed reruns and dispatches, fixes as draft pull requests and unattended
+          runs from a systemd timer work. See the
+          <a href="https://github.com/besessener/flakipype/blob/main/docs/explanation/roadmap.md">roadmap</a>.
         </p>
         <p class="actions">
           <a class="button primary" href="#start">Install</a>
@@ -73,7 +86,7 @@
         />
       </section>
 
-      <section id="safety">
+      <section id="safety" class="panel">
         <h2>Safe by design</h2>
         <p class="section-lead">flakipype reruns pipelines and writes code in your repositories. These rules are built in, not settings.</p>
         <ul class="checks">
@@ -111,21 +124,36 @@ sh install.sh</code></pre>
         <h2>Documentation</h2>
         <p class="section-lead">Organised by what you need right now (<a href="https://diataxis.fr/">Diátaxis</a>).</p>
         <div class="cards">
-          <a class="card-link" href="https://github.com/besessener/flakipype/tree/main/docs/tutorials">
+          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#tutorials">
             <strong>Tutorials</strong>
             <span>Step by step to a first success</span>
           </a>
-          <a class="card-link" href="https://github.com/besessener/flakipype/tree/main/docs/how-to">
+          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#how-to-guides">
             <strong>How-to guides</strong>
             <span>Reach one concrete goal</span>
           </a>
-          <a class="card-link" href="https://github.com/besessener/flakipype/tree/main/docs/reference">
+          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#reference">
             <strong>Reference</strong>
             <span>Look up exactly how it is</span>
           </a>
-          <a class="card-link" href="https://github.com/besessener/flakipype/tree/main/docs/explanation">
+          <a class="card-link" href="https://github.com/besessener/flakipype/blob/main/docs/README.md#explanation">
             <strong>Explanation</strong>
             <span>Understand why it is so</span>
+          </a>
+        </div>
+      </section>
+
+      <section id="related">
+        <h2>Related projects</h2>
+        <p class="section-lead">Three tools that started from the same agentic idea, with the same ground rules, quality gates and documentation layout.</p>
+        <div class="cards">
+          <a class="card-link" href="https://besessener.github.io/PlayMonkey/">
+            <strong><img src="https://besessener.github.io/PlayMonkey/favicon.svg" alt="" width="24" height="24" /> PlayMonkey</strong>
+            <span>Let a seeded monkey loose on a website in a test environment and get reproducible bugs.</span>
+          </a>
+          <a class="card-link" href="https://besessener.github.io/Archivist/">
+            <strong><img src="https://besessener.github.io/Archivist/favicon.svg" alt="" width="24" height="24" /> Archivist</strong>
+            <span>A personal, agentic AI archivist for Windows (in German).</span>
           </a>
         </div>
       </section>
@@ -135,7 +163,8 @@ sh install.sh</code></pre>
       <p>
         flakipype is released under the <a href="https://github.com/besessener/flakipype/blob/main/LICENSE">MIT License</a>.
         <a href="https://github.com/besessener/flakipype">Source on GitHub</a> ·
-        <a href="https://github.com/besessener/flakipype/releases">Releases</a>
+        <a href="https://github.com/besessener/flakipype/releases">Releases</a> ·
+        <a href="https://github.com/besessener/flakipype/issues">Issues</a>
       </p>
     </footer>
   </body>
