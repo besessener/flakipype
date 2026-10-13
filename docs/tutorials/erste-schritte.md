@@ -1,11 +1,11 @@
-# Getting started
+# Erste Schritte
 
-This walks you from installation to a healthy `flakipype doctor`. You need a
-Linux machine, an Anthropic API key (or a Claude deployment on Azure AI
-Foundry) and a GitHub account with access to the repositories you want to
-scan.
+Das hier führt dich von der Installation bis zu einem gesunden
+`flakipype doctor`. Du brauchst einen Linux-Rechner, einen Anthropic-API-Key
+(oder ein Claude-Deployment auf Azure AI Foundry) und einen GitHub-Account
+mit Zugriff auf die Repositories, die du scannen willst.
 
-## 1. Install
+## 1. Installieren
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
@@ -13,54 +13,59 @@ sh install.sh
 flakipype --version
 ```
 
-The script needs `curl`, `tar` and `git`. It uses your `uv` if you have one;
-otherwise it downloads the `uv` release it names, checks the download against
-the SHA-256 that release publishes, and installs it to `~/.local/bin`. Then
-it runs `uv tool install` for the flakipype release, which also brings a
-Python 3.12 or newer if your system has none. Nothing needs root. With `uv`
-already installed, this is the same:
+Das Skript braucht `curl`, `tar` und `git`. Es nutzt dein `uv`, wenn du eines
+hast; sonst lädt es das `uv`-Release herunter, das es nennt, prüft den
+Download gegen die SHA-256, die dieses Release veröffentlicht, und installiert
+es nach `~/.local/bin`. Dann führt es `uv tool install` für das
+flakipype-Release aus, das auch ein Python 3.12 oder neuer mitbringt, falls
+dein System keines hat. Nichts braucht root. Ist `uv` schon installiert, ist
+das hier dasselbe:
 
 ```bash
 uv tool install git+https://github.com/besessener/flakipype@v0.1.0
 ```
 
-## 2. Run the setup wizard
+## 2. Den Einrichtungsassistenten starten
 
 ```bash
 flakipype setup
 ```
 
-The wizard is a full-screen form with two sections.
+Der Assistent ist ein Vollbild-Formular mit zwei Abschnitten.
 
 **1 Model**
 
-- **Base URL**: `https://api.anthropic.com`, your Foundry endpoint
-  (`https://<resource>.services.ai.azure.com/anthropic`) or a proxy. See
-  [connect a model](../how-to/modell-verbinden.md).
-- **API key**: stored in the system keyring, never in the config file.
-- **Model**: the model name, or on Foundry the deployment name.
+- **Base URL**: `https://api.anthropic.com`, dein Foundry-Endpunkt
+  (`https://<resource>.services.ai.azure.com/anthropic`) oder ein Proxy.
+  Siehe [Modell verbinden](../how-to/modell-verbinden.md).
+- **API key**: wird im System-Schlüsselbund gespeichert, nie in der
+  Konfigurationsdatei.
+- **Model**: der Modellname, auf Foundry der Deployment-Name.
 
-Press **Test connection**. flakipype sends one tiny request (a single output
-token) and shows the model that answered, or what went wrong and what to do.
+Drück **Test connection**. flakipype sendet eine winzige Anfrage (ein
+einziges Ausgabe-Token) und zeigt das Modell, das geantwortet hat, oder was
+schiefging und was zu tun ist.
 
 **2 GitHub**
 
-- **Host**: `github.com`, or your GitHub Enterprise Server host.
-- **User or organisation to scan**.
-- **gh**: if no `gh` 2.97.0 or newer is on your `PATH`, press **Download gh**.
-  flakipype fetches the latest release for your architecture, checks its
-  SHA-256 against the release's checksum file and installs it to
-  `~/.local/share/flakipype/bin/gh`. A progress bar shows the download
-  (about 15 MB); the GitHub buttons are locked until it is done.
-- **Login**: flakipype shares your normal `gh` login. If you are not logged
-  in, press **Log in with browser** (the wizard hands the terminal to
-  `gh auth login`) or paste a token and press **Use token**.
+- **Host**: `github.com` oder dein GitHub-Enterprise-Server-Host.
+- **User or organisation to scan**: der User oder die Organisation, die
+  gescannt wird.
+- **gh**: Liegt kein `gh` 2.97.0 oder neuer in deinem `PATH`, drück
+  **Download gh**. flakipype holt das neueste Release für deine Architektur,
+  prüft seine SHA-256 gegen die Prüfsummendatei des Releases und installiert
+  es nach `~/.local/share/flakipype/bin/gh`. Ein Fortschrittsbalken zeigt den
+  Download (etwa 15 MB); die GitHub-Buttons sind gesperrt, bis er fertig ist.
+- **Login**: flakipype teilt deine normale `gh`-Anmeldung. Bist du nicht
+  angemeldet, drück **Log in with browser** (der Assistent übergibt das
+  Terminal an `gh auth login`) oder füge ein Token ein und drück
+  **Use token**.
 
-Press **Save** (or `Ctrl+S`). `Esc` cancels without saving.
+Drück **Save** (oder `Ctrl+S`). `Esc` bricht ab, ohne zu speichern.
 
-## 3. Check everything
+## 3. Alles prüfen
 
-After saving, and any time later:
+Nach dem Speichern und jederzeit später:
 
 ```bash
 flakipype doctor
@@ -74,9 +79,11 @@ flakipype doctor
  ✔  Scan target                octo-org on github.com
 ```
 
-Every failed line has an arrow with the next step. `doctor` exits with code
-1 when a check fails, so it also works in scripts.
+Jede fehlgeschlagene Zeile hat einen Pfeil mit dem nächsten Schritt. `doctor`
+beendet sich mit Code 1, wenn eine Prüfung fehlschlägt, und funktioniert so
+auch in Skripten.
 
-On a server without a terminal UI, see
-[set up a headless machine](../how-to/headless-einrichten.md); to let flakipype
-work on its own, [run it on a schedule](../how-to/zeitgesteuert-ausfuehren.md).
+Auf einem Server ohne Terminal-Oberfläche siehe
+[Einen Headless-Rechner einrichten](../how-to/headless-einrichten.md); damit
+flakipype selbstständig arbeitet,
+[führ es zeitgesteuert aus](../how-to/zeitgesteuert-ausfuehren.md).

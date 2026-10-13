@@ -1,26 +1,27 @@
-# Set up a headless machine
+# Einen Headless-Rechner einrichten
 
-Use this on servers, containers or over SSH without an interactive terminal UI.
+Das hier gilt für Server, Container oder SSH ohne interaktive
+Terminal-Oberfläche.
 
-## 1. Log in to GitHub
+## 1. Bei GitHub anmelden
 
-flakipype shares `gh`'s login. On a machine without a browser, log in with a
-token:
+flakipype teilt die Anmeldung von `gh`. Auf einem Rechner ohne Browser
+meldest du dich mit einem Token an:
 
 ```bash
 gh auth login --hostname github.com --with-token < token.txt
 ```
 
-A classic token or `gh`'s own OAuth login needs the scopes `repo`,
-`workflow` and `read:org`. A fine-grained token needs read and write access
-to Actions, Contents, Pull requests and Workflows on the repositories you
-scan; GitHub does not report these, so `doctor` shows a warning instead of a
-check mark.
+Ein klassisches Token oder die eigene OAuth-Anmeldung von `gh` braucht die
+Scopes `repo`, `workflow` und `read:org`. Ein Fine-grained Token braucht
+Lese- und Schreibzugriff auf Actions, Contents, Pull requests und Workflows
+in den Repositories, die du scannst; GitHub meldet diese nicht zurück, deshalb
+zeigt `doctor` eine Warnung statt eines Häkchens.
 
-If `gh` is not installed yet, step 2 downloads it; you can run the login
-afterwards with `~/.local/share/flakipype/bin/gh`.
+Ist `gh` noch nicht installiert, lädt Schritt 2 es herunter; die Anmeldung
+kannst du danach mit `~/.local/share/flakipype/bin/gh` ausführen.
 
-## 2. Save the configuration
+## 2. Konfiguration speichern
 
 ```bash
 printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive \
@@ -30,18 +31,23 @@ printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive \
   --api-key-stdin
 ```
 
-- Options you leave out keep their saved value (or the default).
-- The key is read from standard input so it never appears in the process
-  list or shell history. Without `--api-key-stdin` the stored key is kept.
-- On machines without a system keyring the key goes to
-  `~/.config/flakipype/secrets.json` with mode `0600`. Add
-  `--secret-store file` to keep it there even where a keyring exists, e.g.
-  for a [timer](zeitgesteuert-ausfuehren.md) that runs without a desktop session.
-- If no suitable `gh` is found, setup downloads and verifies it.
+- Optionen, die du weglässt, behalten ihren gespeicherten Wert (oder den
+  Standard).
+- Der Key wird von der Standardeingabe gelesen, damit er nie in der
+  Prozessliste oder im Shell-Verlauf auftaucht. Ohne `--api-key-stdin` bleibt
+  der gespeicherte Key erhalten.
+- Auf Rechnern ohne System-Schlüsselbund landet der Key in
+  `~/.config/flakipype/secrets.json` mit Modus `0600`. Mit
+  `--secret-store file` bleibt er dort, auch wenn es einen Schlüsselbund gibt,
+  z. B. für einen [Timer](zeitgesteuert-ausfuehren.md), der ohne
+  Desktop-Sitzung läuft.
+- Findet setup kein passendes `gh`, lädt es eines herunter und prüft es.
 
-Setup finishes with the same checks as `flakipype doctor` and exits with code
-1 if one fails, or 2 if the input was invalid or the keyring cannot be read.
+Setup endet mit denselben Prüfungen wie `flakipype doctor` und beendet sich
+mit Code 1, wenn eine fehlschlägt, oder 2, wenn die Eingabe ungültig war oder
+der Schlüsselbund nicht gelesen werden kann.
 
-## 3. Run it unattended
+## 3. Unbeaufsichtigt ausführen
 
-[Run flakipype on a schedule](zeitgesteuert-ausfuehren.md) with a systemd user timer.
+[flakipype zeitgesteuert ausführen](zeitgesteuert-ausfuehren.md) mit einem
+systemd-User-Timer.

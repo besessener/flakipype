@@ -1,9 +1,10 @@
-# Scan JSON (`flakipype scan --json`)
+# Scan-JSON (`flakipype scan --json`)
 
-The format is versioned by `schema_version`. Fields are only added within a
-version; renaming or removing one raises the version.
+Das Format ist über `schema_version` versioniert. Innerhalb einer Version
+kommen nur Felder hinzu; das Umbenennen oder Entfernen eines Feldes erhöht
+die Version.
 
-## Schema version 1
+## Schema-Version 1
 
 ```json
 {
@@ -64,61 +65,61 @@ version; renaming or removing one raises the version.
 }
 ```
 
-How the statuses are decided: [how flakiness is detected](../explanation/flake-erkennung.md).
+Wie die Status entschieden werden: [wie Instabilität erkannt wird](../explanation/flake-erkennung.md).
 
-### Top level
+### Oberste Ebene
 
-| Field | Type | Meaning |
+| Feld | Typ | Bedeutung |
 | --- | --- | --- |
-| `schema_version` | int | Format version, currently `1` |
-| `owner`, `host` | string | What was scanned |
-| `window.start`, `window.end` | UTC timestamp | Runs created in this range |
-| `complete` | bool | `false` if the scan stopped early (rate limit) |
-| `repositories` | int | Repositories scanned (no archived ones, no forks) |
-| `runs` | int | Workflow runs listed in the window |
-| `logs_not_read` | int | Failed jobs whose log was not read yet (limit or early stop) |
-| `attempts_not_read` | int | Attempts whose jobs were not read yet (`scan.max_job_reads` or early stop); later scans continue |
-| `problems` | list of strings | Repositories or items that could not be read |
-| `min_flaky_runs` | int | Runs needed for status `flaky` |
-| `jobs` | list | Jobs with proven flaky events: all `flaky` ones in ranking order, then `seen_once`, then `fixed` |
-| `recurring_errors` | list | Same error in several runs without proof; flaky or a real bug, never ranked |
+| `schema_version` | int | Formatversion, derzeit `1` |
+| `owner`, `host` | string | Was gescannt wurde |
+| `window.start`, `window.end` | UTC-Zeitstempel | Läufe, die in diesem Zeitraum erstellt wurden |
+| `complete` | bool | `false`, wenn der Scan früh beendet wurde (Rate-Limit) |
+| `repositories` | int | Gescannte Repositories (keine archivierten, keine Forks) |
+| `runs` | int | Im Zeitfenster aufgelistete Workflow-Läufe |
+| `logs_not_read` | int | Fehlgeschlagene Jobs, deren Log noch nicht gelesen wurde (Limit oder früher Abbruch) |
+| `attempts_not_read` | int | Versuche, deren Jobs noch nicht gelesen wurden (`scan.max_job_reads` oder früher Abbruch); spätere Scans machen weiter |
+| `problems` | Liste von Strings | Repositories oder Einträge, die nicht gelesen werden konnten |
+| `min_flaky_runs` | int | Nötige Läufe für den Status `flaky` |
+| `jobs` | Liste | Jobs mit nachgewiesenen Flake-Ereignissen: alle `flaky` in Rangfolge, dann `seen_once`, dann `fixed` |
+| `recurring_errors` | Liste | Derselbe Fehler in mehreren Läufen ohne Nachweis; instabil oder ein echter Fehler, nie in der Rangfolge |
 
 ### `jobs[]`
 
-| Field | Meaning |
+| Feld | Bedeutung |
 | --- | --- |
-| `finding` | The finding number, as shown by `flakipype scan`. Numbers belong to one scan: a later scan (which `investigate` runs) can number differently |
-| `reference` | 8 hex characters that name the same finding in any later scan; `flakipype investigate --finding REF` accepts it |
-| `status` | `flaky`, `seen_once` (fewer runs than `min_flaky_runs`) or `fixed` (all events before the workflow passed again for good) |
-| `repository`, `workflow.name`, `workflow.path`, `job`, `step` | Where the failures happen; `step` is the first failed step, empty if unknown |
-| `flaky_failures` | Failed jobs with proof (one run can contribute several attempts) |
-| `affected_runs` | Distinct runs with such a failure |
-| `total_runs` | Finished runs (success or failure) of this workflow in the window |
-| `flake_rate` | `affected_runs / total_runs`, 4 decimals; only meaningful for `flaky` |
-| `signals.rerun_passed` | Failures in an attempt that a later attempt of the same run fixed |
-| `signals.same_commit` | Failures of runs whose commit passed in another run of the workflow |
-| `first_seen`, `last_seen` | When the oldest and the newest such failure finished |
-| `passing_since` | First passing run of the workflow from the last affected run on; `null` if none |
-| `examples` | Up to 3 job URLs, newest first |
-| `signatures[]` | Error signatures from the logs read so far, most frequent first |
+| `finding` | Die Nummer des Befunds, wie `flakipype scan` sie zeigt. Nummern gehören zu einem Scan: Ein späterer Scan (den `investigate` ausführt) kann anders nummerieren |
+| `reference` | 8 Hex-Zeichen, die denselben Befund in jedem späteren Scan benennen; `flakipype investigate --finding REF` akzeptiert sie |
+| `status` | `flaky`, `seen_once` (weniger Läufe als `min_flaky_runs`) oder `fixed` (alle Ereignisse liegen vor dem Zeitpunkt, ab dem der Workflow dauerhaft wieder bestand) |
+| `repository`, `workflow.name`, `workflow.path`, `job`, `step` | Wo die Fehlschläge passieren; `step` ist der erste fehlgeschlagene Schritt, leer, wenn unbekannt |
+| `flaky_failures` | Fehlgeschlagene Jobs mit Nachweis (ein Lauf kann mehrere Versuche beitragen) |
+| `affected_runs` | Verschiedene Läufe mit einem solchen Fehlschlag |
+| `total_runs` | Abgeschlossene Läufe (Erfolg oder Fehlschlag) dieses Workflows im Zeitfenster |
+| `flake_rate` | `affected_runs / total_runs`, 4 Nachkommastellen; nur für `flaky` aussagekräftig |
+| `signals.rerun_passed` | Fehlschläge in einem Versuch, den ein späterer Versuch desselben Laufs behoben hat |
+| `signals.same_commit` | Fehlschläge von Läufen, deren Commit in einem anderen Lauf des Workflows bestanden hat |
+| `first_seen`, `last_seen` | Wann der älteste und der neueste solche Fehlschlag abgeschlossen wurde |
+| `passing_since` | Erster bestandener Lauf des Workflows ab dem letzten betroffenen Lauf; `null`, wenn es keinen gibt |
+| `examples` | Bis zu 3 Job-URLs, neueste zuerst |
+| `signatures[]` | Fehlersignaturen aus den bisher gelesenen Logs, häufigste zuerst |
 
 ### `recurring_errors[]`
 
-| Field | Meaning |
+| Feld | Bedeutung |
 | --- | --- |
-| `finding` | The finding number; numbering continues after `jobs[]` |
-| `reference` | As in `jobs[]` |
-| `repository`, `workflow`, `job`, `step` | As in `jobs[]` |
-| `runs` | Runs that ended with this error |
-| `branches` | Branches those runs were on |
-| `first_seen`, `last_seen`, `examples` | As in `jobs[]` |
-| `signature` | `category`, `message`, `fingerprint` of the shared error |
+| `finding` | Die Nummer des Befunds; die Nummerierung setzt nach `jobs[]` fort |
+| `reference` | Wie in `jobs[]` |
+| `repository`, `workflow`, `job`, `step` | Wie in `jobs[]` |
+| `runs` | Läufe, die mit diesem Fehler endeten |
+| `branches` | Branches, auf denen diese Läufe waren |
+| `first_seen`, `last_seen`, `examples` | Wie in `jobs[]` |
+| `signature` | `category`, `message`, `fingerprint` des gemeinsamen Fehlers |
 
 ### `signatures[]`
 
-| Field | Meaning |
+| Feld | Bedeutung |
 | --- | --- |
-| `category` | `runner`, `resources`, `rate limit`, `network`, `dependencies`, `timeout`, `assertion`, `exit code` or `other` |
-| `message` | Normalised error text: stand-alone numbers become `N`, durations `<duration>`, hashes `<hex>`, times `<time>`, temp paths `<tmp>` |
-| `fingerprint` | 12 hex characters; equal fingerprints mean the same error |
-| `occurrences` | Failures of this job with this signature |
+| `category` | `runner`, `resources`, `rate limit`, `network`, `dependencies`, `timeout`, `assertion`, `exit code` oder `other` |
+| `message` | Normalisierter Fehlertext: Alleinstehende Zahlen werden zu `N`, Dauern zu `<duration>`, Hashes zu `<hex>`, Uhrzeiten zu `<time>`, temporäre Pfade zu `<tmp>` |
+| `fingerprint` | 12 Hex-Zeichen; gleiche Fingerprints bedeuten denselben Fehler |
+| `occurrences` | Fehlschläge dieses Jobs mit dieser Signatur |

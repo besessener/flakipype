@@ -1,19 +1,21 @@
-# Find flaky pipelines
+# Instabile Pipelines finden
 
-`flakipype scan` reads the GitHub Actions runs of the configured user or
-organisation, finds jobs that failed and passed on the same code, and ranks
-the ones where that keeps happening. It needs a finished `flakipype setup`;
-the model is not used.
+`flakipype scan` liest die GitHub-Actions-Läufe des konfigurierten Users oder
+der Organisation, findet Jobs, die auf demselben Code fehlgeschlagen und
+durchgelaufen sind, und sortiert die nach oben, bei denen das immer wieder
+passiert. Dafür braucht es ein abgeschlossenes `flakipype setup`; das Modell
+wird nicht genutzt.
 
-## Scan
+## Scannen
 
 ```bash
 flakipype scan
 ```
 
-While it runs, a progress bar shows the stage: listing repositories, reading
-workflow runs, inspecting failed attempts and reading the logs of failed
-jobs. Then it prints a ranking, most affected runs first:
+Während er läuft, zeigt ein Fortschrittsbalken die Phase: Repositories
+auflisten, Workflow-Läufe lesen, fehlgeschlagene Versuche prüfen und die Logs
+fehlgeschlagener Jobs lesen. Dann gibt er eine Rangliste aus, die am stärksten
+betroffenen Läufe zuerst:
 
 ```text
 ╭─ flakipype scan · octo-org on github.com ─────────────────────────────────────────╮
@@ -27,29 +29,35 @@ jobs. Then it prints a ranking, most affected runs first:
      latest failure ↗
 ```
 
-- **Runs**: runs with a flaky failure of this job / finished runs of its workflow.
-- **Signal**: `↻ passed on rerun` (strong) or `≡ same commit passed` (medium);
-  see [how flakiness is detected](../explanation/flake-erkennung.md).
-- **Signatures**: the error behind the failures, grouped across runs, with a
-  category such as timeout, network or dependencies.
-- **latest failure ↗** is a terminal hyperlink to the job on GitHub.
+- **Runs**: Läufe mit einem instabilen Fehlschlag dieses Jobs / fertige Läufe
+  seines Workflows.
+- **Signal**: `↻ passed on rerun` (stark) oder `≡ same commit passed`
+  (mittel); siehe
+  [wie Flakiness erkannt wird](../explanation/flake-erkennung.md).
+- **Signaturen**: der Fehler hinter den Fehlschlägen, über Läufe hinweg
+  gruppiert, mit einer Kategorie wie Timeout, Netzwerk oder Abhängigkeiten.
+- **latest failure ↗** ist ein Terminal-Hyperlink zum Job auf GitHub.
 
-Below the ranking, up to three more sections:
+Unter der Rangliste folgen bis zu drei weitere Abschnitte:
 
-- **Seen once**: proven events in a single run only. Could be an outage or a
-  fix outside the code followed by a rerun; not counted as flaky.
-- **Fixed**: failed in several runs, then the workflow kept passing. A real
-  error that was fixed; not flaky.
-- **Recurring errors**: the same error in several runs (any branch) without
-  proof. Could be a flaky test nobody reran, or a real bug caught again.
+- **Seen once**: bewiesene Ereignisse in nur einem Lauf. Kann ein Ausfall
+  sein oder eine Korrektur außerhalb des Codes mit anschließendem Rerun; zählt
+  nicht als instabil.
+- **Fixed**: in mehreren Läufen fehlgeschlagen, danach lief der Workflow
+  durchgehend durch. Ein echter Fehler, der behoben wurde; nicht instabil.
+- **Recurring errors**: derselbe Fehler in mehreren Läufen (beliebiger
+  Branch) ohne Beweis. Kann ein instabiler Test sein, den niemand erneut
+  ausgeführt hat, oder ein echter Fehler, der wieder auftritt.
 
-Why these are kept apart: [how flakiness is detected](../explanation/flake-erkennung.md).
+Warum diese getrennt bleiben:
+[wie Flakiness erkannt wird](../explanation/flake-erkennung.md).
 
-Every entry has a number (**#**), counted across all sections. Use it to let
-the agent explain a finding: `flakipype investigate --finding 3`; see
-[investigate findings](befunde-untersuchen.md).
+Jeder Eintrag hat eine Nummer (**#**), über alle Abschnitte hinweg gezählt.
+Mit ihr lässt du den Agenten einen Befund erklären:
+`flakipype investigate --finding 3`; siehe
+[Befunde untersuchen](befunde-untersuchen.md).
 
-## Narrow or widen it
+## Eingrenzen oder erweitern
 
 ```bash
 flakipype scan --days 7                 # look back 7 days instead of 30
@@ -59,43 +67,48 @@ flakipype scan --max-logs 200           # read more logs this time
 flakipype scan --min-runs 3             # need 3 runs before calling a job flaky
 ```
 
-Defaults come from the `[scan]` section of the
-[configuration](../reference/konfiguration.md).
+Die Standardwerte kommen aus dem Abschnitt `[scan]` der
+[Konfiguration](../reference/konfiguration.md).
 
-## Use it in scripts
+## In Skripten nutzen
 
 ```bash
 flakipype scan --json > flaky.json
 jq '.jobs[] | select(.status == "flaky") | .repository + " " + .job' flaky.json
 ```
 
-The JSON goes to standard output, progress to standard error. The format is
-described in the [scan JSON reference](../reference/scan-json.md).
+Das JSON geht auf die Standardausgabe, der Fortschritt auf die
+Standardfehlerausgabe. Das Format beschreibt die
+[Referenz zum Scan-JSON](../reference/scan-json.md).
 
-| Exit code | Meaning |
+| Exit-Code | Bedeutung |
 | --- | --- |
-| 0 | Scan finished (whether or not flaky jobs were found) |
-| 1 | Stopped early (rate limit), or GitHub could not be read at all |
-| 2 | Not set up: no configuration, owner or `gh` |
+| 0 | Scan fertig (egal, ob instabile Jobs gefunden wurden) |
+| 1 | Vorzeitig abgebrochen (Rate Limit), oder GitHub ließ sich gar nicht lesen |
+| 2 | Nicht eingerichtet: keine Konfiguration, kein Owner oder kein `gh` |
 
-## Repeated scans are fast
+## Wiederholte Scans sind schnell
 
-Jobs of finished attempts and the results of read logs never change, so
-flakipype caches them in `~/.local/share/flakipype/cache.sqlite3`. A second
-scan only lists the runs again. Jobs are read for at most `max_job_reads`
-attempts and logs at most `max_log_downloads` per scan, newest flaky
-failures first; the next scan continues where the last one stopped, and the
-*Notes* say how many are left. Deleting the cache file only costs time for
-scan data, but it also deletes the chat and run sessions, pending
-verifications and the audit log behind the daily limits of `flakipype run`;
-see [configuration](../reference/konfiguration.md).
+Jobs abgeschlossener Versuche und die Ergebnisse gelesener Logs ändern sich
+nie, deshalb speichert flakipype sie in
+`~/.local/share/flakipype/cache.sqlite3`. Ein zweiter Scan listet nur die
+Läufe erneut auf. Jobs werden je Scan für höchstens `max_job_reads` Versuche
+gelesen und Logs höchstens `max_log_downloads`-mal heruntergeladen, die
+neuesten instabilen Fehlschläge zuerst; der nächste Scan macht dort weiter,
+wo der letzte aufgehört hat, und die *Notes* sagen, wie viele noch fehlen.
+Die Cache-Datei zu löschen kostet für Scan-Daten nur Zeit, löscht aber auch
+die Chat- und Lauf-Sitzungen, ausstehende Verifikationen und das
+Audit-Protokoll hinter den Tageslimits von `flakipype run`; siehe
+[Konfiguration](../reference/konfiguration.md).
 
-## When something goes wrong
+## Wenn etwas schiefgeht
 
-- **A repository could not be read** (for example Actions disabled): it is
-  listed under *Notes*, the rest of the scan continues.
-- **Rate limit**: the scan stops, shows what it found so far and exits with 1.
-  Run it again later; cached work is not repeated.
-- **Login no longer valid**: run `flakipype setup` and log in again.
-- **Logs expired**: GitHub keeps logs for 90 days by default. Such failures
-  are still counted, just without a signature.
+- **Ein Repository ließ sich nicht lesen** (zum Beispiel Actions
+  abgeschaltet): Es steht unter *Notes*, der Rest des Scans läuft weiter.
+- **Rate Limit**: Der Scan stoppt, zeigt, was er bis dahin gefunden hat, und
+  beendet sich mit 1. Starte ihn später erneut; bereits zwischengespeicherte
+  Arbeit wird nicht wiederholt.
+- **Anmeldung nicht mehr gültig**: Führe `flakipype setup` aus und melde dich
+  erneut an.
+- **Logs abgelaufen**: GitHub bewahrt Logs standardmäßig 90 Tage auf. Solche
+  Fehlschläge werden weiterhin gezählt, nur ohne Signatur.

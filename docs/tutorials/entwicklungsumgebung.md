@@ -1,18 +1,19 @@
-# Development setup
+# Entwicklungsumgebung aufsetzen
 
-This takes you from a fresh clone to every quality gate green. It works on
-Linux, macOS and Windows; flakipype itself only targets Linux, so on Windows
-the Linux check runs through [act](../how-to/ci-lokal-ausfuehren.md).
+Das hier führt dich von einem frischen Klon bis dahin, dass jede
+Qualitätsprüfung grün ist. Es funktioniert unter Linux, macOS und Windows;
+flakipype selbst ist nur für Linux gebaut, deshalb läuft die Linux-Prüfung
+unter Windows über [act](../how-to/ci-lokal-ausfuehren.md).
 
-## 1. Install the tools
+## 1. Werkzeuge installieren
 
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) – installs
-  the right Python and all dev tools.
-- [prek](https://prek.j178.dev/) (or `pre-commit`) – runs the git hooks.
-- Docker and [act](https://nektosact.com/) – only needed for the Linux CI job
-  on a non-Linux machine.
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) – installiert
+  das passende Python und alle Entwicklungswerkzeuge.
+- [prek](https://prek.j178.dev/) (oder `pre-commit`) – führt die Git-Hooks aus.
+- Docker und [act](https://nektosact.com/) – nur für den Linux-CI-Job auf
+  einem Rechner ohne Linux nötig.
 
-## 2. Create the environment
+## 2. Umgebung anlegen
 
 ```bash
 git clone https://github.com/besessener/flakipype.git
@@ -21,10 +22,10 @@ uv sync
 prek install
 ```
 
-`uv sync` creates `.venv` with Python 3.12 (pinned in `.python-version`) and
-installs flakipype in editable mode together with the dev group.
+`uv sync` legt `.venv` mit Python 3.12 an (festgelegt in `.python-version`)
+und installiert flakipype im Editable-Modus zusammen mit der Dev-Gruppe.
 
-## 3. Run the gates
+## 3. Prüfungen ausführen
 
 ```bash
 uv run poe check          # format, lint, types, architecture, deps, dead code, tests + coverage
@@ -32,10 +33,10 @@ prek run --all-files      # gitleaks, zizmor, file hygiene
 act pull_request -j test  # Linux CI job in Docker (Windows/macOS)
 ```
 
-All three green means you are ready to open a pull request. What each gate
-checks: [quality gates](../reference/qualitaetssicherung.md).
+Sind alle drei grün, kannst du einen Pull Request öffnen. Was jede Prüfung
+abdeckt: [Qualitätsprüfungen](../reference/qualitaetssicherung.md).
 
-## 4. Try the CLI
+## 4. Die CLI ausprobieren
 
 ```bash
 uv run flakipype --version

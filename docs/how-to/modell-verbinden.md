@@ -1,44 +1,47 @@
-# Connect a model
+# Ein Modell verbinden
 
-flakipype speaks the Anthropic Messages API only. It needs three values: a
-base URL, an API key and a model. Which client it uses follows from the URL.
+flakipype spricht nur die Anthropic Messages API. Es braucht drei Werte: eine
+Base URL, einen API-Key und ein Modell. Welchen Client es nutzt, ergibt sich
+aus der URL.
 
 ## Anthropic API
 
-| Field | Value |
+| Feld | Wert |
 | --- | --- |
-| Base URL | `https://api.anthropic.com` (default) |
-| API key | a key from the Anthropic Console |
-| Model | a model name, e.g. `claude-sonnet-4-5` |
+| Base URL | `https://api.anthropic.com` (Standard) |
+| API key | ein Key aus der Anthropic Console |
+| Model | ein Modellname, z. B. `claude-sonnet-4-5` |
 
 ## Azure AI Foundry
 
-| Field | Value |
+| Feld | Wert |
 | --- | --- |
 | Base URL | `https://<resource>.services.ai.azure.com/anthropic` |
-| API key | the key of your Foundry resource |
-| Model | the **deployment name** of your Claude deployment |
+| API key | der Key deiner Foundry-Ressource |
+| Model | der **Deployment-Name** deines Claude-Deployments |
 
-A host ending in `.services.ai.azure.com` switches flakipype to the SDK's
-Foundry client automatically.
+Ein Host, der auf `.services.ai.azure.com` endet, schaltet flakipype
+automatisch auf den Foundry-Client des SDK um.
 
-## A proxy or gateway
+## Ein Proxy oder Gateway
 
-Any HTTPS URL that forwards the Anthropic Messages API works. Plain `http://`
-is only accepted for `localhost`, `127.0.0.1` and `::1`, for a local gateway.
+Jede HTTPS-URL, die die Anthropic Messages API weiterleitet, funktioniert.
+Einfaches `http://` wird nur für `localhost`, `127.0.0.1` und `::1`
+akzeptiert, für ein lokales Gateway.
 
-## Test it
+## Testen
 
-In the wizard press **Test connection**, or run `flakipype doctor`. The test
-sends one request with a single output token. Typical results:
+Drück im Assistenten **Test connection** oder führe `flakipype doctor` aus.
+Der Test sendet eine Anfrage mit einem einzigen Ausgabe-Token. Typische
+Ergebnisse:
 
-| Result | Meaning |
+| Ergebnis | Bedeutung |
 | --- | --- |
-| authentication | The key is wrong or belongs to another endpoint. |
-| permission | The key may not use this model. |
-| not found | Wrong model or deployment name, or wrong base URL path. |
-| bad request | The endpoint rejected the request, usually the model name. |
-| rate limited | Quota or rate limit reached; try again later. |
-| unreachable / timeout | URL, proxy, DNS or firewall. |
-| unexpected answer | Something answered, but not like the Messages API: often a sign-in page or the wrong base URL path. |
-| environment | `ANTHROPIC_FOUNDRY_RESOURCE` is set and conflicts with the base URL; unset it. |
+| authentication | Der Key ist falsch oder gehört zu einem anderen Endpunkt. |
+| permission | Der Key darf dieses Modell nicht nutzen. |
+| not found | Falscher Modell- oder Deployment-Name oder falscher Pfad in der Base URL. |
+| bad request | Der Endpunkt hat die Anfrage abgelehnt, meist wegen des Modellnamens. |
+| rate limited | Kontingent oder Rate Limit erreicht; versuch es später erneut. |
+| unreachable / timeout | URL, Proxy, DNS oder Firewall. |
+| unexpected answer | Etwas hat geantwortet, aber nicht wie die Messages API: oft eine Anmeldeseite oder ein falscher Pfad in der Base URL. |
+| environment | `ANTHROPIC_FOUNDRY_RESOURCE` ist gesetzt und widerspricht der Base URL; entferne die Variable. |

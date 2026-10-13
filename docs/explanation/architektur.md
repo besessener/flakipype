@@ -1,9 +1,9 @@
-# Architecture
+# Architektur
 
-flakipype is a single Python package (`src/flakipype/`) split into
-sub-packages by responsibility. import-linter (`uv run poe arch`) enforces the
-layers; a higher layer may import a lower one, never the reverse, and packages
-on the same layer do not import each other.
+flakipype ist ein einzelnes Python-Paket (`src/flakipype/`), aufgeteilt in
+Unterpakete nach Zuständigkeit. import-linter (`uv run poe arch`) erzwingt
+die Schichten: Eine höhere Schicht darf eine niedrigere importieren, nie
+umgekehrt, und Pakete auf derselben Schicht importieren einander nicht.
 
 ```text
 cli                               Typer entry point, composition root (cli/wiring.py)
@@ -22,125 +22,144 @@ cli                               Typer entry point, composition root (cli/wirin
                          └─ config  settings and secret storage
 ```
 
-## Packages
+## Pakete
 
-- **`flaky`** is pure. It receives runs, jobs and log text as values and
-  returns flaky failures, rankings and error signatures. No network,
-  filesystem, `gh`, database or clock — the current time is a parameter. That
-  keeps the core logic deterministic and easy to test exhaustively. How it
-  decides: [flake detection](flake-erkennung.md).
-- **`config`** reads and writes settings under `$XDG_CONFIG_HOME/flakipype`
-  and keeps secrets in the system keyring, falling back to a `0600` file on
-  headless machines.
-- **`github`** is the only place that runs `gh`. If no suitable `gh` is on
-  `PATH`, it downloads the release tarball for the machine's architecture,
-  verifies its SHA-256 against the release checksums and installs it under
-  `$XDG_DATA_HOME/flakipype/bin`. Supports github.com and GitHub Enterprise
-  Server (`GH_HOST`). flakipype shares the user's `gh` login rather than
-  keeping its own token. Release and version logic (`release.py`) is pure;
-  the download goes through `httpx2`, the same HTTP stack the `anthropic` SDK
-  uses. `actions.py` reads repositories, runs, jobs and logs with `gh api`,
-  validates the answers with pydantic models (`payloads.py`) and turns `gh`
-  errors into typed exceptions (rate limit, authentication, others).
-  `runs.py` (`RunControl`) reruns, dispatches and cancels runs and reads
-  their state. `pulls.py` (`PullRequests`) reads push permission, the file
-  tree and exact file bytes, creates a branch only where none exists,
-  commits through GraphQL `createCommitOnBranch` (signed by GitHub, with the
-  expected head commit), opens pull requests always as drafts, and comments.
-- **`llm`** wraps the official `anthropic` SDK with a configurable base URL,
-  so the same code talks to api.anthropic.com and Azure AI Foundry (chosen by
-  the host name). Connection problems are categorised
-  (`ConnectionProblem`), each with a next step for the user.
-- **`setup`** is the application service behind the wizard, headless setup
-  and `doctor`: it validates input, stores settings and the key, finds or
-  installs `gh` and checks the login. Its collaborators (secret store, `gh`
-  provider, model check) are passed in, so tests swap them for fakes.
-- **`scan`** is the application service behind `flakipype scan` (and later
-  the agent's scan tools): it lists runs, fetches jobs for attempts that can
-  be flaky and for the last attempt of failed runs, reads a limited number of
-  logs, and returns the verdicts (flaky, seen once, fixed) plus recurring
-  errors without proof. A rate
-  limit stops it early with a report of what was found; other errors skip the
-  item and are listed. Progress is reported as events, so the CLI and the TUI
-  can show it their own way.
-- **`store`** owns the SQLite cache under `$XDG_DATA_HOME/flakipype`: jobs of
-  finished attempts and log results, which never change. Schema migrations
-  are append-only (`PRAGMA user_version`) and run in one transaction under
-  the write lock, so a killed or concurrent open never leaves half a
-  schema; cached signatures carry the
-  signature algorithm's version and are recomputed when it changes. Run lists
-  are   not cached: listing them is cheap and they change constantly. Chat and run
-  sessions are stored there too, as one JSON document per session, and so is
-  the append-only audit log of action requests (`audit.py`). The database
-  uses SQLite's WAL journal, so the chat and a run can share it; `lock.py`
-  keeps a second `flakipype run` out through SQLite's own file lock, which
-  the OS releases if a run dies.
-- **`agent`** investigates one finding: an investigator tool loop over the
-  Messages API, a deterministic citation check, a reviewer pass and at most one
-  revision ([the agent](agent.md)). Every tool declares a risk level and runs
-  only through the policy gate ([safety model](sicherheitsmodell.md)); everything
-  sent to the model is masked first. It knows nothing of the scan service:
-  it gets a `Finding` and the scan's `Evidence` as values. The chat
-  orchestrator (`orchestrator.py`) is a tool loop too; its tools call a
-  `Workspace` protocol that `investigate` implements. For fixes it has the
-  fixer (`fixer.py`) with edit tools (`fix_tools.py`) on an in-memory
-  working copy of one commit (`workcopy.py`), and `fix_pipeline.py` runs
-  fixer and reviewer with at most one revision ([fixes](korrekturen.md)). Investigator
-  and fixer share one tool loop (`tool_loop.py`): call, run tools, check the
-  submission, correct at most twice; each brings its submit tool and checks.
-- **`actions`** prepares the chat's reruns, dispatches and cancels for the
-  policy gate: it checks the targets against the current scan's findings,
-  reads the workflow file to check `workflow_dispatch`, enforces the session
-  budget, records every request in the audit log, and watches started runs
-  (polling, finish notes, session state). Starting a confirmed rerun or
-  dispatch on GitHub lives in `starting.py`. Its GitHub collaborators are
-  protocols that `github` implements ([actions](aktionen.md)).
-- **`fix`** turns a reviewed verdict into a draft pull request for the
-  chat: it refuses findings that cannot be fixed, checks push access and
-  open flakipype pull requests, runs the fixer through a function it is
-  given, checks the diff in code (`checks.py`), prepares the one
-  confirmation with the diff, delivers branch, commit and draft pull request
-  (`delivery.py`), verifies the fix branch and comments the result
-  (`verify.py`), and keeps proposals, opened pull requests and the pull
-  request budget as session state ([fixes](korrekturen.md)).
-- **`investigate`** runs a scan, numbers the findings, picks the requested
-  ones, runs investigations in parallel under one run budget and stores
-  completed verdicts in the cache until a finding has a newer failure. For
-  the chat it holds the current scan and its verdicts (`workspace.py`) and
-  handles slash commands and sessions (`chat.py`), independent of Textual.
-- **`tui`** renders the setup wizard and the chat with Textual. It talks to
-  `setup` and `investigate` and never runs `gh` or the model itself; slow
-  work runs in worker threads so the UI stays responsive. The chat window
-  answers the gate's confirmation requests with a dialog (with the model's
-  text and the diff for a fix), shows the mode in its status line, and polls
-  started runs and fix verifications in the background.
-- **`unattended`** (on the layer of `tui` and independent of it) runs
-  `flakipype run` without a window: scan, investigate, fix and verify in
-  fixed steps on the chat's workspace, every action through the
-  `HeadlessGate`, with daily limits across runs (`limits.py`), the pull
-  requests carried over from the last run (`carry.py`) and a report the CLI
-  prints ([unattended runs](unbeaufsichtigte-laeufe.md)). The systemd units are rendered
-  and installed by `setup` (`daemon.py`).
-- **`cli`** wires everything together: `cli/wiring.py` is the only place that
-  reads flakipype's configuration from the environment and builds real
-  collaborators. `GhCli` passes the process environment (with `PATH`
-  filtered) on to `gh`. `cli/readiness.py` holds what a command needs before
-  it starts, and `cli/errors.py` the exit codes and error lines every headless
-  command prints on stderr. Headless commands bypass `tui` but not `setup` or
-  `agent`.
+- **`flaky`** ist rein. Es bekommt Läufe, Jobs und Log-Text als Werte und
+  liefert instabile Fehlschläge, Rangfolgen und Fehlersignaturen. Kein
+  Netzwerk, kein Dateisystem, kein `gh`, keine Datenbank, keine Uhr – die
+  aktuelle Zeit ist ein Parameter. So bleibt die Kernlogik deterministisch
+  und lässt sich leicht erschöpfend testen. Wie es entscheidet:
+  [Flake-Erkennung](flake-erkennung.md).
+- **`config`** liest und schreibt Einstellungen unter
+  `$XDG_CONFIG_HOME/flakipype` und hält Secrets im Schlüsselbund des Systems;
+  auf Rechnern ohne Oberfläche weicht es auf eine `0600`-Datei aus.
+- **`github`** ist die einzige Stelle, die `gh` ausführt. Liegt kein
+  passendes `gh` im `PATH`, lädt es das Release-Tarball für die Architektur
+  des Rechners herunter, prüft dessen SHA-256 gegen die Release-Prüfsummen
+  und installiert es unter `$XDG_DATA_HOME/flakipype/bin`. Unterstützt
+  github.com und GitHub Enterprise Server (`GH_HOST`). flakipype nutzt die
+  `gh`-Anmeldung des Benutzers mit, statt ein eigenes Token zu halten. Die
+  Release- und Versionslogik (`release.py`) ist rein; der Download läuft über
+  `httpx2`, denselben HTTP-Stack, den das `anthropic`-SDK nutzt.
+  `actions.py` liest Repositories, Läufe, Jobs und Logs mit `gh api`,
+  validiert die Antworten mit pydantic-Modellen (`payloads.py`) und macht aus
+  `gh`-Fehlern typisierte Exceptions (Rate Limit, Authentifizierung, andere).
+  `runs.py` (`RunControl`) führt Läufe erneut aus, startet sie per Dispatch,
+  bricht sie ab und liest ihren Zustand. `pulls.py` (`PullRequests`) liest
+  die Push-Berechtigung, den Dateibaum und exakte Dateibytes, legt einen
+  Branch nur dort an, wo keiner existiert, committet über GraphQL
+  `createCommitOnBranch` (von GitHub signiert, mit dem erwarteten
+  Head-Commit), öffnet Pull Requests immer als Entwurf und kommentiert.
+- **`llm`** kapselt das offizielle `anthropic`-SDK mit konfigurierbarer
+  Basis-URL, sodass derselbe Code mit api.anthropic.com und Azure AI Foundry
+  spricht (gewählt am Hostnamen). Verbindungsprobleme werden kategorisiert
+  (`ConnectionProblem`), jedes mit einem nächsten Schritt für den Benutzer.
+- **`setup`** ist der Anwendungsdienst hinter dem Assistenten, dem
+  Headless-Setup und `doctor`: Er validiert Eingaben, speichert Einstellungen
+  und den Schlüssel, findet oder installiert `gh` und prüft die Anmeldung.
+  Seine Kollaborateure (Secret-Speicher, `gh`-Provider, Modellprüfung) werden
+  hineingereicht, sodass Tests sie durch Fakes ersetzen.
+- **`scan`** ist der Anwendungsdienst hinter `flakipype scan` (und später den
+  Scan-Werkzeugen des Agenten): Er listet Läufe, holt Jobs für Versuche, die
+  instabil sein können, und für den letzten Versuch fehlgeschlagener Läufe,
+  liest eine begrenzte Zahl von Logs und liefert die Einordnungen (instabil,
+  einmal gesehen, behoben) plus wiederkehrende Fehler ohne Nachweis. Ein
+  Rate Limit stoppt ihn vorzeitig mit einem Bericht dessen, was gefunden
+  wurde; andere Fehler überspringen den Eintrag und werden aufgelistet. Der
+  Fortschritt wird als Ereignisse gemeldet, sodass CLI und TUI ihn auf ihre
+  eigene Weise zeigen können.
+- **`store`** verwaltet den SQLite-Cache unter `$XDG_DATA_HOME/flakipype`:
+  Jobs abgeschlossener Versuche und Log-Ergebnisse, die sich nie ändern.
+  Schema-Migrationen werden nur angehängt (`PRAGMA user_version`) und laufen
+  in einer Transaktion unter der Schreibsperre, sodass ein abgebrochenes oder
+  gleichzeitiges Öffnen nie ein halbes Schema hinterlässt;
+  zwischengespeicherte Signaturen tragen die Version des
+  Signaturalgorithmus und werden neu berechnet, wenn er sich ändert. Lauflisten werden nicht zwischengespeichert:
+  Sie abzurufen ist günstig, und sie ändern sich ständig. Chat- und
+  Laufsitzungen werden ebenfalls dort gespeichert, als ein JSON-Dokument pro
+  Sitzung, ebenso das nur ergänzte Audit-Log der Aktionsanfragen
+  (`audit.py`). Die Datenbank nutzt das WAL-Journal von SQLite, sodass Chat
+  und Lauf sie gemeinsam nutzen können; `lock.py` hält einen zweiten
+  `flakipype run` über die eigene Dateisperre von SQLite fern, die das
+  Betriebssystem freigibt, wenn ein Lauf abstürzt.
+- **`agent`** untersucht einen Befund: eine Werkzeugschleife des
+  Investigators über die Messages API, eine deterministische Zitatprüfung,
+  einen Durchgang des Reviewers und höchstens eine Überarbeitung
+  ([Der Agent](agent.md)). Jedes Werkzeug deklariert eine Risikostufe und
+  läuft nur durch das Policy-Gate ([Sicherheitsmodell](sicherheitsmodell.md));
+  alles, was an das Modell geht, wird zuerst maskiert. Er weiß nichts vom
+  Scan-Dienst: Er bekommt ein `Finding` und die `Evidence` des Scans als
+  Werte. Der Chat-Orchestrator (`orchestrator.py`) ist ebenfalls eine
+  Werkzeugschleife; seine Werkzeuge rufen ein `Workspace`-Protokoll auf, das
+  `investigate` implementiert. Für Korrekturen hat er den Fixer
+  (`fixer.py`) mit Bearbeitungswerkzeugen (`fix_tools.py`) auf einer
+  Arbeitskopie eines Commits im Speicher (`workcopy.py`), und
+  `fix_pipeline.py` lässt Fixer und Reviewer mit höchstens einer
+  Überarbeitung laufen ([Korrekturen](korrekturen.md)). Investigator und
+  Fixer teilen sich eine Werkzeugschleife (`tool_loop.py`): aufrufen,
+  Werkzeuge ausführen, die Abgabe prüfen, höchstens zweimal korrigieren;
+  jeder bringt sein eigenes Abgabewerkzeug und seine Prüfungen mit.
+- **`actions`** bereitet die Reruns, Dispatches und Abbrüche des Chats für
+  das Policy-Gate vor: Es prüft die Ziele gegen die Befunde des aktuellen
+  Scans, liest die Workflow-Datei, um `workflow_dispatch` zu prüfen,
+  erzwingt das Sitzungsbudget, zeichnet jede Anfrage im Audit-Log auf und
+  beobachtet gestartete Läufe (Polling, Hinweise bei Abschluss,
+  Sitzungszustand). Einen bestätigten Rerun oder Dispatch auf GitHub zu
+  starten, liegt in `starting.py`. Seine GitHub-Kollaborateure sind
+  Protokolle, die `github` implementiert ([Aktionen](aktionen.md)).
+- **`fix`** macht aus einem geprüften Urteil einen Draft-PR für den Chat: Es
+  lehnt Befunde ab, die sich nicht korrigieren lassen, prüft den
+  Push-Zugriff und offene Pull Requests von flakipype, lässt den Fixer über
+  eine übergebene Funktion laufen, prüft den Diff im Code (`checks.py`),
+  bereitet die eine Bestätigung mit dem Diff vor, liefert Branch, Commit und
+  Draft-PR aus (`delivery.py`), prüft den Korrektur-Branch und kommentiert
+  das Ergebnis (`verify.py`) und hält Vorschläge, geöffnete Pull Requests und
+  das Pull-Request-Budget als Sitzungszustand ([Korrekturen](korrekturen.md)).
+- **`investigate`** führt einen Scan aus, nummeriert die Befunde, wählt die
+  angeforderten aus, lässt Untersuchungen parallel unter einem gemeinsamen
+  Laufbudget laufen und speichert abgeschlossene Urteile im Cache, bis ein
+  Befund einen neueren Fehlschlag hat. Für den Chat hält es den aktuellen
+  Scan und seine Urteile (`workspace.py`) und verarbeitet Slash-Befehle und
+  Sitzungen (`chat.py`), unabhängig von Textual.
+- **`tui`** stellt den Einrichtungsassistenten und den Chat mit Textual dar.
+  Es spricht mit `setup` und `investigate` und führt `gh` oder das Modell nie
+  selbst aus; langsame Arbeit läuft in Worker-Threads, damit die Oberfläche
+  reaktionsfähig bleibt. Das Chat-Fenster beantwortet die
+  Bestätigungsanfragen des Gates mit einem Dialog (mit dem Text des Modells
+  und dem Diff bei einer Korrektur), zeigt den Modus in seiner Statuszeile
+  und fragt gestartete Läufe und Korrekturprüfungen im Hintergrund ab.
+- **`unattended`** (auf der Schicht von `tui` und unabhängig davon) führt
+  `flakipype run` ohne Fenster aus: Scannen, Untersuchen, Korrigieren und
+  Prüfen in festen Schritten auf dem Workspace des Chats, jede Aktion über
+  das `HeadlessGate`, mit Tageslimits über Läufe hinweg (`limits.py`), den
+  aus dem letzten Lauf übernommenen Pull Requests (`carry.py`) und einem
+  Bericht, den die CLI ausgibt
+  ([unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)). Die systemd-Units
+  erzeugt und installiert `setup` (`daemon.py`).
+- **`cli`** verbindet alles: `cli/wiring.py` ist die einzige Stelle, die die
+  Konfiguration von flakipype aus der Umgebung liest und echte
+  Kollaborateure baut. `GhCli` reicht die Prozessumgebung (mit gefiltertem
+  `PATH`) an `gh` weiter. `cli/readiness.py` enthält, was ein Befehl braucht,
+  bevor er startet, und `cli/errors.py` die Exit-Codes und Fehlerzeilen, die
+  jeder Headless-Befehl auf stderr ausgibt. Headless-Befehle umgehen `tui`,
+  aber nicht `setup` oder `agent`.
 
-## Data flow
+## Datenfluss
 
-1. **Scan**: `github` lists repositories and workflow runs in the configured
-   window (default 30 days); `flaky` picks the attempts worth a look, whose
-   jobs and logs `github` then fetches and `store` caches.
-2. **Facts**: `flaky` keeps failures with proof (passed on rerun, same commit
-   passed), decides flaky / seen once / fixed, lists recurring errors without
-   proof, and extracts error signatures. Deterministic and free of model cost.
-3. **Judgement**: the agent investigates findings with tools (prepared log
-   excerpts, run history, commit diffs, files), marked as data, and returns
-   verdicts with cited evidence that a reviewer pass checks.
-4. **Fix** ([fixes](korrekturen.md)): the agent edits an in-memory copy of the
-   repository, code checks the diff, a new branch with one signed commit and
-   a draft PR are created through GitHub's API, and reruns of the fix branch
-   are compared with the default branch's flake rate.
+1. **Scan**: `github` listet Repositories und Workflow-Läufe im
+   konfigurierten Zeitfenster (Standard 30 Tage); `flaky` wählt die Versuche
+   aus, die einen Blick wert sind, deren Jobs und Logs `github` dann holt und
+   `store` zwischenspeichert.
+2. **Fakten**: `flaky` behält Fehlschläge mit Nachweis (beim Rerun
+   bestanden, derselbe Commit bestanden), entscheidet instabil / einmal
+   gesehen / behoben, listet wiederkehrende Fehler ohne Nachweis auf und
+   extrahiert Fehlersignaturen. Deterministisch und ohne Modellkosten.
+3. **Urteil**: Der Agent untersucht Befunde mit Werkzeugen (aufbereitete
+   Log-Auszüge, Laufverlauf, Commit-Diffs, Dateien), als Daten markiert, und
+   liefert Urteile mit zitierten Belegen, die ein Durchgang des Reviewers
+   prüft.
+4. **Korrektur** ([Korrekturen](korrekturen.md)): Der Agent bearbeitet eine
+   Kopie des Repositorys im Speicher, Code prüft den Diff, ein neuer Branch
+   mit einem signierten Commit und ein Draft-PR werden über die GitHub-API
+   angelegt, und Reruns des Korrektur-Branches werden mit der Flake-Rate des
+   Standardbranches verglichen.

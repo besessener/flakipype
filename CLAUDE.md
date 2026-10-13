@@ -9,7 +9,7 @@ this repository. Read this file before writing anything.
 user or organisation, finds flaky GitHub Actions pipelines, explains them and
 fixes them through pull requests. It has a rich terminal chat (Textual) with
 slash commands and headless commands for cron and a systemd timer. Full docs:
-[docs/README.md](docs/README.md) (English, Diátaxis).
+[docs/README.md](docs/README.md) (German, Diátaxis).
 
 - **Entry point**: Typer CLI, `src/flakipype/cli.py`.
 - **Packages** under `src/flakipype/`: `tui`, `agent`, `llm`, `github`,
@@ -111,7 +111,9 @@ and say so; never work around it quietly. Reasoning lives in
 - **Fail fast; measure, don't assume.** Errors are typed exceptions or
   results with a category, surfaced to the user with a next step; never
   swallowed. Performance and coverage are numbers a tool prints.
-- **Language:** English everywhere — UI, prompts, docs, identifiers, logs.
+- **Language:** the website, the READMEs, `CONTRIBUTING.md` and `docs/` are
+  German and address the reader as „du“; everything else is English — UI,
+  prompts, identifiers, comments, logs and this file.
 - **Tests:** assert behaviour, not implementation. GitHub is faked with a
   `gh` stub replaying recorded JSON, the model with a local fake Anthropic
   server; TUI changes get a Textual Pilot test (and a snapshot for new views).

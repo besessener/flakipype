@@ -1,25 +1,26 @@
-# Run CI locally with act
+# CI lokal mit act ausführen
 
-flakipype targets Linux only. When you develop on Windows (or macOS), the
-native `uv run poe check` is the fast loop, and [act](https://nektosact.com/)
-runs the real `.github/workflows/ci.yml` jobs in Linux containers as the Linux
-gate. There is no separate dev container: the workflow is the single source
-of truth for what Linux has to pass.
+flakipype ist nur für Linux gebaut. Entwickelst du unter Windows (oder macOS),
+ist das native `uv run poe check` die schnelle Schleife, und
+[act](https://nektosact.com/) führt die echten Jobs aus
+`.github/workflows/ci.yml` als Linux-Prüfung in Linux-Containern aus. Einen
+eigenen Dev-Container gibt es nicht: Der Workflow ist die einzige Quelle
+dafür, was unter Linux bestehen muss.
 
-## Prerequisites
+## Voraussetzungen
 
-- A running Docker engine with Linux containers (Docker Desktop, Rancher
-  Desktop, or Docker in WSL).
-- act. On Windows without winget, download `act_Windows_x86_64.zip` from the
-  [act releases](https://github.com/nektos/act/releases), verify it against
-  the release's `checksums.txt`, and unpack `act.exe` into a directory on your
-  `PATH`.
+- Eine laufende Docker-Engine mit Linux-Containern (Docker Desktop, Rancher
+  Desktop oder Docker in WSL).
+- act. Unter Windows ohne winget lädst du `act_Windows_x86_64.zip` aus den
+  [act-Releases](https://github.com/nektos/act/releases) herunter, prüfst es
+  gegen die `checksums.txt` des Releases und entpackst `act.exe` in ein
+  Verzeichnis in deinem `PATH`.
 
-The repository's `.actrc` selects the `catthehacker/ubuntu:act-latest` runner
-image (close to GitHub's `ubuntu-latest`) and `linux/amd64`. The first run
-pulls the image (several GB).
+Die `.actrc` des Repositorys wählt das Runner-Image
+`catthehacker/ubuntu:act-latest` (nah an GitHubs `ubuntu-latest`) und
+`linux/amd64`. Der erste Lauf lädt das Image (mehrere GB).
 
-## Run the jobs
+## Jobs ausführen
 
 ```bash
 act pull_request -j test       # quality gates on Python 3.12 and 3.14
@@ -28,14 +29,16 @@ act pull_request -j smoke      # install.sh and a first start on four distributi
 act -l                         # list all jobs
 ```
 
-Uncommitted changes are included: act copies the working tree. New files must
-at least be staged (`git add`) to be picked up reliably.
+Nicht committete Änderungen sind dabei: act kopiert das Arbeitsverzeichnis.
+Neue Dateien müssen mindestens gestagt sein (`git add`), damit sie
+zuverlässig mitkommen.
 
-## Update TUI snapshots on Linux
+## TUI-Snapshots unter Linux aktualisieren
 
-Snapshots of the Textual screens must be generated on Linux, where CI
-compares them. In WSL, copy the working tree to `/tmp`, update the
-snapshots there and copy only the `__snapshots__` folder back:
+Snapshots der Textual-Bildschirme müssen unter Linux erzeugt werden, wo die
+CI sie vergleicht. Kopiere in WSL das Arbeitsverzeichnis nach `/tmp`,
+aktualisiere die Snapshots dort und kopiere nur den Ordner `__snapshots__`
+zurück:
 
 ```bash
 rm -rf /tmp/fpcopy && mkdir /tmp/fpcopy
@@ -45,16 +48,17 @@ UV_PROJECT_ENVIRONMENT=/tmp/fp-venv uv run --python 3.12 pytest tests/tui -p no:
 cp -r /tmp/fpcopy/tests/tui/__snapshots__/. /mnt/c/path/to/flakipype/tests/tui/__snapshots__/
 ```
 
-Run these lines inside a WSL shell, not through PowerShell: PowerShell
-expands `$…` itself, and an empty variable in a `cp -r` source path copies
-the wrong directory.
+Führe diese Zeilen in einer WSL-Shell aus, nicht über PowerShell: PowerShell
+expandiert `$…` selbst, und eine leere Variable im Quellpfad von `cp -r`
+kopiert das falsche Verzeichnis.
 
-## Limits
+## Grenzen
 
-- act is an emulation. GitHub-hosted CI on the pull request stays the
-  authority.
-- CodeQL (`codeql.yml`) needs GitHub's code scanning backend and does not run
-  under act.
-- Pages (`pages.yml`) deploys to GitHub Pages and does not run under act;
-  preview `site/` locally instead ([maintain the website](webseite-pflegen.md)).
-- `uv` may print "Failed to hardlink files" inside act; that is harmless.
+- act ist eine Emulation. Maßgeblich bleibt die von GitHub gehostete CI am
+  Pull Request.
+- CodeQL (`codeql.yml`) braucht GitHubs Code-Scanning-Backend und läuft nicht
+  unter act.
+- Pages (`pages.yml`) veröffentlicht auf GitHub Pages und läuft nicht unter
+  act; sieh dir `site/` stattdessen lokal an
+  ([Webseite pflegen](webseite-pflegen.md)).
+- `uv` gibt in act eventuell „Failed to hardlink files“ aus; das ist harmlos.

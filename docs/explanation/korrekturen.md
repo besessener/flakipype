@@ -1,25 +1,27 @@
-# Fixes: from verdict to draft pull request
+# Korrekturen: vom Urteil zum Draft-Pull-Request
 
-> Status: implemented.
+> Stand: umgesetzt.
 
-An investigation explains a flaky finding and suggests a fix. flakipype lets the
-agent write that fix, shows you the diff, pushes it as a new branch, opens a
-draft pull request and reruns the fix branch to check whether it holds.
-Merging stays your decision.
+Eine Untersuchung erklärt einen instabilen Befund und schlägt eine Korrektur
+vor. flakipype lässt den Agenten diese Korrektur schreiben, zeigt dir den
+Diff, pusht ihn als neuen Branch, öffnet einen Draft-Pull-Request und führt
+den Korrektur-Branch erneut aus, um zu prüfen, ob sie hält. Das Mergen bleibt
+deine Entscheidung.
 
-## Scope
+## Umfang
 
-- **In**: `/fix N` and a `fix` tool in the chat; a fixer agent that edits
-  an in-memory copy of the repository; deterministic checks of the diff; one
-  confirmation for push, pull request and verification; a branch plus one
-  signed commit through GitHub's API; a draft pull request; verification
-  reruns with a result comment; `/mode ask|auto` in the chat.
-- **Out**: headless fixes, which `flakipype run` makes instead (see
-  [unattended runs](unbeaufsichtigte-laeufe.md)); forks (a fix needs
-  push access to the repository); deleting files; updating a pull request
-  after it was opened; merging, ever.
+- **Enthalten**: `/fix N` und ein Werkzeug `fix` im Chat; ein Fixer-Agent,
+  der eine Kopie des Repositorys im Speicher bearbeitet; deterministische
+  Prüfungen des Diffs; eine Bestätigung für Push, Pull Request und
+  Verifikation; ein Branch plus ein signierter Commit über die API von
+  GitHub; ein Draft-Pull-Request; Verifikations-Reruns mit einem
+  Ergebniskommentar; `/mode ask|auto` im Chat.
+- **Nicht enthalten**: headless Korrekturen, die stattdessen `flakipype run`
+  macht (siehe [unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)); Forks
+  (eine Korrektur braucht Push-Zugriff auf das Repository); Dateien löschen;
+  einen Pull Request aktualisieren, nachdem er geöffnet wurde; Mergen, niemals.
 
-## The flow
+## Der Ablauf
 
 ```text
 /fix 2 ──▶ verdict? ──no──▶ investigate first
@@ -40,95 +42,102 @@ Merging stays your decision.
    branch + commit ──▶ draft pull request ──▶ verification runs ──▶ PR comment
 ```
 
-1. **Which findings.** `/fix N` needs a reviewed verdict classified
-   `flaky_test`, `flaky_infrastructure` or `configuration`. Without a verdict
-   it investigates first. `real_bug`, `fixed`, `unclear` and unreviewed
-   verdicts are refused with the reason. If an open flakipype pull request
-   for the finding exists, `/fix` links it instead of opening a second one;
-   it is found by a hidden marker (a hash of the finding) on the first line
-   of the pull request body, on a branch under `flakipype/` in the
-   repository itself; a fork's pull request never counts.
-2. **Push access.** flakipype reads the repository's `permissions.push`
-   before the fixer starts. Without it, `/fix` stops and says so. No forks.
-3. **Fixer.** A fresh agent per fix, like an investigator: the finding, the
-   verdict with its evidence (as data), and the tools below. It ends with
-   `submit_fix`.
-4. **Checks** in code, then a **reviewer** pass on the diff (below). A fix
-   that fails a check goes back to the fixer with the reasons at most twice.
-   A reviewer `revise` sends it back once; `reject` ends the fix without a
-   pull request.
-5. **Delivery** after confirmation: branch, commit, draft pull request,
-   verification. Each step reports its result; a failure stops the next step
-   and says what exists already.
+1. **Welche Befunde.** `/fix N` braucht ein geprüftes Urteil mit der
+   Einstufung `flaky_test`, `flaky_infrastructure` oder `configuration`.
+   Ohne Urteil wird zuerst untersucht. `real_bug`, `fixed`, `unclear` und
+   ungeprüfte Urteile werden mit Begründung abgelehnt. Gibt es für den Befund
+   schon einen offenen Pull Request von flakipype, verlinkt `/fix` diesen,
+   statt einen zweiten zu öffnen; gefunden wird er über eine versteckte
+   Markierung (einen Hash des Befunds) in der ersten Zeile der
+   Pull-Request-Beschreibung, auf einem Branch unter `flakipype/` im
+   Repository selbst; der Pull Request eines Forks zählt nie.
+2. **Push-Zugriff.** flakipype liest `permissions.push` des Repositorys,
+   bevor der Fixer startet. Fehlt er, bricht `/fix` ab und sagt das. Keine
+   Forks.
+3. **Fixer.** Ein frischer Agent pro Korrektur, wie ein Investigator: der
+   Befund, das Urteil mit seinen Belegen (als Daten) und die Werkzeuge
+   unten. Er endet mit `submit_fix`.
+4. **Prüfungen** im Code, dann ein Durchgang des **Reviewers** über den Diff
+   (unten). Eine Korrektur, die eine Prüfung nicht besteht, geht höchstens
+   zweimal mit den Gründen an den Fixer zurück. Ein `revise` des Reviewers
+   schickt sie einmal zurück; `reject` beendet die Korrektur ohne Pull
+   Request.
+5. **Auslieferung** nach der Bestätigung: Branch, Commit, Draft-Pull-Request,
+   Verifikation. Jeder Schritt meldet sein Ergebnis; ein Fehler stoppt den
+   nächsten Schritt und sagt, was bereits existiert.
 
-## The fixer's tools
+## Die Werkzeuge des Fixers
 
-The fixer works on an in-memory working copy pinned to the head commit of
-the default branch when the fix starts. Nothing is cloned or written to
-disk, no repository code runs on your machine, and no git hooks exist to
-run.
+Der Fixer arbeitet auf einer Arbeitskopie im Speicher, festgelegt auf den
+Head-Commit des Standardbranchs zu Beginn der Korrektur. Nichts wird geklont
+oder auf die Festplatte geschrieben, kein Code des Repositorys läuft auf
+deinem Rechner, und es gibt keine Git-Hooks, die laufen könnten.
 
-| Tool | Does | Risk |
+| Werkzeug | Macht | Risiko |
 | --- | --- | --- |
-| `list_files(path)` | Files and directories under a path at the pinned commit (git trees API) | `read` |
-| `read_file(path, from_line, to_line)` | The working copy's version: edited if edited, else from GitHub | `read` |
-| `replace_in_file(path, old, new)` | Replaces one exact, unique occurrence; an ambiguous or missing `old` is an error | `read` |
-| `write_file(path, content)` | Creates a new file or replaces a whole file | `read` |
-| `show_diff()` | Unified diff of the working copy against the pinned commit | `read` |
-| `submit_fix(title, explanation)` | Ends the fix; runs after the response's other calls, and goes back to the fixer if one of them failed | – |
+| `list_files(path)` | Dateien und Verzeichnisse unter einem Pfad im festgelegten Commit (Git-Trees-API) | `read` |
+| `read_file(path, from_line, to_line)` | Die Version der Arbeitskopie: bearbeitet, wenn bearbeitet, sonst von GitHub | `read` |
+| `replace_in_file(path, old, new)` | Ersetzt ein exaktes, eindeutiges Vorkommen; ein mehrdeutiges oder fehlendes `old` ist ein Fehler | `read` |
+| `write_file(path, content)` | Legt eine neue Datei an oder ersetzt eine ganze Datei | `read` |
+| `show_diff()` | Unified Diff der Arbeitskopie gegen den festgelegten Commit | `read` |
+| `submit_fix(title, explanation)` | Beendet die Korrektur; läuft nach den anderen Aufrufen der Antwort und geht an den Fixer zurück, wenn einer davon fehlgeschlagen ist | – |
 
-Plus the investigator's tools (`failure_excerpt`, `log_range`,
-`run_history`, `compare_commits`, `file_diff`, `workflow_file`). Edits are
-risk `read`: they change only memory. The one `critical` action is the push
-(below), confirmed once with the full diff. Only UTF-8 text files can be
-edited, and only inside the finding's repository; paths are normalised and
-`.git/`, absolute or `..` paths and paths with control characters are
-refused. The fixer reads files with secrets masked, so an edit that would
-write a `[masked: …]` placeholder back into a file is refused. Symbolic
-links and submodules cannot be edited (a commit would replace the link, not
-its target). A rewrite keeps the file's final newline; the diff compares
-line endings too, so a changed final newline or CRLF shows up in it.
+Dazu kommen die Werkzeuge des Investigators (`failure_excerpt`, `log_range`,
+`run_history`, `compare_commits`, `file_diff`, `workflow_file`). Änderungen
+haben das Risiko `read`: Sie ändern nur den Speicher. Die einzige
+`critical`-Aktion ist der Push (unten), einmal bestätigt mit dem vollständigen
+Diff. Nur UTF-8-Textdateien lassen sich bearbeiten, und nur im Repository des
+Befunds; Pfade werden normalisiert, und `.git/`, absolute oder `..`-Pfade und
+Pfade mit Steuerzeichen werden abgelehnt. Der Fixer liest Dateien mit
+maskierten Secrets, deshalb wird eine Änderung abgelehnt, die einen
+Platzhalter `[masked: …]` zurück in eine Datei schreiben würde. Symbolische
+Links und Submodule lassen sich nicht bearbeiten (ein Commit würde den Link
+ersetzen, nicht sein Ziel). Ein Neuschreiben behält den abschließenden
+Zeilenumbruch der Datei; der Diff vergleicht auch Zeilenenden, sodass ein
+geänderter abschließender Zeilenumbruch oder CRLF darin auftaucht.
 
-## Checks in code
+## Prüfungen im Code
 
-Deterministic, before the reviewer and before any dialog:
+Deterministisch, vor dem Reviewer und vor jedem Dialog:
 
-| Check | Rule |
+| Prüfung | Regel |
 | --- | --- |
-| Not empty | At least one changed line |
-| Size | At most 10 files and 400 changed lines (`fix.max_files`, `fix.max_changed_lines`) |
-| Still parses | A changed `.yml`, `.yaml`, `.json` or `.toml` file that parsed before (or is new) still parses. YAML may hold several documents and application tags (`!Sub`, `!Ref`); JSON may start with a byte order mark. A file that did not parse before (JSONC with comments, for example) is not checked. Workflow files, the top-level `.yml` and `.yaml` files in `.github/workflows/`, still hold one document with `on` and `jobs` |
-| Nothing masked | No file gains a `[masked: …]` placeholder; masked lines hide real content |
-| Hides failures | Adds `continue-on-error: true`, `if: always()`, a test skip or focus marker (`pytest.skip(`, `pytest.xfail(`, `pytest.mark.skip`/`xfail` with or without `@`, `@unittest.skip`, `.skipTest(`, `SkipTest`, `.skip(` and `.only(` on a test (`test.`, `it.`, `describe.`, `context.`, `suite.`, `fixture.`, `this.`), `xit(`, `@Disabled`, `@Ignore`, `t.Skip`) that the file did not already hold as often, or removes more test declarations (including `async def test_` and modifier forms such as `test.serial(`) than it adds |
-| Reaches out | Adds a `secrets.` reference, `github.token`, an environment dump (`env`, `printenv`), `curl`, `wget`, `nc`, `ncat`, or an `http(s)://` URL other than localhost (the host must be exactly `localhost`, `127.0.0.1` or `[::1]`; any URL with `user@` counts) |
-| Touches `.github/` | Changes workflows or composite actions under `.github/` |
+| Nicht leer | Mindestens eine geänderte Zeile |
+| Größe | Höchstens 10 Dateien und 400 geänderte Zeilen (`fix.max_files`, `fix.max_changed_lines`) |
+| Noch parsebar | Eine geänderte `.yml`-, `.yaml`-, `.json`- oder `.toml`-Datei, die vorher parsebar war (oder neu ist), ist weiterhin parsebar. YAML darf mehrere Dokumente und Anwendungs-Tags (`!Sub`, `!Ref`) enthalten; JSON darf mit einer Byte Order Mark beginnen. Eine Datei, die vorher nicht parsebar war (zum Beispiel JSONC mit Kommentaren), wird nicht geprüft. Workflow-Dateien, die `.yml`- und `.yaml`-Dateien direkt in `.github/workflows/`, enthalten weiterhin ein Dokument mit `on` und `jobs` |
+| Nichts maskiert | Keine Datei bekommt einen Platzhalter `[masked: …]`; maskierte Zeilen verbergen echten Inhalt |
+| Verbirgt Fehlschläge | Fügt `continue-on-error: true`, `if: always()` oder eine Skip- oder Fokus-Markierung für Tests hinzu (`pytest.skip(`, `pytest.xfail(`, `pytest.mark.skip`/`xfail` mit oder ohne `@`, `@unittest.skip`, `.skipTest(`, `SkipTest`, `.skip(` und `.only(` an einem Test (`test.`, `it.`, `describe.`, `context.`, `suite.`, `fixture.`, `this.`), `xit(`, `@Disabled`, `@Ignore`, `t.Skip`), die die Datei nicht schon genauso oft enthielt, oder entfernt mehr Testdeklarationen (einschließlich `async def test_` und Modifikatorformen wie `test.serial(`), als sie hinzufügt |
+| Greift nach außen | Fügt eine Referenz `secrets.`, `github.token`, einen Umgebungs-Dump (`env`, `printenv`), `curl`, `wget`, `nc`, `ncat` oder eine `http(s)://`-URL außer localhost hinzu (der Host muss genau `localhost`, `127.0.0.1` oder `[::1]` sein; jede URL mit `user@` zählt) |
+| Berührt `.github/` | Ändert Workflows oder Composite Actions unter `.github/` |
 
-The first four are errors: the fix goes back to the fixer. The last three
-are **warnings**: in `ask` mode they are shown at the top of the
-confirmation and in the pull request; in `auto` mode a fix with any of them
-is not pushed (see [modes](#modes)).
+Die ersten vier sind Fehler: Die Korrektur geht an den Fixer zurück. Die
+letzten drei sind **Warnungen**: Im Modus `ask` erscheinen sie oben in der
+Bestätigung und im Pull Request; im Modus `auto` wird eine Korrektur mit
+einer davon nicht gepusht (siehe [Modi](#modi)).
 
 ## Reviewer
 
-A second model call with the finding, the verdict, the diff and the fixer's
-explanation, not the fixer's whole conversation. It answers `accept`,
-`revise` (with concrete points; the fixer continues once) or `reject` (with
-a reason), and checks:
+Ein zweiter Modellaufruf mit dem Befund, dem Urteil, dem Diff und der
+Erklärung des Fixers, nicht mit dem ganzen Gespräch des Fixers. Er antwortet
+`accept`, `revise` (mit konkreten Punkten; der Fixer macht einmal weiter)
+oder `reject` (mit Begründung) und prüft:
 
-- The diff addresses the cause the verdict names, not a symptom.
-- It does not hide the failure: no blanket retries, no longer timeouts
-  without a reason in the evidence, no skipped tests.
-- No change unrelated to the cause.
+- Der Diff behebt die Ursache, die das Urteil nennt, nicht ein Symptom.
+- Er verbirgt den Fehlschlag nicht: keine pauschalen Wiederholungen, keine
+  längeren Timeouts ohne Grund in den Belegen, keine übersprungenen Tests.
+- Keine Änderung, die nichts mit der Ursache zu tun hat.
 
-A fix the reviewer does not accept is not pushed. The chat shows the diff
-and the reason, so you can still ask for changes.
+Eine Korrektur, die der Reviewer nicht akzeptiert, wird nicht gepusht. Der
+Chat zeigt den Diff und die Begründung, sodass du trotzdem Änderungen
+anfordern kannst.
 
-## Confirmation
+## Bestätigung
 
-The push is one `critical` action. The dialog shows facts from code at the
-top, the model's text clearly labelled, and the full diff in a scrollable
-pane. Nothing in it is read as markup, and control characters are shown as
-escapes such as `\x1b`, so no content can hide or rewrite a line:
+Der Push ist eine einzige `critical`-Aktion. Der Dialog zeigt oben Fakten aus
+dem Code, den Text des Modells deutlich gekennzeichnet und den vollständigen
+Diff in einem scrollbaren Bereich. Nichts darin wird als Markup gelesen, und
+Steuerzeichen werden als Escapes wie `\x1b` angezeigt, sodass kein Inhalt
+eine Zeile verbergen oder umschreiben kann:
 
 ```text
 ╭──────────────────────────────────────────────────────────────────────────╮
@@ -152,49 +161,54 @@ escapes such as `\x1b`, so no content can hide or rewrite a line:
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
-**Don't push** has the focus. The model's text and the diff are shown as
-plain text, never as markup. A declined fix stays in the session (also
-across `/resume`): `/fix N` shows it again without running the fixer,
-`/fix N --fresh` starts over, and you can ask the model for changes, which it
-passes to the `fix` tool as `instructions`; the fixer then starts from the
-earlier diff at the same pinned commit. Everything else
-follows the gate of [actions](aktionen.md): no second write request after a
-decline in the same turn, and an audit log entry for every request.
+**Don't push** hat den Fokus. Der Text des Modells und der Diff erscheinen
+als reiner Text, nie als Markup. Eine abgelehnte Korrektur bleibt in der
+Sitzung (auch über `/resume` hinweg): `/fix N` zeigt sie erneut, ohne den
+Fixer laufen zu lassen, `/fix N --fresh` fängt neu an, und du kannst das
+Modell um Änderungen bitten, die es dem Werkzeug `fix` als `instructions`
+übergibt; der Fixer startet dann vom früheren Diff am selben festgelegten
+Commit. Alles andere folgt dem Gate wie bei den [Aktionen](aktionen.md): keine
+zweite Schreibanfrage nach einer Ablehnung im selben Zug und ein Eintrag im
+Audit-Log für jede Anfrage.
 
-## Delivery
+## Auslieferung
 
-All through `gh api`, against the configured owner and host only. Right
-before the branch, flakipype looks for an open flakipype pull request for the
-finding once more, since the chat or a run may have opened one while the
-fixer worked; if there is one, nothing is pushed and the message links it.
-Both looks read every page of the repository's open pull requests, so an
-older flakipype pull request behind many newer ones is still found.
+Alles über `gh api`, nur gegen den konfigurierten Owner und Host. Direkt vor
+dem Branch sucht flakipype noch einmal nach einem offenen Pull Request von
+flakipype für den Befund, da der Chat oder ein Lauf einen geöffnet haben
+kann, während der Fixer arbeitete; gibt es einen, wird nichts gepusht, und
+die Meldung verlinkt ihn. Beide Suchen lesen jede Seite der offenen Pull
+Requests des Repositorys, sodass auch ein älterer Pull Request von flakipype
+hinter vielen neueren gefunden wird.
 
-1. **Branch.** `POST /repos/{o}/{r}/git/refs` creates
-   `refs/heads/flakipype/fix-<workflow>-<hash>` at the pinned commit (the
-   hash is of the diff). The name always starts with `flakipype/`. Creating
-   a ref that exists fails, so flakipype tries the suffixes `-2` to `-5` and
-   then stops; it only ever commits to a branch it has just created, so no
-   existing branch, the default branch included, is written.
-2. **Commit.** GraphQL `createCommitOnBranch` adds the changed files as one
-   commit, with `expectedHeadOid` set to the pinned commit, so it can only
-   append to the new branch and never overwrite anything. GitHub signs the
-   commit, so it shows as *Verified* and passes branch rules that require
-   signed commits. Message: the title, the explanation, and a
-   `Generated-by: flakipype` trailer.
-3. **Pull request.** `POST /repos/{o}/{r}/pulls` with `draft: true`, always,
-   in both modes. The body is a code template (below).
-4. **Verification** starts (below).
+1. **Branch.** `POST /repos/{o}/{r}/git/refs` legt
+   `refs/heads/flakipype/fix-<workflow>-<hash>` am festgelegten Commit an
+   (der Hash ist der des Diffs). Der Name beginnt immer mit `flakipype/`.
+   Eine existierende Ref anzulegen schlägt fehl, also probiert flakipype die
+   Suffixe `-2` bis `-5` und hört dann auf; es committet immer nur auf einen
+   Branch, den es gerade selbst angelegt hat, sodass kein existierender
+   Branch beschrieben wird, auch nicht der Standardbranch.
+2. **Commit.** GraphQL `createCommitOnBranch` fügt die geänderten Dateien als
+   einen Commit hinzu, mit `expectedHeadOid` auf dem festgelegten Commit,
+   sodass er nur an den neuen Branch anhängen und nie etwas überschreiben
+   kann. GitHub signiert den Commit, er erscheint also als *Verified* und
+   besteht Branch-Regeln, die signierte Commits verlangen. Nachricht: der
+   Titel, die Erklärung und ein Trailer `Generated-by: flakipype`.
+3. **Pull Request.** `POST /repos/{o}/{r}/pulls` mit `draft: true`, immer, in
+   beiden Modi. Die Beschreibung ist eine Vorlage im Code (unten).
+4. **Verifikation** startet (unten).
 
-If a step fails, the following steps do not run and the message says what
-exists: for example "Branch flakipype/fix-e2e-7c41d0 created; the commit
-failed: … The branch was left as it is; flakipype never deletes branches."
-If verification cannot start (for example the workflow file cannot be
-read), the pull request stays open and the outcome says why.
+Schlägt ein Schritt fehl, laufen die folgenden Schritte nicht, und die
+Meldung sagt, was existiert: zum Beispiel „Branch flakipype/fix-e2e-7c41d0
+created; the commit failed: … The branch was left as it is; flakipype never
+deletes branches.“ Kann die Verifikation nicht starten (zum Beispiel weil
+die Workflow-Datei nicht lesbar ist), bleibt der Pull Request offen, und das
+Ergebnis sagt, warum.
 
-The pull request body. The code-written warnings come before any model
-text, and the model's text is a block quote with HTML comments escaped, so
-it cannot hide the sections code writes:
+Die Beschreibung des Pull Requests: Die vom Code geschriebenen Warnungen
+stehen vor jedem Text des Modells, und der Text des Modells ist ein Zitat, in
+dem HTML-Kommentare escapt sind, sodass er die Abschnitte, die der Code
+schreibt, nicht verbergen kann:
 
 ```markdown
 <!-- flakipype:finding=3f9c2a71b0d4 -->
@@ -222,37 +236,44 @@ Pending: flakipype reruns E2E on this branch 3 times.
 Opened by flakipype as a draft. Merging is up to you.
 ```
 
-## Verification
+## Verifikation
 
-The fix branch has to show it passes where the default branch flakes:
+Der Korrektur-Branch muss zeigen, dass er dort durchläuft, wo der
+Standardbranch instabil ist:
 
-1. If the workflow (as on the fix commit) runs on `push` or
-   `pull_request`, opening the pull request starts its own run: flakipype
-   waits for a run of the finding's workflow on the fix commit. If no run
-   shows up within 10 minutes (branch, type or path filters can exclude the
-   fix branch or the draft pull request), flakipype dispatches the workflow
-   when it allows `workflow_dispatch` without required inputs; otherwise the
-   result is "cannot verify automatically". A lookup that GitHub keeps
-   refusing (other than its rate limit) ends the wait the same way after 10
-   minutes, with GitHub's error as the reason. If the workflow runs on neither
-   `push` nor `pull_request` but can be dispatched, flakipype dispatches it on
-   the fix branch right away. Otherwise the result is "cannot verify
-   automatically" right away, with the reason (no `workflow_dispatch`, or the
-   inputs it requires).
-2. When the run finishes, it reruns the whole run until the workflow has
-   run `fix.verify_runs` times (default 3) on the fix commit. The runs show
-   in the Runs list as in [actions](aktionen.md) and count against the same
-   action budget; the push confirmation already covers them. Watching a run
-   flakipype did not start (the pull request's own) costs no budget.
-3. A run counts as passed only when the finding's job ran and passed in it.
-   A successful run that skipped the job (an `if:` on draft pull requests,
-   for example) stops verification, since a rerun replays the same event.
-   Verification also stops early when a run ends neither passed nor failed
-   (for example cancelled), does not finish within `actions.watch_hours`,
-   GitHub refuses a rerun, or the action budget is used up; the comment says
-   after how many runs and why. A rate limit only pauses it until the next
-   poll.
-4. The result is posted as a comment on the pull request, written by code:
+1. Läuft der Workflow (wie im Korrektur-Commit) bei `push` oder
+   `pull_request`, startet das Öffnen des Pull Requests einen eigenen Lauf:
+   flakipype wartet auf einen Lauf des Workflows des Befunds auf dem
+   Korrektur-Commit. Erscheint innerhalb von 10 Minuten kein Lauf (Branch-,
+   Typ- oder Pfadfilter können den Korrektur-Branch oder den
+   Draft-Pull-Request ausschließen), startet flakipype den Workflow per
+   Dispatch, wenn er `workflow_dispatch` ohne Pflichteingaben erlaubt;
+   andernfalls lautet das Ergebnis „cannot verify automatically“. Eine
+   Abfrage, die GitHub wiederholt ablehnt (außer wegen seines Rate-Limits),
+   beendet das Warten nach 10 Minuten auf dieselbe Weise, mit dem Fehler von
+   GitHub als Grund. Läuft der Workflow weder bei `push` noch bei
+   `pull_request`, lässt sich aber per Dispatch starten, startet flakipype
+   ihn sofort auf dem Korrektur-Branch. Andernfalls lautet das Ergebnis sofort
+   „cannot verify automatically“, mit dem Grund (kein `workflow_dispatch` oder
+   die Eingaben, die er verlangt).
+2. Ist der Lauf fertig, führt flakipype den ganzen Lauf erneut aus, bis der
+   Workflow `fix.verify_runs`-mal (Standard 3) auf dem Korrektur-Commit
+   gelaufen ist. Die Läufe erscheinen in der Liste **Runs** wie bei den
+   [Aktionen](aktionen.md) und zählen gegen dasselbe Aktionsbudget; die
+   Push-Bestätigung deckt sie bereits ab. Einen Lauf zu beobachten, den
+   flakipype nicht gestartet hat (den eigenen des Pull Requests), kostet kein
+   Budget.
+3. Ein Lauf zählt nur als durchgelaufen, wenn der Job des Befunds darin lief
+   und durchlief. Ein erfolgreicher Lauf, der den Job übersprungen hat (zum
+   Beispiel durch ein `if:` bei Draft-Pull-Requests), stoppt die
+   Verifikation, da ein Rerun dasselbe Ereignis wiederholt. Die Verifikation
+   stoppt auch vorzeitig, wenn ein Lauf weder durchgelaufen noch
+   fehlgeschlagen endet (zum Beispiel abgebrochen), nicht innerhalb von
+   `actions.watch_hours` fertig wird, GitHub einen Rerun ablehnt oder das
+   Aktionsbudget aufgebraucht ist; der Kommentar sagt, nach wie vielen Läufen
+   und warum. Ein Rate-Limit pausiert sie nur bis zur nächsten Abfrage.
+4. Das Ergebnis wird als Kommentar am Pull Request veröffentlicht, vom Code
+   geschrieben:
 
 ```text
 flakipype verification: E2E passed 3 of 3 runs on this branch.
@@ -260,95 +281,103 @@ On main, E2E failed 4 of 31 runs (13%) in the scanned window.
 Three passes in a row would also happen by chance 66% of the time without a fix, so this is a first signal, not proof.
 ```
 
-Each failed run gets a line: a failure of the finding's job with the
-finding's error signature says the fix did not hold, one with another
-signature is reported with its message, a failure in another job names that
-job, and an unreadable log says so. The rate is the finding's job failing
-at least once per run on the default branch in the scan, or on all branches
-when the scan has no runs on the default branch; like the scan, it counts
-only runs that passed or failed, not cancelled or skipped ones. The chance shown is
-`(1 − rate)^runs`, only when every run passed. Verification is polled while
-the chat is open, and its note appears in the chat; a resumed session
-continues it. A pull request an [unattended run](unbeaufsichtigte-laeufe.md) opened is
-polled by that run and, if it is not done in time, by the next one.
+Jeder fehlgeschlagene Lauf bekommt eine Zeile: Ein Fehlschlag des Jobs des
+Befunds mit der Fehlersignatur des Befunds sagt, dass die Korrektur nicht
+gehalten hat, einer mit einer anderen Signatur wird mit seiner Meldung
+berichtet, ein Fehlschlag in einem anderen Job nennt diesen Job, und ein
+unlesbares Log wird als solches gemeldet. Die Rate ist der Anteil der Läufe,
+in denen der Job des Befunds im Scan auf dem Standardbranch mindestens einmal
+fehlschlug, oder auf allen Branches, wenn der Scan keine Läufe auf dem
+Standardbranch hat; wie der Scan zählt sie nur Läufe, die durchliefen oder
+fehlschlugen, keine abgebrochenen oder übersprungenen. Die angezeigte Chance
+ist `(1 − rate)^runs`, nur wenn jeder Lauf durchlief. Die Verifikation wird
+abgefragt, solange der Chat offen ist, und ihr Hinweis erscheint im Chat; eine
+fortgesetzte Sitzung setzt sie fort. Einen Pull Request, den ein
+[unbeaufsichtigter Lauf](unbeaufsichtigte-laeufe.md) geöffnet hat, fragt
+dieser Lauf ab und, wenn er nicht rechtzeitig fertig ist, der nächste.
 
-## Modes
+## Modi
 
-`/mode ask|auto` switches the chat's mode; `/mode` alone shows it. The chat
-always starts in `ask`, `/new` and `/resume` switch back to `ask`, the mode
-is not stored in the session, and the status line shows it.
+`/mode ask|auto` wechselt den Modus des Chats; `/mode` allein zeigt ihn an.
+Der Chat startet immer in `ask`, `/new` und `/resume` wechseln zurück zu
+`ask`, der Modus wird nicht in der Sitzung gespeichert, und die Statuszeile
+zeigt ihn an.
 
 | | `ask` | `auto` |
 | --- | --- | --- |
-| Reruns, dispatches, cancels (`write`) | dialog | run within the budget |
-| Push and draft PR (`critical`) | dialog with the diff | run within the budget, if no warning |
-| Fix with a warning (hides failures, reaches out, `.github/`) | dialog shows the warnings | not pushed; kept for `/mode ask` |
-| Draft pull request | always | always |
+| Reruns, Dispatches, Abbrüche (`write`) | Dialog | laufen im Rahmen des Budgets |
+| Push und Draft-PR (`critical`) | Dialog mit dem Diff | läuft im Rahmen des Budgets, wenn es keine Warnung gibt |
+| Korrektur mit Warnung (verbirgt Fehlschläge, greift nach außen, `.github/`) | Dialog zeigt die Warnungen | nicht gepusht; aufbewahrt für `/mode ask` |
+| Draft-Pull-Request | immer | immer |
 
-The `.github/` rule exists because a pushed branch in the same repository
-triggers its `push` workflows with the repository's secrets, using the
-workflow files from that branch, before anyone reviews the pull request.
-Job logs and repository files can contain text that tries to steer the
-model; in `ask` mode you see every line of the diff first, in `auto` mode
-code refuses the changes that could leak secrets or hide failures. Audit
-entries record `auto` as the answer, or `not run in auto mode` for a fix
-with warnings; that fix stays in the session for `/mode ask` and `/fix N`.
+Die Regel für `.github/` gibt es, weil ein gepushter Branch im selben
+Repository dessen `push`-Workflows mit den Secrets des Repositorys auslöst,
+mit den Workflow-Dateien aus diesem Branch, bevor irgendjemand den Pull
+Request prüft. Job-Logs und Dateien im Repository können Text enthalten, der
+versucht, das Modell zu steuern; im Modus `ask` siehst du vorher jede Zeile
+des Diffs, im Modus `auto` lehnt der Code die Änderungen ab, die Secrets
+preisgeben oder Fehlschläge verbergen könnten. Audit-Einträge halten `auto`
+als Antwort fest, oder `not run in auto mode` für eine Korrektur mit
+Warnungen; diese Korrektur bleibt für `/mode ask` und `/fix N` in der
+Sitzung.
 
 ## Budget
 
-| Limit | Default | Setting |
+| Limit | Standard | Einstellung |
 | --- | --- | --- |
-| Pull requests per chat session | 3 | `fix.max_prs_per_session` (1–20) |
-| Files and changed lines per fix | 10 and 400 | `fix.max_files` (1–50), `fix.max_changed_lines` (10–2,000) |
-| Verification runs per fix | 3 | `fix.verify_runs` (1–10) |
-| Fixer tool rounds | 20 | `fix.max_rounds` (5–60) |
-| Fixer tokens (fixer and reviewer) | 300,000 | `fix.max_tokens` (10,000–2,000,000) |
-| Fixer wall-clock time | 10 minutes | `fix.max_seconds` (60–3,600) |
+| Pull Requests pro Chat-Sitzung | 3 | `fix.max_prs_per_session` (1–20) |
+| Dateien und geänderte Zeilen pro Korrektur | 10 und 400 | `fix.max_files` (1–50), `fix.max_changed_lines` (10–2.000) |
+| Verifikationsläufe pro Korrektur | 3 | `fix.verify_runs` (1–10) |
+| Werkzeugrunden des Fixers | 20 | `fix.max_rounds` (5–60) |
+| Tokens des Fixers (Fixer und Reviewer) | 300.000 | `fix.max_tokens` (10.000–2.000.000) |
+| Laufzeit des Fixers | 10 Minuten | `fix.max_seconds` (60–3.600) |
 
-Verification reruns count against `actions.max_per_session`. Reaching a
-limit ends the fix with a summary, as everywhere.
+Verifikations-Reruns zählen gegen `actions.max_per_session`. Wird ein Limit
+erreicht, endet die Korrektur mit einer Zusammenfassung, wie überall.
 
-## Permissions
+## Berechtigungen
 
-The `repo` and `workflow` scopes flakipype already asks for cover branches,
-commits (including workflow files) and pull requests. A fine-grained token
-needs **Contents**, **Pull requests** and **Workflows: read and write**, plus
-**Actions: read and write** for verification. A `403` explains which
-permission is missing, and nothing is retried. A `403` from GitHub's rate
-limit says so instead and asks to try again after the limit resets. When
-GitHub gives reasons for a refusal (a `422` such as "Draft pull requests are
-not supported in this repository"), the message includes them.
+Die Scopes `repo` und `workflow`, die flakipype ohnehin anfordert, decken
+Branches, Commits (einschließlich Workflow-Dateien) und Pull Requests ab. Ein
+Fine-grained Token braucht **Contents**, **Pull requests** und **Workflows:
+read and write**, dazu **Actions: read and write** für die Verifikation. Ein
+`403` erklärt, welche Berechtigung fehlt, und nichts wird wiederholt. Ein
+`403` wegen des Rate-Limits von GitHub sagt stattdessen genau das und bittet
+darum, es nach dem Zurücksetzen des Limits erneut zu versuchen. Nennt GitHub
+Gründe für eine Ablehnung (ein `422` wie „Draft pull requests are not
+supported in this repository“), enthält die Meldung sie.
 
-## Where it lives
+## Wo es im Code liegt
 
-- **`agent`**: the fixer (`fixer.py`), the generic reviewer (`reviewer.py`),
-  fixer then reviewer with at most one revision (`fix_pipeline.py`), the
-  edit tools (`fix_tools.py`), and the working copy (`workcopy.py`: an
-  overlay of edited files over the pinned commit, with the unified diff from
-  `difflib`).
-- **`fix`** (between `investigate` and `actions`): the checks
-  (`checks.py`), branch name, pull request body and comment texts
-  (`texts.py`), verification (`verify.py`), delivery (`delivery.py`), the
-  session state of fixes (`state.py`) and the service with the pull request
-  budget and the confirmation (`service.py`).
-- **`github`**: `pulls.py` for refs, `createCommitOnBranch`, pull requests,
-  comments, push permission and the tree listing.
-- **`investigate`**: `/fix`, `/mode`, the `fix` tool's workspace side.
-- **`tui`**: the model's text and the diff in the confirmation dialog, the
-  mode in the status line.
+- **`agent`**: der Fixer (`fixer.py`), der generische Reviewer
+  (`reviewer.py`), Fixer und dann Reviewer mit höchstens einer Überarbeitung
+  (`fix_pipeline.py`), die Bearbeitungswerkzeuge (`fix_tools.py`) und die
+  Arbeitskopie (`workcopy.py`: eine Überlagerung der bearbeiteten Dateien
+  über dem festgelegten Commit, mit dem Unified Diff aus `difflib`).
+- **`fix`** (zwischen `investigate` und `actions`): die Prüfungen
+  (`checks.py`), Branch-Name, Pull-Request-Beschreibung und Kommentartexte
+  (`texts.py`), die Verifikation (`verify.py`), die Auslieferung
+  (`delivery.py`), der Sitzungszustand der Korrekturen (`state.py`) und der
+  Service mit dem Pull-Request-Budget und der Bestätigung (`service.py`).
+- **`github`**: `pulls.py` für Refs, `createCommitOnBranch`, Pull Requests,
+  Kommentare, Push-Berechtigung und die Baumauflistung.
+- **`investigate`**: `/fix`, `/mode`, die Workspace-Seite des Werkzeugs
+  `fix`.
+- **`tui`**: der Text des Modells und der Diff im Bestätigungsdialog, der
+  Modus in der Statuszeile.
 
-## Testing
+## Tests
 
-- The working copy and edit tools: unique and ambiguous replacements, new
-  files, path normalisation, the diff.
-- Every check, with diffs that pass and fail it.
-- The fixer and reviewer with the scripted fake model: accept, revise,
-  reject, a failing check, budget ends.
-- `pulls.py` against the `gh` stub with recorded responses, including the
-  GraphQL commit, an existing branch name, `403` and a failure after the
-  branch was created.
-- Delivery, verification (passes, same signature, other signature, cannot
-  verify) and the comment text with a fake clock.
-- The gate in both modes, including warnings in `auto`.
-- The confirmation with a diff and the mode in the status line: Pilot tests
-  and snapshots.
+- Die Arbeitskopie und die Bearbeitungswerkzeuge: eindeutige und mehrdeutige
+  Ersetzungen, neue Dateien, Pfadnormalisierung, der Diff.
+- Jede Prüfung, mit Diffs, die sie bestehen und nicht bestehen.
+- Fixer und Reviewer mit dem geskripteten Fake-Modell: accept, revise,
+  reject, eine fehlschlagende Prüfung, Budgetende.
+- `pulls.py` gegen den `gh`-Stub mit aufgezeichneten Antworten, einschließlich
+  des GraphQL-Commits, eines existierenden Branch-Namens, `403` und eines
+  Fehlers, nachdem der Branch angelegt wurde.
+- Auslieferung, Verifikation (durchgelaufen, gleiche Signatur, andere
+  Signatur, nicht verifizierbar) und der Kommentartext mit einer Fake-Uhr.
+- Das Gate in beiden Modi, einschließlich Warnungen in `auto`.
+- Die Bestätigung mit einem Diff und der Modus in der Statuszeile:
+  Pilot-Tests und Snapshots.

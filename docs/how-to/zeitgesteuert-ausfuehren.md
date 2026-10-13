@@ -1,50 +1,53 @@
-# Run flakipype on a schedule
+# flakipype zeitgesteuert ausführen
 
-`flakipype run` scans, investigates and opens draft pull requests without a
-window; a systemd user timer starts it. How it decides and what limits it:
-[unattended runs](../explanation/unbeaufsichtigte-laeufe.md).
+`flakipype run` scannt, untersucht und öffnet Draft-PRs ohne Fenster; ein
+systemd-User-Timer startet es. Wie es entscheidet und was es begrenzt:
+[unbeaufsichtigte Läufe](../explanation/unbeaufsichtigte-laeufe.md).
 
-To try this end to end without touching a real project, point it at the
-sandbox [besessener/flakipype-test](https://github.com/besessener/flakipype-test),
-which is flaky in known ways and is there to receive draft pull requests and
-verification reruns: add `--repo besessener/flakipype-test` to the commands
-below.
+Um das von Anfang bis Ende auszuprobieren, ohne ein echtes Projekt
+anzufassen, richte es auf die Sandbox
+[besessener/flakipype-test](https://github.com/besessener/flakipype-test).
+Sie ist auf bekannte Weise instabil und dafür da, Draft-PRs und Reruns zur
+Verifikation zu empfangen: Hänge `--repo besessener/flakipype-test` an die
+Befehle unten an.
 
-## 1. Try a dry run
+## 1. Einen Probelauf machen
 
 ```bash
 flakipype run --mode ask
 ```
 
-`ask` without a window only reports: it scans, investigates and writes fixes,
-but pushes nothing and shows what it would open. Fixes it made stay in the
-run's session; `/sessions` and `/resume N` in the chat open them, and `/fix N`
-shows the confirmation with the diff.
+`ask` ohne Fenster berichtet nur: Es scannt, untersucht und schreibt
+Korrekturen, pusht aber nichts und zeigt, was es öffnen würde. Seine
+Korrekturen bleiben in der Sitzung des Laufs; `/sessions` und `/resume N` im
+Chat öffnen sie, und `/fix N` zeigt die Bestätigung mit dem Diff.
 
-## 2. Run it for real once
+## 2. Einmal richtig ausführen
 
 ```bash
 flakipype run
 ```
 
-The summary names every draft pull request, every fix that was not pushed and
-why, the verification of each pull request and how much of today's limits
-the runs used. Exit codes: 0 finished, 1 something was incomplete, 2 not set
-up, 3 another run is running.
+Die Zusammenfassung nennt jeden Draft-PR, jede Korrektur, die nicht gepusht
+wurde, und warum, die Verifikation jedes Pull Requests und wie viel der
+heutigen Limits die Läufe verbraucht haben. Exit-Codes: 0 fertig, 1 etwas
+blieb unvollständig, 2 nicht eingerichtet, 3 ein anderer Lauf läuft gerade.
 
-## 3. Make the key readable without a desktop session
+## 3. Den Key ohne Desktop-Sitzung lesbar machen
 
-A timer often runs while no desktop session has unlocked the system keyring.
-Keep the key in a file only you can read instead:
+Ein Timer läuft oft, während keine Desktop-Sitzung den System-Schlüsselbund
+entsperrt hat. Leg den Key stattdessen in eine Datei, die nur du lesen
+kannst:
 
 ```bash
 printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive --secret-store file --api-key-stdin
 ```
 
-If `gh` keeps its token in the keyring too, log in again with
-`gh auth login --insecure-storage`, which keeps it in `gh`'s own config file.
+Speichert auch `gh` sein Token im Schlüsselbund, melde dich mit
+`gh auth login --insecure-storage` erneut an; dann liegt es in der eigenen
+Konfigurationsdatei von `gh`.
 
-## 4. Install the timer
+## 4. Den Timer installieren
 
 ```bash
 flakipype daemon install                      # daily
@@ -52,28 +55,28 @@ flakipype daemon install --schedule "Mon..Fri 06:00"
 flakipype daemon install --print              # only show the unit files
 ```
 
-`install` first runs `flakipype doctor` through `systemd-run --user`, in the
-same environment as the timer; if that fails, nothing is installed and the
-output says why. Then it writes `flakipype.service` and `flakipype.timer` to
-`~/.config/systemd/user/` and starts the timer. Run `install` again to change
-the schedule.
+`install` führt zuerst `flakipype doctor` über `systemd-run --user` aus, in
+derselben Umgebung wie der Timer; schlägt das fehl, wird nichts installiert,
+und die Ausgabe sagt, warum. Dann schreibt es `flakipype.service` und
+`flakipype.timer` nach `~/.config/systemd/user/` und startet den Timer. Führe
+`install` erneut aus, um den Zeitplan zu ändern.
 
-Without lingering, a user timer only runs while you are logged in. To run it
-on a server without a login session:
+Ohne Lingering läuft ein User-Timer nur, solange du angemeldet bist. So läuft
+er auf einem Server ohne Anmeldesitzung:
 
 ```bash
 loginctl enable-linger "$USER"
 ```
 
-## 5. Check on it
+## 5. Nachsehen, wie es läuft
 
 ```bash
 flakipype daemon status                       # next start, last result, last summary
 journalctl --user -u flakipype.service        # every run's summary
 ```
 
-Limits per run and per day are in the `[run]` section of the
-[configuration](../reference/konfiguration.md). To stop:
+Die Limits je Lauf und je Tag stehen im Abschnitt `[run]` der
+[Konfiguration](../reference/konfiguration.md). Zum Beenden:
 
 ```bash
 flakipype daemon uninstall

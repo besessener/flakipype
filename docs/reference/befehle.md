@@ -1,104 +1,107 @@
-# Commands
+# Befehle
 
-## Development tasks (`uv run poe <task>`)
+## Entwicklungs-Tasks (`uv run poe <task>`)
 
-| Task | Runs | Purpose |
+| Task | Führt aus | Zweck |
 | --- | --- | --- |
-| `format` | `ruff format` | Format all files |
-| `format-check` | `ruff format --check` | Fail on unformatted files |
-| `lint` | `ruff check` | Lint with all ruff rules (exceptions in `pyproject.toml`) |
-| `typecheck` | `ty check` | Type check `src` and `tests` (rules in `pyproject.toml`) |
-| `arch` | `lint-imports` | Architecture boundaries (import-linter) |
-| `deps` | `deptry src` | Unused, missing and misplaced dependencies |
-| `deadcode` | `vulture` | Dead code |
-| `shellcheck` | `shellcheck install.sh tests/smoke/smoke.sh` | Lint the shell scripts |
-| `test` | `pytest` | Tests without coverage |
-| `test-cov` | `pytest --cov` | Tests with the coverage threshold |
-| `check` | all of the above except `format`, `test` | The local definition of done |
+| `format` | `ruff format` | Alle Dateien formatieren |
+| `format-check` | `ruff format --check` | Bei unformatierten Dateien fehlschlagen |
+| `lint` | `ruff check` | Lint mit allen ruff-Regeln (Ausnahmen in `pyproject.toml`) |
+| `typecheck` | `ty check` | Typprüfung von `src` und `tests` (Regeln in `pyproject.toml`) |
+| `arch` | `lint-imports` | Architekturgrenzen (import-linter) |
+| `deps` | `deptry src` | Ungenutzte, fehlende und falsch eingeordnete Abhängigkeiten |
+| `deadcode` | `vulture` | Toter Code |
+| `shellcheck` | `shellcheck install.sh tests/smoke/smoke.sh` | Die Shell-Skripte prüfen |
+| `test` | `pytest` | Tests ohne Abdeckung |
+| `test-cov` | `pytest --cov` | Tests mit der Abdeckungsschwelle |
+| `check` | alle oben außer `format`, `test` | Die lokale Definition of Done |
 
-Outside poe:
+Außerhalb von poe:
 
-| Command | Purpose |
+| Befehl | Zweck |
 | --- | --- |
-| `prek run --all-files` | gitleaks, zizmor, file hygiene hooks |
-| `act pull_request -j test` | Linux CI job in Docker, see [run CI locally](../how-to/ci-lokal-ausfuehren.md) |
-| `act pull_request -j smoke` | `install.sh` and a first start on Ubuntu, Debian, Fedora and Arch |
+| `prek run --all-files` | gitleaks, zizmor, Hooks für Dateihygiene |
+| `act pull_request -j test` | Linux-CI-Job in Docker, siehe [CI lokal ausführen](../how-to/ci-lokal-ausfuehren.md) |
+| `act pull_request -j smoke` | `install.sh` und ein erster Start unter Ubuntu, Debian, Fedora und Arch |
 
-## `flakipype` CLI
+## `flakipype`-CLI
 
-| Command | Purpose |
+| Befehl | Zweck |
 | --- | --- |
-| `flakipype --version` | Print the installed version |
-| `flakipype` (no args) | The chat in a terminal, see [use the chat](../how-to/chat-nutzen.md); otherwise the help. Exit codes: 0 left, 1 GitHub unreadable or the chat crashed, 2 not set up |
-| `flakipype setup` | Full-screen setup wizard (needs a terminal) |
-| `flakipype setup --non-interactive [options]` | Headless setup, see below |
-| `flakipype doctor` | Check configuration, model connection, `gh` and the GitHub login |
-| `flakipype scan [options]` | Find and rank flaky jobs, see below |
-| `flakipype investigate [options]` | Let the agent explain findings with evidence; see [investigate findings](../how-to/befunde-untersuchen.md) |
-| `flakipype run [options]` | Scan, investigate and fix without a window, see below |
-| `flakipype daemon install\|uninstall\|status` | The systemd user timer that starts `flakipype run`, see below |
+| `flakipype --version` | Die installierte Version ausgeben |
+| `flakipype` (ohne Argumente) | Der Chat im Terminal, siehe [den Chat nutzen](../how-to/chat-nutzen.md); sonst die Hilfe. Exit-Codes: 0 Chat verlassen, 1 GitHub nicht lesbar oder der Chat ist abgestürzt, 2 nicht eingerichtet |
+| `flakipype setup` | Einrichtungsassistent im Vollbild (braucht ein Terminal) |
+| `flakipype setup --non-interactive [options]` | Einrichtung headless, siehe unten |
+| `flakipype doctor` | Konfiguration, Modellverbindung, `gh` und die GitHub-Anmeldung prüfen |
+| `flakipype scan [options]` | Instabile Jobs finden und ordnen, siehe unten |
+| `flakipype investigate [options]` | Befunde vom Agenten mit Belegen erklären lassen; siehe [Befunde untersuchen](../how-to/befunde-untersuchen.md) |
+| `flakipype run [options]` | Scannen, untersuchen und korrigieren ohne Fenster, siehe unten |
+| `flakipype daemon install\|uninstall\|status` | Der systemd-Benutzer-Timer, der `flakipype run` startet, siehe unten |
 
 ### `flakipype run`
 
-| Option | Meaning |
+| Option | Bedeutung |
 | --- | --- |
-| `--mode auto\|ask` | `auto` (default) pushes draft pull requests within the limits; `ask` only reports what it would do |
-| `--days N`, `--repo NAME` | As for `scan` |
-| `--owner NAME` | Must be the configured `github.owner` (any case): a run fixes only that owner; any other exits with code 2 |
-| `--json` | Print the summary as JSON (`schema_version` 1) |
+| `--mode auto\|ask` | `auto` (Standard) pusht Draft-PRs innerhalb der Limits; `ask` meldet nur, was es tun würde |
+| `--days N`, `--repo NAME` | Wie bei `scan` |
+| `--owner NAME` | Muss der konfigurierte `github.owner` sein (Groß- und Kleinschreibung egal): Ein Lauf korrigiert nur diesen Owner; jeder andere endet mit Code 2 |
+| `--json` | Die Zusammenfassung als JSON ausgeben (`schema_version` 1) |
 
-Exit codes: 0 finished (a reached limit is a normal end), 1 something was
-incomplete (scan stopped early, GitHub or the model failed, a delivery
-failed), 2 not set up or another `--owner`, 3 another `flakipype run` is running. How it works:
-[unattended runs](../explanation/unbeaufsichtigte-laeufe.md).
+Exit-Codes: 0 beendet (ein erreichtes Limit ist ein normales Ende), 1 etwas
+war unvollständig (Scan früh beendet, GitHub oder das Modell sind
+fehlgeschlagen, eine Auslieferung ist fehlgeschlagen), 2 nicht eingerichtet
+oder ein anderer `--owner`, 3 ein anderer `flakipype run` läuft. So
+funktioniert es: [unbeaufsichtigte Läufe](../explanation/unbeaufsichtigte-laeufe.md).
 
 ### `flakipype daemon`
 
-| Command | Meaning |
+| Befehl | Bedeutung |
 | --- | --- |
-| `install [--schedule S] [--mode auto\|ask]` | Run `doctor` in the timer's environment, then write, enable and start `flakipype.timer`; `S` is a systemd calendar expression (default `daily`) |
-| `install --print` | Print the unit files, change nothing |
-| `uninstall` | Stop the timer and remove the units flakipype wrote |
-| `status` | The timer, the last result and the last run's summary |
+| `install [--schedule S] [--mode auto\|ask]` | `doctor` in der Umgebung des Timers ausführen, dann `flakipype.timer` schreiben, aktivieren und starten; `S` ist ein systemd-Kalenderausdruck (Standard `daily`) |
+| `install --print` | Die Unit-Dateien ausgeben, nichts ändern |
+| `uninstall` | Den Timer stoppen und die Units entfernen, die flakipype geschrieben hat |
+| `status` | Der Timer, das letzte Ergebnis und die Zusammenfassung des letzten Laufs |
 
-`install` and `uninstall` exit with 1 when systemd refuses, `install` with 2
-when flakipype is not set up (no configuration file, or one it cannot read)
-and with 1 when `doctor` fails in the timer's environment. `install --print`
-needs no configuration. Guide: [run on a schedule](../how-to/zeitgesteuert-ausfuehren.md).
+`install` und `uninstall` enden mit 1, wenn systemd ablehnt, `install` mit 2,
+wenn flakipype nicht eingerichtet ist (keine Konfigurationsdatei oder eine,
+die es nicht lesen kann), und mit 1, wenn `doctor` in der Umgebung des Timers
+fehlschlägt. `install --print` braucht keine Konfiguration. Anleitung:
+[zeitgesteuert ausführen](../how-to/zeitgesteuert-ausfuehren.md).
 
 ### `flakipype scan`
 
-| Option | Meaning |
+| Option | Bedeutung |
 | --- | --- |
-| `--days N` | Days to look back, 1–400 (default `scan.window_days`) |
-| `--repo NAME` | Only this repository (`repo` or `owner/repo`); repeat for more |
-| `--owner NAME` | Another user or organisation (default `github.owner`) |
-| `--max-logs N` | Most job logs to read this time, 0–1000 (default `scan.max_log_downloads`) |
-| `--min-runs N` | Runs needed to call a job flaky, 1–100 (default `scan.min_flaky_runs`) |
-| `--json` | Print the [JSON result](scan-json.md) on stdout instead of the table |
+| `--days N` | Tage, die zurückgeschaut wird, 1–400 (Standard `scan.window_days`) |
+| `--repo NAME` | Nur dieses Repository (`repo` oder `owner/repo`); für mehrere wiederholen |
+| `--owner NAME` | Ein anderer Benutzer oder eine andere Organisation (Standard `github.owner`) |
+| `--max-logs N` | Höchstzahl der Job-Logs, die diesmal gelesen werden, 0–1000 (Standard `scan.max_log_downloads`) |
+| `--min-runs N` | Läufe, die nötig sind, um einen Job instabil zu nennen, 1–100 (Standard `scan.min_flaky_runs`) |
+| `--json` | Das [JSON-Ergebnis](scan-json.md) statt der Tabelle auf stdout ausgeben |
 
-Exit codes: 0 finished, 1 stopped early or GitHub unreadable, 2 not set up.
-Guide: [find flaky pipelines](../how-to/instabile-pipelines-finden.md).
+Exit-Codes: 0 beendet, 1 früh beendet oder GitHub nicht lesbar, 2 nicht
+eingerichtet. Anleitung: [instabile Pipelines finden](../how-to/instabile-pipelines-finden.md).
 
 ### `flakipype setup --non-interactive`
 
-| Option | Meaning |
+| Option | Bedeutung |
 | --- | --- |
-| `--base-url URL` | Anthropic Messages API base URL |
-| `--model NAME` | Model, or deployment name on Foundry |
-| `--host HOST` | GitHub host |
-| `--owner NAME` | GitHub user or organisation to scan |
-| `--api-key-stdin` | Read the API key from standard input |
-| `--secret-store auto\|keyring\|file` | Where the API key is kept (`secrets.store`); with a new store, pass the key again |
+| `--base-url URL` | Basis-URL der Anthropic Messages API |
+| `--model NAME` | Modell, auf Foundry der Deployment-Name |
+| `--host HOST` | GitHub-Host |
+| `--owner NAME` | GitHub-Benutzer oder -Organisation, die gescannt wird |
+| `--api-key-stdin` | Den API-Key von der Standardeingabe lesen |
+| `--secret-store auto\|keyring\|file` | Wo der API-Key liegt (`secrets.store`); bei einem neuen Speicher den Key erneut übergeben |
 
-Omitted options keep their saved value. Setup downloads `gh` if needed and
-ends with the `doctor` checks. The wizard (`flakipype setup` without
-`--non-interactive`) takes `--secret-store` too and saves that choice.
+Weggelassene Optionen behalten ihren gespeicherten Wert. Die Einrichtung lädt
+`gh` bei Bedarf herunter und endet mit den Prüfungen von `doctor`. Der
+Assistent (`flakipype setup` ohne `--non-interactive`) nimmt ebenfalls
+`--secret-store` an und speichert diese Wahl.
 
-### Exit codes
+### Exit-Codes
 
 | Code | `setup` | `doctor` |
 | --- | --- | --- |
-| 0 | Saved and all checks passed (warnings allowed) | All checks passed (warnings allowed) |
-| 1 | Saved, but a check failed; or the wizard was cancelled | A check failed |
-| 2 | Invalid input, a configuration file setup cannot keep, no terminal for the wizard, or the secret store cannot be read or written | The secret store cannot be read |
+| 0 | Gespeichert und alle Prüfungen bestanden (Warnungen erlaubt) | Alle Prüfungen bestanden (Warnungen erlaubt) |
+| 1 | Gespeichert, aber eine Prüfung ist fehlgeschlagen; oder der Assistent wurde abgebrochen | Eine Prüfung ist fehlgeschlagen |
+| 2 | Ungültige Eingabe, eine Konfigurationsdatei, die die Einrichtung nicht behalten kann, kein Terminal für den Assistenten, oder der Secret-Speicher kann nicht gelesen oder geschrieben werden | Der Secret-Speicher kann nicht gelesen werden |

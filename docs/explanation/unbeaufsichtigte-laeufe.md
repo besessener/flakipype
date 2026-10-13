@@ -1,92 +1,104 @@
-# Unattended runs and release
+# Unbeaufsichtigte Läufe und Release
 
-> Status: implemented. Setup: [run on a schedule](../how-to/zeitgesteuert-ausfuehren.md).
+> Stand: umgesetzt. Einrichtung: [Zeitgesteuert ausführen](../how-to/zeitgesteuert-ausfuehren.md).
 
-The chat needs you at the keyboard. flakipype can also work on a schedule:
-`flakipype run` scans, investigates and opens draft pull requests for
-fixable findings without a window, `flakipype daemon install` runs it from a
-systemd user timer, and an install script plus smoke tests on four
-distributions make it installable. Every rule of the
-[safety model](sicherheitsmodell.md) applies unchanged; nobody watching means
-tighter limits, not looser ones.
+Der Chat braucht dich an der Tastatur. flakipype kann auch nach Zeitplan
+arbeiten: `flakipype run` scannt, untersucht und öffnet Draft-Pull-Requests
+für korrigierbare Befunde ohne Fenster, `flakipype daemon install` startet es
+über einen systemd-User-Timer, und ein Installationsskript plus Smoke-Tests
+auf vier Distributionen machen es installierbar. Jede Regel des
+[Sicherheitsmodells](sicherheitsmodell.md) gilt unverändert; dass niemand
+zusieht, bedeutet engere Limits, nicht lockerere.
 
-## Scope
+## Umfang
 
-- **In**: `flakipype run [--mode auto|ask]`; continuing fix verifications
-  across runs; daily limits across runs; a run lock; `flakipype daemon
-  install|uninstall|status` for a systemd user timer; a `secrets.store`
-  setting and a clean error for an unreachable keyring; `install.sh`; the
-  first release tag `v0.1.0`; a CI smoke job on Ubuntu, Debian, Fedora and
-  Arch.
-- **Out**: reruns or dispatches on the default branch to gather evidence
-  (headless runs only rerun flakipype's own fix branches); a model that
-  decides what to do (the run's steps are fixed in code); system-wide
-  services, cron files, container images; PyPI; a release workflow.
+- **Enthalten**: `flakipype run [--mode auto|ask]`; Fortsetzen von
+  Verifikationen von Korrekturen über Läufe hinweg; Tageslimits über Läufe
+  hinweg; eine Laufsperre; `flakipype daemon install|uninstall|status` für
+  einen systemd-User-Timer; eine Einstellung `secrets.store` und ein
+  sauberer Fehler für einen nicht erreichbaren Schlüsselbund; `install.sh`;
+  das erste Release-Tag `v0.1.0`; ein CI-Smoke-Job auf Ubuntu, Debian,
+  Fedora und Arch.
+- **Nicht enthalten**: Reruns oder Dispatches auf dem Standardbranch, um
+  Belege zu sammeln (headless Läufe führen nur flakipypes eigene
+  Korrektur-Branches erneut aus); ein Modell, das entscheidet, was zu tun ist
+  (die Schritte des Laufs sind im Code festgelegt); systemweite Dienste,
+  Cron-Dateien, Container-Images; PyPI; ein Release-Workflow.
 
 ## `flakipype run`
 
-One run does, in this order, all in code and without an orchestrator model:
+Ein Lauf macht in dieser Reihenfolge, alles im Code und ohne
+Orchestrator-Modell:
 
 ```text
 lock ──▶ continue earlier verifications ──▶ scan ──▶ investigate ──▶ fix ──▶ poll until done or time is up ──▶ summary
 ```
 
-1. **Lock.** A second `flakipype run` while one is running exits with code 3
-   at once (below).
-2. **Continue.** The pull requests the last run left unverified are taken
-   over ([verifications](#verifications-across-runs)) and saved in the new
-   run's session at once, so a run that dies later still hands them on.
-3. **Scan** the configured owner, as `flakipype scan` does. A scan stopped by
-   GitHub's rate limit ends the step here: investigations would only see
-   GitHub refuse their tools, so they and the fixes wait for the next run.
-4. **Investigate** the flaky and recurring findings, as `flakipype
-   investigate` does: cached verdicts are reused until a finding has a newer
-   failure. A finding whose investigation in an earlier run ended without a
-   verdict (`no_verdict` or a loop, in either mode) is not investigated again
-   until it has a newer failure; running out of tokens or a model error is
-   tried again next time. No investigation starts after `run.max_minutes`.
-5. **Fix** findings with a reviewed verdict classified `flaky_test`,
-   `flaky_infrastructure` or `configuration`, highest ranked first, through
-   the same `fix` tool and policy gate as the chat ([fixes](korrekturen.md)).
-   Skipped: findings with an open flakipype pull request or without push
-   access, and findings whose fix an earlier `auto` run did not push
-   (warnings, no fix, rejected by the reviewer, or a commit pushed whose pull
-   request could not be opened), until they have a newer failure, so a run
-   does not pay for the same rejected fix every day. A model error during the
-   fix or its review is a problem of the run (exit code 1) and is tried
-   again next time. A fix gets at most the time the run has left, even when
-   `fix.max_seconds` is longer. A pushed commit whose pull request could not
-   be opened counts against the pull request limits like an opened one.
-6. **Poll** (`auto` only) started verifications every 10 seconds until all
-   are done or `run.max_minutes` is reached.
-7. **Summary** on standard output, which systemd sends to the journal.
+1. **Sperre.** Ein zweites `flakipype run`, während eines läuft, endet sofort
+   mit Code 3 (unten).
+2. **Fortsetzen.** Die Pull Requests, die der letzte Lauf unverifiziert
+   hinterlassen hat, werden übernommen
+   ([Verifikationen](#verifikationen-über-läufe-hinweg)) und sofort in der
+   Sitzung des neuen Laufs gespeichert, sodass ein Lauf, der später abstürzt,
+   sie trotzdem weitergibt.
+3. **Scan** des konfigurierten Owners, wie `flakipype scan` es macht. Ein
+   Scan, den das Rate-Limit von GitHub gestoppt hat, beendet den Schritt
+   hier: Untersuchungen würden nur sehen, wie GitHub ihre Werkzeuge
+   ablehnt, also warten sie und die Korrekturen auf den nächsten Lauf.
+4. **Untersuchen** der instabilen und wiederkehrenden Befunde, wie
+   `flakipype investigate` es macht: Gecachte Urteile werden
+   wiederverwendet, bis ein Befund einen neueren Fehlschlag hat. Ein Befund,
+   dessen Untersuchung in einem früheren Lauf ohne Urteil endete
+   (`no_verdict` oder eine Schleife, in beiden Modi), wird erst wieder
+   untersucht, wenn er einen neueren Fehlschlag hat; gehen die Tokens aus
+   oder tritt ein Modellfehler auf, wird es beim nächsten Mal erneut
+   versucht. Nach `run.max_minutes` startet keine Untersuchung mehr.
+5. **Korrigieren** von Befunden mit einem geprüften Urteil mit der Einstufung
+   `flaky_test`, `flaky_infrastructure` oder `configuration`, die am höchsten
+   gerankten zuerst, über dasselbe Werkzeug `fix` und dasselbe Policy-Gate
+   wie im Chat ([Korrekturen](korrekturen.md)). Übersprungen werden: Befunde
+   mit einem offenen Pull Request von flakipype oder ohne Push-Zugriff sowie
+   Befunde, deren Korrektur ein früherer `auto`-Lauf nicht gepusht hat
+   (Warnungen, keine Korrektur, vom Reviewer abgelehnt oder ein gepushter
+   Commit, zu dem sich kein Pull Request öffnen ließ), bis sie einen neueren
+   Fehlschlag haben, damit ein Lauf nicht jeden Tag für dieselbe abgelehnte
+   Korrektur bezahlt. Ein Modellfehler während der Korrektur oder ihrer
+   Prüfung ist ein Problem des Laufs (Exit-Code 1) und wird beim nächsten
+   Mal erneut versucht. Eine Korrektur bekommt höchstens die Zeit, die dem
+   Lauf noch bleibt, auch wenn `fix.max_seconds` länger ist. Ein gepushter
+   Commit, zu dem sich kein Pull Request öffnen ließ, zählt gegen die
+   Pull-Request-Limits wie ein geöffneter.
+6. **Abfragen** (nur `auto`) gestarteter Verifikationen alle 10 Sekunden,
+   bis alle fertig sind oder `run.max_minutes` erreicht ist.
+7. **Zusammenfassung** auf der Standardausgabe, die systemd an das Journal
+   schickt.
 
-Options: `--mode auto|ask` (default `auto`), `--json`, and `--repo` and
-`--days` as for `scan`. `--owner` must name the configured `github.owner`
-(in any case): a run fixes only that owner, so another one is refused with
-exit code 2 before anything is read; `scan` and `investigate` read other
-owners. Progress goes to standard error and only
-on a terminal.
+Optionen: `--mode auto|ask` (Standard `auto`), `--json` sowie `--repo` und
+`--days` wie bei `scan`. `--owner` muss den konfigurierten `github.owner`
+nennen (Groß- und Kleinschreibung egal): Ein Lauf korrigiert nur diesen
+Owner, ein anderer wird also mit Exit-Code 2 abgelehnt, bevor irgendetwas
+gelesen wird; `scan` und `investigate` lesen auch andere Owner. Der
+Fortschritt geht auf die Standardfehlerausgabe, und nur auf einem Terminal.
 
-### Modes without a window
+### Modi ohne Fenster
 
-| | `auto` (default) | `ask` |
+| | `auto` (Standard) | `ask` |
 | --- | --- | --- |
-| Scan, investigate, fixer and reviewer | run | run |
-| Push and draft pull request (`critical`) | run within the budgets, if the diff has no warning | not run: reported with its diff |
-| Verification reruns of the run's own fix branches (`write`) | run within the budgets | none: earlier runs' pull requests wait for the next `auto` run |
-| Fix with a warning (hides failures, reaches out, `.github/`) | not pushed, kept | kept |
-| A fix that was not pushed | remembered until the finding fails again | not remembered |
-| Draft pull request | always | – |
+| Scan, Untersuchung, Fixer und Reviewer | laufen | laufen |
+| Push und Draft-Pull-Request (`critical`) | laufen im Rahmen der Budgets, wenn der Diff keine Warnung hat | laufen nicht: werden mit ihrem Diff berichtet |
+| Verifikations-Reruns der eigenen Korrektur-Branches des Laufs (`write`) | laufen im Rahmen der Budgets | keine: Pull Requests früherer Läufe warten auf den nächsten `auto`-Lauf |
+| Korrektur mit Warnung (verbirgt Fehlschläge, greift nach außen, `.github/`) | nicht gepusht, aufbewahrt | aufbewahrt |
+| Eine nicht gepushte Korrektur | gemerkt, bis der Befund wieder fehlschlägt | nicht gemerkt |
+| Draft-Pull-Request | immer | – |
 
-`ask` without a window is a dry run that still goes through the gate: the
-`HeadlessGate` answers every `write` and `critical` request with `report
-only`, and the audit log records it so. A fix that was not pushed is kept in
-the run's session for the chat (below). A headless run never starts a rerun
-or dispatch on anything but its own fix branches; the scan's runs are only
-read.
+`ask` ohne Fenster ist ein Probelauf, der trotzdem durch das Gate geht: Das
+`HeadlessGate` beantwortet jede `write`- und `critical`-Anfrage mit `report
+only`, und das Audit-Log hält das so fest. Eine nicht gepushte Korrektur
+wird für den Chat in der Sitzung des Laufs aufbewahrt (unten). Ein headless
+Lauf startet nie einen Rerun oder Dispatch auf etwas anderem als seinen
+eigenen Korrektur-Branches; die Läufe des Scans werden nur gelesen.
 
-### Summary and exit codes
+### Zusammenfassung und Exit-Codes
 
 ```text
 flakipype run · octo-org · auto · 2026-10-12 06:02–06:41 CEST
@@ -101,121 +113,132 @@ Verification: octo-org/app#51: flakipype verification: E2E passed 3 of 3 runs on
 Budget: pull requests today 1 of 3 · actions today 4 of 20 · tokens 412,000 of 1,000,000 (today 412,000 of 3,000,000)
 ```
 
-The header shows the machine's local time and zone, like the timer's
-schedule and the journal; `--json` and the stored session keep UTC. The run's
-session in the chat's `/sessions` is named the same way, for example
-`run 2026-10-12 06:02 CEST (auto)`.
+Die Kopfzeile zeigt die lokale Zeit und Zeitzone des Rechners, wie der
+Zeitplan des Timers und das Journal; `--json` und die gespeicherte Sitzung
+bleiben bei UTC. Die Sitzung des Laufs in `/sessions` im Chat ist genauso
+benannt, zum Beispiel `run 2026-10-12 06:02 CEST (auto)`.
 
-`Fixes` has a line for every flaky finding and recurring error: the pull
-request, or why there is none (no verdict, a classification flakipype does
-not fix, a verdict whose review could not run, a limit, a fix that was not
-pushed). Further lines name the limits that stopped a step (`Stopped by:`)
-and the errors (`Problems:`). `--json` prints the same as one object with
-`schema_version` 1, including the diff of every fix that was not pushed.
+`Fixes` hat eine Zeile für jeden instabilen Befund und jeden wiederkehrenden
+Fehler: den Pull Request oder warum es keinen gibt (kein Urteil, eine
+Einstufung, die flakipype nicht korrigiert, ein Urteil, dessen Prüfung nicht
+laufen konnte, ein Limit, eine nicht gepushte Korrektur). Weitere Zeilen
+nennen die Limits, die einen Schritt gestoppt haben (`Stopped by:`), und die
+Fehler (`Problems:`). `--json` gibt dasselbe als ein Objekt mit
+`schema_version` 1 aus, einschließlich des Diffs jeder nicht gepushten
+Korrektur.
 
-| Code | Meaning |
+| Code | Bedeutung |
 | --- | --- |
-| 0 | The run finished; a reached budget or time limit is a normal end and named in the summary |
-| 1 | Something was incomplete: the scan stopped early, GitHub or the model failed, an investigation or a delivery failed |
-| 2 | Not ready: no configuration, no key, an unreachable keyring, `gh` not logged in or its token expired (checked before the scan), an `--owner` other than the configured one |
-| 3 | Another `flakipype run` holds the lock |
+| 0 | Der Lauf ist fertig geworden; ein erreichtes Budget oder Zeitlimit ist ein normales Ende und wird in der Zusammenfassung genannt |
+| 1 | Etwas war unvollständig: Der Scan hat vorzeitig aufgehört, GitHub oder das Modell sind fehlgeschlagen, eine Untersuchung oder eine Auslieferung ist fehlgeschlagen |
+| 2 | Nicht bereit: keine Konfiguration, kein Key, ein nicht erreichbarer Schlüsselbund, `gh` nicht angemeldet oder sein Token abgelaufen (geprüft vor dem Scan), ein anderer `--owner` als der konfigurierte |
+| 3 | Ein anderes `flakipype run` hält die Sperre |
 
-## Verifications across runs
+## Verifikationen über Läufe hinweg
 
-A fix branch is verified by up to `fix.verify_runs` runs, which can take
-longer than one run may last. Each run is stored as a session, like a chat
-session, with its scan, verdicts, kept fixes, started runs and opened pull
-requests. When a run reaches `run.max_minutes`, unfinished verifications
-stay in its session. The next run takes over the pull requests the last run
-left unverified, with the runs they follow under their numbers, and an `auto`
-run polls them until they finish or their watch time
-(`actions.watch_hours`) is over; the pull request comment then says after how
-many runs and why, as in the chat. An `ask` run only keeps them for the next
-`auto` run. Reruns started for an earlier run's verification count against
-the action limits of the run that starts them.
+Ein Korrektur-Branch wird durch bis zu `fix.verify_runs` Läufe verifiziert,
+was länger dauern kann, als ein Lauf dauern darf. Jeder Lauf wird als Sitzung
+gespeichert, wie eine Chat-Sitzung, mit seinem Scan, seinen Urteilen,
+aufbewahrten Korrekturen, gestarteten Läufen und geöffneten Pull Requests.
+Erreicht ein Lauf `run.max_minutes`, bleiben unfertige Verifikationen in
+seiner Sitzung. Der nächste Lauf übernimmt die Pull Requests, die der letzte
+Lauf unverifiziert hinterlassen hat, mit den Läufen, die sie unter ihren
+Nummern verfolgen, und ein `auto`-Lauf fragt sie ab, bis sie fertig sind oder
+ihre Beobachtungszeit (`actions.watch_hours`) vorbei ist; der Kommentar am
+Pull Request sagt dann, nach wie vielen Läufen und warum, wie im Chat. Ein
+`ask`-Lauf bewahrt sie nur für den nächsten `auto`-Lauf auf. Reruns, die für
+die Verifikation eines früheren Laufs gestartet werden, zählen gegen die
+Aktionslimits des Laufs, der sie startet.
 
-**In the chat**, `/sessions` lists run sessions marked `run`. `/resume` on a
-run session starts a new chat session with a copy of the run's scan,
-verdicts and kept fixes, in `ask` mode. The run's started runs and pull
-requests stay with the run session, so only the timer polls them and nothing
-is rerun twice. A kept fix with warnings then works as in the chat: `/fix N`
-shows the confirmation with the warnings and the full diff.
+**Im Chat** listet `/sessions` Laufsitzungen mit der Markierung `run` auf.
+`/resume` auf einer Laufsitzung startet eine neue Chat-Sitzung mit einer
+Kopie des Scans, der Urteile und der aufbewahrten Korrekturen des Laufs, im
+Modus `ask`. Die gestarteten Läufe und Pull Requests des Laufs bleiben bei
+der Laufsitzung, sodass nur der Timer sie abfragt und nichts zweimal erneut
+ausgeführt wird. Eine aufbewahrte Korrektur mit Warnungen funktioniert dann
+wie im Chat: `/fix N` zeigt die Bestätigung mit den Warnungen und dem
+vollständigen Diff.
 
 ## Budgets
 
-The limits of one run are the existing session limits; a run is one
-session. On top, daily limits count every headless run of the last 24 hours,
-so a short timer interval cannot multiply them:
+Die Limits eines Laufs sind die bestehenden Sitzungslimits; ein Lauf ist eine
+Sitzung. Zusätzlich zählen Tageslimits jeden headless Lauf der letzten 24
+Stunden, sodass ein kurzes Timer-Intervall sie nicht vervielfachen kann:
 
-| Limit | Default | Setting |
+| Limit | Standard | Einstellung |
 | --- | --- | --- |
-| Draft pull requests per run | 3 | `fix.max_prs_per_session` |
-| Reruns and dispatches per run | 10 | `actions.max_per_session` |
-| Tokens per run, investigations and fixes together | 1,000,000 | `agent.max_tokens_per_run` |
-| Wall-clock time per run | 120 minutes | `run.max_minutes` (10–720) |
-| Draft pull requests in 24 hours | 3 | `run.max_prs_per_day` (1–20) |
-| Reruns and dispatches in 24 hours | 20 | `run.max_actions_per_day` (1–200) |
-| Tokens in 24 hours | 3,000,000 | `run.max_tokens_per_day` (10k–50M) |
+| Draft-Pull-Requests pro Lauf | 3 | `fix.max_prs_per_session` |
+| Reruns und Dispatches pro Lauf | 10 | `actions.max_per_session` |
+| Tokens pro Lauf, Untersuchungen und Korrekturen zusammen | 1.000.000 | `agent.max_tokens_per_run` |
+| Laufzeit pro Lauf | 120 Minuten | `run.max_minutes` (10–720) |
+| Draft-Pull-Requests in 24 Stunden | 3 | `run.max_prs_per_day` (1–20) |
+| Reruns und Dispatches in 24 Stunden | 20 | `run.max_actions_per_day` (1–200) |
+| Tokens in 24 Stunden | 3.000.000 | `run.max_tokens_per_day` (10k–50M) |
 
-Pull requests and actions in 24 hours are counted from the audit log
-(entries with origin `run` that ran); tokens from the run sessions. The chat
-does not count against the daily limits, and runs do not count against the
-chat's. Reaching a limit stops what it limits: no further fixes after the
-pull request limit, no investigation after today's tokens are used up and
-no further fix after a token limit (a fix already running still ends at its
-own `fix.max_tokens`); polling verifications continues within the action
-limit. The summary names the limit.
+Pull Requests und Aktionen in 24 Stunden werden aus dem Audit-Log gezählt
+(Einträge mit dem Ursprung `run`, die ausgeführt wurden); Tokens aus den
+Laufsitzungen. Der Chat zählt nicht gegen die Tageslimits, und Läufe zählen
+nicht gegen die des Chats. Ein erreichtes Limit stoppt, was es begrenzt:
+keine weiteren Korrekturen nach dem Pull-Request-Limit, keine Untersuchung
+mehr, wenn die heutigen Tokens aufgebraucht sind, und keine weitere Korrektur
+nach einem Token-Limit (eine bereits laufende Korrektur endet trotzdem an
+ihrem eigenen `fix.max_tokens`); das Abfragen von Verifikationen geht im
+Rahmen des Aktionslimits weiter. Die Zusammenfassung nennt das Limit.
 
-## Running next to the chat
+## Neben dem Chat laufen
 
-- **Run lock.** `run` holds an exclusive SQLite lock on
-  `$XDG_DATA_HOME/flakipype/run.lock` for its whole duration; the OS
-  releases it if the process dies. A second run exits with code 3 and touches
-  nothing.
-- **Database.** The cache database uses SQLite's WAL journal with a busy
-  timeout, so the chat and a run can read and write it at the same time.
-  SQLite does not apply that timeout to the switch to WAL, so opening the
-  cache retries the switch itself, up to the same timeout.
-- **Duplicate pull requests.** The chat and a run may fix the same finding
-  at the same time. Delivery looks for an open flakipype pull request for
-  the finding again right before it creates the branch, and links that one
-  instead.
-- **Audit.** Entries from runs have the origin `run`, next to `model` and
-  `command`. Verification reruns and dispatches are recorded too, as
-  `verify_rerun` and `verify_dispatch` with the answer `covered by the push`;
-  the daily action limit counts them.
+- **Laufsperre.** `run` hält für seine gesamte Dauer eine exklusive
+  SQLite-Sperre auf `$XDG_DATA_HOME/flakipype/run.lock`; das Betriebssystem
+  gibt sie frei, wenn der Prozess stirbt. Ein zweiter Lauf endet mit Code 3
+  und rührt nichts an.
+- **Datenbank.** Die Cache-Datenbank nutzt das WAL-Journal von SQLite mit
+  einem Busy-Timeout, sodass Chat und Lauf gleichzeitig lesen und schreiben
+  können. SQLite wendet dieses Timeout nicht auf den Wechsel zu WAL an,
+  deshalb wiederholt das Öffnen des Caches den Wechsel selbst, bis zum
+  selben Timeout.
+- **Doppelte Pull Requests.** Chat und Lauf können denselben Befund
+  gleichzeitig korrigieren. Die Auslieferung sucht direkt vor dem Anlegen
+  des Branchs noch einmal nach einem offenen Pull Request von flakipype für
+  den Befund und verlinkt stattdessen diesen.
+- **Audit.** Einträge aus Läufen haben den Ursprung `run`, neben `model` und
+  `command`. Verifikations-Reruns und -Dispatches werden ebenfalls
+  festgehalten, als `verify_rerun` und `verify_dispatch` mit der Antwort
+  `covered by the push`; das tägliche Aktionslimit zählt sie.
 
-## Secrets under systemd
+## Secrets unter systemd
 
-A user timer often runs without a desktop session. Then the system keyring
-is missing (keyring falls back to the `0600` file, which is empty if setup
-stored the key in the keyring) or locked. So:
+Ein User-Timer läuft oft ohne Desktop-Sitzung. Dann fehlt der
+Schlüsselbund des Systems (keyring weicht auf die `0600`-Datei aus, die leer
+ist, wenn die Einrichtung den Key im Schlüsselbund gespeichert hat), oder er
+ist gesperrt. Deshalb:
 
-- The setting `secrets.store` is `auto` (the keyring where there is one,
-  else the file), `keyring` or `file`. `flakipype setup --non-interactive
-  --secret-store file --api-key-stdin` stores the key in
-  `~/.config/flakipype/secrets.json` (mode `0600`), which a timer can read
-  without a session.
-- A locked or unreachable keyring is a typed error: exit code 2 and that
-  next step, never a traceback.
-- `doctor` says which store holds the key.
-- `daemon install` checks before it installs anything (below).
+- Die Einstellung `secrets.store` ist `auto` (der Schlüsselbund, wo es einen
+  gibt, sonst die Datei), `keyring` oder `file`.
+  `flakipype setup --non-interactive
+  --secret-store file --api-key-stdin` speichert den Key in
+  `~/.config/flakipype/secrets.json` (Modus `0600`), die ein Timer ohne
+  Sitzung lesen kann.
+- Ein gesperrter oder nicht erreichbarer Schlüsselbund ist ein typisierter
+  Fehler: Exit-Code 2 und genau dieser nächste Schritt, nie ein Traceback.
+- `doctor` sagt, welcher Speicher den Key hält.
+- `daemon install` prüft, bevor es irgendetwas installiert (unten).
 
-The GitHub token stays `gh`'s login. If `gh` keeps it in the keyring, the
-same applies to `gh`; `gh auth login --insecure-storage` keeps it in `gh`'s
-own config file instead ([run on a schedule](../how-to/zeitgesteuert-ausfuehren.md)).
+Das GitHub-Token bleibt die Anmeldung von `gh`. Bewahrt `gh` es im
+Schlüsselbund auf, gilt dasselbe für `gh`; `gh auth login --insecure-storage`
+bewahrt es stattdessen in der eigenen Konfigurationsdatei von `gh` auf
+([Zeitgesteuert ausführen](../how-to/zeitgesteuert-ausfuehren.md)).
 
 ## `flakipype daemon`
 
-| Command | Does |
+| Befehl | Macht |
 | --- | --- |
-| `daemon install [--schedule S] [--mode auto\|ask]` | Checks, writes the units, `systemctl --user daemon-reload`, enables and starts the timer |
-| `daemon install --print` | Prints the units and changes nothing |
-| `daemon uninstall` | Disables the timer and removes the units flakipype wrote |
-| `daemon status` | The timer's next and last start, the last result and exit status, and the last run's summary from the journal |
+| `daemon install [--schedule S] [--mode auto\|ask]` | Prüft, schreibt die Units, `systemctl --user daemon-reload`, aktiviert und startet den Timer |
+| `daemon install --print` | Gibt die Units aus und ändert nichts |
+| `daemon uninstall` | Deaktiviert den Timer und entfernt die Units, die flakipype geschrieben hat |
+| `daemon status` | Nächster und letzter Start des Timers, das letzte Ergebnis und der Exit-Status sowie die Zusammenfassung des letzten Laufs aus dem Journal |
 
-`--schedule` takes a systemd calendar expression, checked with
-`systemd-analyze calendar`; default `daily`. The units go to
+`--schedule` nimmt einen systemd-Kalenderausdruck, geprüft mit
+`systemd-analyze calendar`; Standard `daily`. Die Units landen in
 `$XDG_CONFIG_HOME/systemd/user/`:
 
 ```ini
@@ -244,128 +267,138 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-- `ExecStart` is the absolute path of the running `flakipype`, because a
-  user unit's `PATH` does not include `~/.local/bin`.
-- `TimeoutStartSec` is the highest allowed `run.max_minutes` (720) plus 10
-  minutes. It is a backstop: the run keeps its own `run.max_minutes`, and
-  changing that setting later needs no new unit. A step that is already
-  running when the limit is reached (the scan, an investigation, a fix's
-  last model call) still finishes, so a run can end a few minutes after
-  `run.max_minutes`, never anywhere near the unit's limit.
-- `Type=oneshot` means systemd never starts the service twice at once; the
-  run lock covers manual runs.
-- Unit files flakipype did not write (no `generated by flakipype` line) are
-  never overwritten or removed.
+- `ExecStart` ist der absolute Pfad des laufenden `flakipype`, weil der
+  `PATH` einer User-Unit `~/.local/bin` nicht enthält.
+- `TimeoutStartSec` ist der höchste erlaubte Wert für `run.max_minutes` (720)
+  plus 10 Minuten. Das ist eine Rückfallgrenze: Der Lauf behält sein eigenes
+  `run.max_minutes`, und eine spätere Änderung dieser Einstellung braucht
+  keine neue Unit. Ein Schritt, der beim Erreichen des Limits schon läuft
+  (der Scan, eine Untersuchung, der letzte Modellaufruf einer Korrektur),
+  wird trotzdem fertig, sodass ein Lauf ein paar Minuten nach
+  `run.max_minutes` enden kann, aber nie auch nur in der Nähe des Limits der
+  Unit.
+- `Type=oneshot` bedeutet, dass systemd den Dienst nie zweimal gleichzeitig
+  startet; die Laufsperre deckt manuelle Läufe ab.
+- Unit-Dateien, die flakipype nicht geschrieben hat (keine Zeile
+  `generated by flakipype`), werden nie überschrieben oder entfernt.
 
-**Checks before installing.** `daemon install` checks the schedule with
-`systemd-analyze calendar` and runs
-`systemd-run --user --wait --pipe --collect <flakipype> doctor`, so `doctor`
-runs in the same environment as the timer will. If either fails, nothing is
-written and the output says why, typically the keyring. The executable path
-and the schedule must not contain characters that could add lines to a unit
-file. If systemd refuses after the files are written, the message says where
-they are and that `daemon uninstall` removes them. Without lingering
-(`loginctl show-user` reports `Linger=no`), a warning says that the timer
-only runs while you are logged in and that `loginctl enable-linger` changes
-that; flakipype does not run it.
+**Prüfungen vor der Installation.** `daemon install` prüft den Zeitplan mit
+`systemd-analyze calendar` und führt
+`systemd-run --user --wait --pipe --collect <flakipype> doctor` aus, sodass
+`doctor` in derselben Umgebung läuft wie später der Timer. Schlägt eines
+davon fehl, wird nichts geschrieben, und die Ausgabe sagt, warum,
+typischerweise der Schlüsselbund. Der Pfad zur ausführbaren Datei und der
+Zeitplan dürfen keine Zeichen enthalten, die einer Unit-Datei Zeilen
+hinzufügen könnten. Lehnt systemd ab, nachdem die Dateien geschrieben sind,
+sagt die Meldung, wo sie liegen und dass `daemon uninstall` sie entfernt.
+Ohne Lingering (`loginctl show-user` meldet `Linger=no`) sagt eine Warnung,
+dass der Timer nur läuft, solange du angemeldet bist, und dass
+`loginctl enable-linger` das ändert; flakipype führt es nicht selbst aus.
 
-## Install script
+## Installationsskript
 
-`install.sh` in the repository root, POSIX `sh`, for a user install without
-root:
+`install.sh` im Wurzelverzeichnis des Repositorys, POSIX-`sh`, für eine
+Benutzerinstallation ohne root:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
 sh install.sh
 ```
 
-1. Checks Linux, `x86_64` or `aarch64`, glibc, and `curl`, `tar`,
-   `sha256sum` and `git`; a missing one is named with the package to
-   install.
-2. Uses `uv` from `PATH` if there is one. Otherwise it downloads the `uv`
-   release pinned in the script from `github.com/astral-sh/uv/releases`,
-   verifies the tarball against the release's published `.sha256` file and
-   installs `uv` to `~/.local/bin`. A mismatch aborts and installs nothing.
-3. Runs `uv tool install --force
-   git+https://github.com/besessener/flakipype@v0.1.0`. The tag is the one
-   the script was released with. uv takes a Python 3.12 or newer from the
-   system or downloads one, which it verifies itself.
-4. Prints the next step (`flakipype setup`) and a hint if `~/.local/bin` is
-   not on `PATH`.
+1. Prüft Linux, `x86_64` oder `aarch64`, glibc sowie `curl`, `tar`,
+   `sha256sum` und `git`; fehlt eines, wird es mit dem zu installierenden
+   Paket genannt.
+2. Nutzt `uv` aus dem `PATH`, wenn es eines gibt. Andernfalls lädt es das im
+   Skript festgelegte `uv`-Release von `github.com/astral-sh/uv/releases`
+   herunter, prüft das Tarball gegen die veröffentlichte `.sha256`-Datei des
+   Releases und installiert `uv` nach `~/.local/bin`. Eine Abweichung bricht
+   ab und installiert nichts.
+3. Führt `uv tool install --force
+   git+https://github.com/besessener/flakipype@v0.1.0` aus. Das Tag ist
+   dasjenige, mit dem das Skript veröffentlicht wurde. uv nimmt ein Python
+   3.12 oder neuer vom System oder lädt eines herunter, das es selbst prüft.
+4. Gibt den nächsten Schritt aus (`flakipype setup`) und einen Hinweis, wenn
+   `~/.local/bin` nicht im `PATH` liegt.
 
-`FLAKIPYPE_SOURCE` installs from a local checkout instead, for the smoke
-tests. `uv tool install git+…` stays documented for people who already
-have `uv`.
+`FLAKIPYPE_SOURCE` installiert stattdessen aus einem lokalen Checkout, für
+die Smoke-Tests. `uv tool install git+…` bleibt für alle dokumentiert, die
+`uv` schon haben.
 
 ## Release
 
-The version is `0.1.0` in `pyproject.toml`, and `install.sh` names the tag
-`v0.1.0`; a unit test checks that both agree. The tag on `main` and the
-GitHub release from it are created by hand. There is no release workflow and
-no PyPI package.
+Die Version ist `0.1.0` in `pyproject.toml`, und `install.sh` nennt das Tag
+`v0.1.0`; ein Unit-Test prüft, dass beide übereinstimmen. Das Tag auf `main`
+und das GitHub-Release daraus werden von Hand erstellt. Es gibt keinen
+Release-Workflow und kein PyPI-Paket.
 
-## Smoke tests
+## Smoke-Tests
 
-The job `smoke` in `.github/workflows/ci.yml`, on pull requests and pushes
-to `main`, and runnable with `act pull_request -j smoke`. A matrix of
-containers, images pinned by digest: `ubuntu:24.04`, `debian:12`,
-`fedora:latest` and `archlinux:latest`. Each one installs `curl`, `git` and
-`systemd` (and `ca-certificates` or `tar` where the image lacks them) as root,
-then runs `tests/smoke/smoke.sh` as a new user without root, which:
+Der Job `smoke` in `.github/workflows/ci.yml`, bei Pull Requests und Pushes
+auf `main`, und ausführbar mit `act pull_request -j smoke`. Eine Matrix aus
+Containern, Images per Digest festgelegt: `ubuntu:24.04`, `debian:12`,
+`fedora:latest` und `archlinux:latest`. Jeder installiert als root `curl`,
+`git` und `systemd` (und `ca-certificates` oder `tar`, wo das Image sie nicht
+hat) und führt dann `tests/smoke/smoke.sh` als neuer Benutzer ohne root aus,
+das:
 
-1. runs `install.sh` with `FLAKIPYPE_SOURCE` set to a copy of the checkout,
-   which also exercises the verified `uv` download, since no image has `uv`;
-2. checks `flakipype --version` against `pyproject.toml`;
-3. checks that `flakipype doctor` without a configuration exits with code 1
-   and points to `flakipype setup`;
-4. renders the units with `daemon install --print`, checks that `ExecStart`
-   starts the installed command, and checks both units with
-   `systemd-analyze verify`.
+1. `install.sh` mit `FLAKIPYPE_SOURCE` auf eine Kopie des Checkouts ausführt,
+   was auch den geprüften `uv`-Download testet, da kein Image `uv` hat;
+2. `flakipype --version` gegen `pyproject.toml` prüft;
+3. prüft, dass `flakipype doctor` ohne Konfiguration mit Code 1 endet und auf
+   `flakipype setup` verweist;
+4. die Units mit `daemon install --print` rendert, prüft, dass `ExecStart`
+   den installierten Befehl startet, und beide Units mit
+   `systemd-analyze verify` prüft.
 
-The job may only read the repository and checks out without credentials,
-like the other jobs. Real GitHub and a real model are not used; `run` itself
-is tested in the `test` job with in-memory GitHub fakes and a fake model.
+Der Job darf das Repository nur lesen und checkt ohne Zugangsdaten aus, wie
+die anderen Jobs. Echtes GitHub und ein echtes Modell werden nicht genutzt;
+`run` selbst wird im Job `test` mit GitHub-Fakes im Speicher und einem
+Fake-Modell getestet.
 
-## Where it lives
+## Wo es im Code liegt
 
-- **`unattended`** (on the layer of `tui`, independent of it): the run
-  service with the steps above and its report (`service.py`), the daily
-  limits (`limits.py`) and what a run takes over from the last one
-  (`carry.py`). It uses the chat's workspace and the `investigate`, `fix`
-  and `actions` services the way the chat does.
-- **`agent`**: the `HeadlessGate` next to the policy gate (`tools.py`).
-- **`setup`**: `daemon.py` renders the units (pure text) and installs them
-  through a command runner it is given.
-- **`store`**: the run lock (`lock.py`), WAL, run sessions, the fixes a run
-  did not push, the investigations that ended without a verdict, and audit
-  entries since a time.
-- **`config`**: `[run]`, `[secrets]` and the store choice.
-- **`fix`** and **`actions`**: the origin `run`, audited verification runs,
-  taking over pull requests and runs, the check for an open pull request
-  before delivery, and typed errors for a fix that was not made and a failed
-  delivery.
-- **`investigate`**: run sessions in `/sessions` and `/resume`.
-- **`cli`**: `run` and `daemon` (`run_command.py`, `run_report.py`,
-  `daemon_commands.py`), wired in `wiring.py`.
+- **`unattended`** (auf der Ebene von `tui`, unabhängig davon): der
+  Lauf-Service mit den Schritten oben und seinem Bericht (`service.py`), die
+  Tageslimits (`limits.py`) und was ein Lauf vom letzten übernimmt
+  (`carry.py`). Er nutzt den Workspace des Chats und die Services
+  `investigate`, `fix` und `actions` so, wie der Chat es tut.
+- **`agent`**: das `HeadlessGate` neben dem Policy-Gate (`tools.py`).
+- **`setup`**: `daemon.py` rendert die Units (reiner Text) und installiert
+  sie über einen Befehlsausführer, den es übergeben bekommt.
+- **`store`**: die Laufsperre (`lock.py`), WAL, Laufsitzungen, die
+  Korrekturen, die ein Lauf nicht gepusht hat, die Untersuchungen, die ohne
+  Urteil endeten, und Audit-Einträge seit einem Zeitpunkt.
+- **`config`**: `[run]`, `[secrets]` und die Wahl des Speichers.
+- **`fix`** und **`actions`**: der Ursprung `run`, auditierte
+  Verifikationsläufe, die Übernahme von Pull Requests und Läufen, die Suche
+  nach einem offenen Pull Request vor der Auslieferung und typisierte Fehler
+  für eine nicht erstellte Korrektur und eine fehlgeschlagene Auslieferung.
+- **`investigate`**: Laufsitzungen in `/sessions` und `/resume`.
+- **`cli`**: `run` und `daemon` (`run_command.py`, `run_report.py`,
+  `daemon_commands.py`), verdrahtet in `wiring.py`.
 
-## Testing
+## Tests
 
-- The run service over in-memory GitHub fakes and a fake agent and fixer,
-  with a settable clock: both modes, a fix with warnings, a rejected fix that
-  is not tried again (and is in a dry run), every limit, the time limit with
-  verifications left over and finished by the next `auto` run, a failed
-  delivery, the session it leaves for the chat.
-- A line for every finding that was not fixed, and investigations without a
-  verdict that the next run skips until a newer failure.
-- Daily usage from audit entries and the per-run limits it leaves.
-- The run lock held twice; WAL on a cache file.
-- `/resume` of a run session: a new session with the run's fixes not pushed,
-  without its pull requests.
-- The exact unit files; install, uninstall and status against a fake command
-  runner, including a failing `doctor`, foreign unit files and a refused
-  start.
-- The keyring error and each `secrets.store` value.
-- The summary, its JSON and every exit code of `run`; the `daemon` commands.
-- `install.sh` and the smoke test with ShellCheck (`shellcheck-py`) in
-  `poe check`, a test that the script installs the version in
-  `pyproject.toml`, and end to end in the smoke job.
+- Der Lauf-Service über GitHub-Fakes im Speicher und einem Fake-Agenten und
+  -Fixer, mit einer einstellbaren Uhr: beide Modi, eine Korrektur mit
+  Warnungen, eine abgelehnte Korrektur, die nicht erneut versucht wird (auch
+  in einem Probelauf), jedes Limit, das Zeitlimit mit übrig gebliebenen
+  Verifikationen, die der nächste `auto`-Lauf zu Ende führt, eine
+  fehlgeschlagene Auslieferung, die Sitzung, die er für den Chat hinterlässt.
+- Eine Zeile für jeden Befund, der nicht korrigiert wurde, und
+  Untersuchungen ohne Urteil, die der nächste Lauf bis zu einem neueren
+  Fehlschlag überspringt.
+- Die tägliche Nutzung aus Audit-Einträgen und die Limits pro Lauf, die sie
+  übrig lässt.
+- Die Laufsperre zweimal gehalten; WAL auf einer Cache-Datei.
+- `/resume` einer Laufsitzung: eine neue Sitzung mit den nicht gepushten
+  Korrekturen des Laufs, ohne seine Pull Requests.
+- Die exakten Unit-Dateien; Installation, Deinstallation und Status gegen
+  einen Fake-Befehlsausführer, einschließlich eines fehlschlagenden
+  `doctor`, fremder Unit-Dateien und eines abgelehnten Starts.
+- Der Schlüsselbund-Fehler und jeder Wert von `secrets.store`.
+- Die Zusammenfassung, ihr JSON und jeder Exit-Code von `run`; die
+  `daemon`-Befehle.
+- `install.sh` und der Smoke-Test mit ShellCheck (`shellcheck-py`) in
+  `poe check`, ein Test, dass das Skript die Version aus `pyproject.toml`
+  installiert, und Ende-zu-Ende im Smoke-Job.

@@ -1,131 +1,154 @@
-# How flakiness is detected
+# Wie Instabilität erkannt wird
 
-A red pipeline is not evidence of flakiness: catching real bugs is what
-pipelines are for. A test is flaky when it fails *sometimes on the same
-code*. flakipype therefore separates **proof** from **suspicion**, and only
-proof counts. Everything here is pure logic in the `flaky` package; no model
-is involved. Judging the unproven cases is the agent's job.
+Eine rote Pipeline ist kein Beleg für Instabilität: Echte Fehler zu finden
+ist genau die Aufgabe von Pipelines. Ein Test ist instabil, wenn er *auf
+demselben Code manchmal* fehlschlägt. flakipype trennt deshalb **Beweis** von
+**Verdacht**, und nur der Beweis zählt. Alles hier ist reine Logik im Paket
+`flaky`; kein Modell ist beteiligt. Die unbewiesenen Fälle zu beurteilen ist
+Aufgabe des Agenten.
 
-## Proof: the same code both failed and passed
+## Beweis: derselbe Code ist fehlgeschlagen und durchgelaufen
 
-**Passed on rerun (strong).** A run's attempt failed and a later attempt of
-the *same run* passed. Same commit, same workflow file, same inputs — only
-the luck or the environment changed. The classic "just rerun it" flake.
+**Beim Rerun durchgelaufen (stark).** Ein Versuch eines Laufs ist
+fehlgeschlagen, und ein späterer Versuch *desselben Laufs* ist durchgelaufen.
+Gleicher Commit, gleiche Workflow-Datei, gleiche Eingaben – nur Glück oder
+Umgebung haben sich geändert. Der klassische Flake nach dem Motto „einfach
+noch mal laufen lassen“.
 
-**Same commit passed (medium).** A run failed, but another run of the same
-workflow on the same commit passed, for example a push and a manual dispatch.
-Weaker, because the runs can differ in event, inputs or environment.
-Pull request runs (`pull_request`, `pull_request_target`) take no part: they
-test the merge of the head with the base branch, not the head commit itself,
-so a pass on push and a failure on the pull request tested different code.
-Their reruns still count as "passed on rerun".
+**Gleicher Commit durchgelaufen (mittel).** Ein Lauf ist fehlgeschlagen, aber
+ein anderer Lauf desselben Workflows auf demselben Commit ist durchgelaufen,
+zum Beispiel ein Push und ein manueller Dispatch. Schwächer, weil sich die
+Läufe in Ereignis, Eingaben oder Umgebung unterscheiden können.
+Pull-Request-Läufe (`pull_request`, `pull_request_target`) zählen hier nicht:
+Sie testen den Merge des Heads mit dem Basisbranch, nicht den Head-Commit
+selbst, also haben ein Erfolg beim Push und ein Fehlschlag im Pull Request
+unterschiedlichen Code getestet. Ihre Reruns zählen trotzdem als „beim Rerun
+durchgelaufen“.
 
-Both compare identical code — the whole repository, not just the workflow —
-so code changes elsewhere in the history cannot fake an event. A run that
-still fails after a rerun is not flaky; it is broken.
+Beide Regeln vergleichen identischen Code – das ganze Repository, nicht nur
+den Workflow –, sodass Codeänderungen an anderer Stelle der Historie kein
+Ereignis vortäuschen können. Ein Lauf, der nach einem Rerun weiterhin
+fehlschlägt, ist nicht instabil, sondern kaputt.
 
-Generated workflows without a file in the repository (Dependabot's
-`dynamic/…` runs) are skipped: their name changes with every update and there
-is nothing to fix in the repository.
+Generierte Workflows ohne Datei im Repository (die `dynamic/…`-Läufe von
+Dependabot) werden übersprungen: Ihr Name ändert sich mit jedem Update, und
+im Repository gibt es nichts zu korrigieren.
 
-## Verdicts: flaky, seen once, fixed
+## Urteile: flaky, seen once, fixed
 
-Proven events are grouped by repository, workflow, job and first failed step
-— across commits and branches, because the cause of a flaky test often lives
-for months. One event alone is still not enough:
+Bewiesene Ereignisse werden nach Repository, Workflow, Job und erstem
+fehlgeschlagenem Schritt gruppiert – über Commits und Branches hinweg, weil
+die Ursache eines instabilen Tests oft monatelang besteht. Ein einzelnes
+Ereignis reicht trotzdem nicht:
 
-| Verdict | Rule | Why |
+| Urteil | Regel | Warum |
 | --- | --- | --- |
-| **flaky** | Events in at least `scan.min_flaky_runs` runs (default 2) **and** the workflow passed between the first and the last of them | The failure keeps coming back after good phases |
-| **seen once** | Fewer runs than `min_flaky_runs` | A single event can be an outage, a runner that died, or a fix outside the code (a repository setting, a secret) followed by a rerun |
-| **fixed** | Enough runs, all of them before the workflow passed again for good, and it did pass after the last one | A real error that was fixed, e.g. a push failed twice, the Pages setting was changed, and a dispatch on the same commit passed |
+| **flaky** | Ereignisse in mindestens `scan.min_flaky_runs` Läufen (Standard 2) **und** der Workflow ist zwischen dem ersten und dem letzten davon durchgelaufen | Der Fehler kommt nach guten Phasen immer wieder |
+| **seen once** | Weniger Läufe als `min_flaky_runs` | Ein einzelnes Ereignis kann ein Ausfall sein, ein abgestürzter Runner oder eine Korrektur außerhalb des Codes (eine Repository-Einstellung, ein Secret), gefolgt von einem Rerun |
+| **fixed** | Genug Läufe, alle davon bevor der Workflow endgültig wieder durchlief, und nach dem letzten ist er durchgelaufen | Ein echter Fehler, der behoben wurde, z. B. ein Push ist zweimal fehlgeschlagen, die Pages-Einstellung wurde geändert, und ein Dispatch auf demselben Commit ist durchgelaufen |
 
-A job with enough runs that has not passed since its last failure is not
-fixed: it counts as **flaky** and is investigated, where the agent can still
-call it a real bug.
+Ein Job mit genug Läufen, der seit seinem letzten Fehlschlag nicht wieder
+durchgelaufen ist, ist nicht behoben: Er zählt als **flaky** und wird
+untersucht, wobei der Agent ihn immer noch als echten Fehler einstufen kann.
 
-"Passed" means the whole workflow run passed. A run where the job passed but
-another job failed does not count as a pass, so the rule leans towards
-"fixed" rather than "flaky".
+„Durchgelaufen“ heißt, dass der ganze Workflow-Lauf durchgelaufen ist. Ein
+Lauf, in dem der Job durchlief, aber ein anderer Job fehlschlug, zählt nicht
+als Erfolg; die Regel neigt also eher zu „fixed“ als zu „flaky“.
 
-Only **flaky** jobs are ranked. The **flake rate** is the number of runs with
-a flaky event divided by the finished runs of the workflow in the window.
-Ranking: most affected runs first, then the higher rate, then the most
-recent. Seen-once and fixed jobs are listed separately and never ranked.
+Nur Jobs mit dem Urteil **flaky** werden gerankt. Die **Flake-Rate** ist die
+Zahl der Läufe mit einem Flake-Ereignis geteilt durch die abgeschlossenen
+Läufe des Workflows im Zeitfenster. Rangfolge: die meisten betroffenen Läufe
+zuerst, dann die höhere Rate, dann der jüngste. Jobs mit „seen once“ und
+„fixed“ werden getrennt aufgeführt und nie gerankt.
 
-## Suspicion: recurring errors
+## Verdacht: wiederkehrende Fehler
 
-Flakiness nobody reran is invisible to the proof rules: a run fails, nobody
-reruns, the next commit passes, and a week later it fails again the same way.
-But the same pattern also fits a real bug caught several times, or a feature
-branch that stays red until it is fixed. Telling them apart needs a look at
-what changed between the failure and the next pass — judgement, not a rule.
+Instabilität, bei der niemand einen Rerun gestartet hat, ist für die
+Beweisregeln unsichtbar: Ein Lauf schlägt fehl, niemand führt ihn erneut aus,
+der nächste Commit läuft durch, und eine Woche später schlägt er auf dieselbe
+Weise wieder fehl. Dasselbe Muster passt aber auch zu einem echten Fehler,
+der mehrmals erwischt wurde, oder zu einem Feature-Branch, der rot bleibt,
+bis er korrigiert ist. Um sie zu unterscheiden, muss man sich ansehen, was
+sich zwischen dem Fehlschlag und dem nächsten Erfolg geändert hat – das ist
+Urteilsvermögen, keine Regel.
 
-So flakipype lists **recurring errors** separately: the same job, step and
-error fingerprint in at least `min_flaky_runs` runs, on any branch, without
-proof. They are labelled "flaky or a real bug", carry no flake rate and are
-never ranked. The agent investigates them with the commit diffs. An
-error that the same scan proved flaky for the same job and step is not
-listed again as a recurring error.
+Deshalb führt flakipype **wiederkehrende Fehler** getrennt auf: derselbe Job,
+derselbe Schritt und derselbe Fehler-Fingerprint in mindestens
+`min_flaky_runs` Läufen, auf beliebigen Branches, ohne Beweis. Sie sind als
+„flaky or a real bug“ gekennzeichnet, haben keine Flake-Rate und werden nie
+gerankt. Der Agent untersucht sie anhand der Commit-Diffs. Ein Fehler, den
+derselbe Scan für denselben Job und Schritt als instabil bewiesen hat, wird
+nicht noch einmal als wiederkehrender Fehler aufgeführt.
 
-A generic *exit code N* never ties runs together; only a real error line
-does.
+Ein generischer *exit code N* verbindet nie Läufe miteinander; das tut nur
+eine echte Fehlerzeile.
 
-## What it costs
+## Was es kostet
 
-GitHub's run list only shows the last attempt of each run. flakipype lists
-all runs (about one call per 100 runs; the window is split when GitHub's
-1,000-result cap would cut the list), then fetches jobs for the attempts that
-can be flaky and for the last attempt of every failed run. Finished attempts
-never change, so their jobs are cached for good. A scan reads the jobs of at
-most `scan.max_job_reads` attempts (default 500), those that can be flaky
-first and newest first; the rest are counted as not inspected yet and read
-by later scans. On an organisation-sized target (hundreds of repositories)
-the first scans therefore build up the cache over several runs.
+Die Laufliste von GitHub zeigt nur den letzten Versuch jedes Laufs.
+flakipype listet alle Läufe (etwa ein Aufruf pro 100 Läufe; das Zeitfenster
+wird geteilt, wenn die Obergrenze von 1.000 Ergebnissen bei GitHub die Liste
+abschneiden würde) und holt dann die Jobs für die Versuche, die instabil sein
+können, und für den letzten Versuch jedes fehlgeschlagenen Laufs.
+Abgeschlossene Versuche ändern sich nie, deshalb werden ihre Jobs dauerhaft
+gecacht. Ein Scan liest die Jobs von höchstens `scan.max_job_reads` Versuchen
+(Standard 500), zuerst die, die instabil sein können, und die neuesten
+zuerst; der Rest wird als noch nicht geprüft gezählt und von späteren Scans
+gelesen. Bei einem Ziel in Organisationsgröße (Hunderte Repositories) bauen
+die ersten Scans den Cache deshalb über mehrere Läufe auf.
 
-At most 1,000 repositories of an owner are scanned; a longer list is cut and
-named in the scan's problems, and `--repo` picks others. A scan stopped by
-GitHub's rate limit still uses every cached job and log result.
+Es werden höchstens 1.000 Repositories eines Owners gescannt; eine längere
+Liste wird abgeschnitten und in den Problemen des Scans genannt, und `--repo`
+wählt andere aus. Ein Scan, den das Rate-Limit von GitHub gestoppt hat,
+nutzt trotzdem jeden gecachten Job und jedes gecachte Log-Ergebnis.
 
-Requests are made one after another, as GitHub recommends to avoid its
-secondary rate limits. On a real account (18 repositories, about 1,400 runs
-in 30 days, about 70 failed runs) the first scan took about 3 minutes and a
-repeat scan about 50 seconds, almost all of it GitHub answering pages of 100
-runs (about 3 seconds each). Run lists cannot be cached: a rerun of an old
-run keeps its creation date, so only listing again sees it.
+Anfragen laufen nacheinander, wie GitHub es empfiehlt, um seine sekundären
+Rate-Limits zu vermeiden. Auf einem echten Konto (18 Repositories, etwa
+1.400 Läufe in 30 Tagen, etwa 70 fehlgeschlagene Läufe) dauerte der erste
+Scan etwa 3 Minuten und ein wiederholter Scan etwa 50 Sekunden, fast
+vollständig die Zeit, in der GitHub Seiten mit 100 Läufen beantwortet (je
+etwa 3 Sekunden). Lauflisten lassen sich nicht cachen: Ein Rerun eines alten
+Laufs behält sein Erstellungsdatum, also sieht ihn nur erneutes Auflisten.
 
-## Error signatures
+## Fehlersignaturen
 
-flakipype reads job logs — proven flaky failures first, then the other
-failed jobs, newest first within each, up to `scan.max_log_downloads` per
-scan, cached — and extracts one signature per log:
+flakipype liest Job-Logs – zuerst bewiesen instabile Fehlschläge, dann die
+anderen fehlgeschlagenen Jobs, innerhalb jeder Gruppe die neuesten zuerst,
+bis zu `scan.max_log_downloads` pro Scan, gecacht – und gewinnt daraus eine
+Signatur pro Log:
 
-1. The first `##[error]` annotation that is not the generic
-   *Process completed with exit code N*.
-2. If there is only the generic one, the most telling line shortly before
-   it: lines with `ERR!`, `Error:` (also `TypeError:`, `AssertionError:` and
-   other names ending in `Error`), `fatal:`, `Traceback`, `FAILED` and names
-   ending in `Exception` win; warnings and stack frames are skipped.
+1. Die erste `##[error]`-Annotation, die nicht das generische
+   *Process completed with exit code N* ist.
+2. Gibt es nur die generische, die aussagekräftigste Zeile kurz davor:
+   Zeilen mit `ERR!`, `Error:` (auch `TypeError:`, `AssertionError:` und
+   andere Namen, die auf `Error` enden), `fatal:`, `Traceback`, `FAILED` und
+   Namen, die auf `Exception` enden, gewinnen; Warnungen und Stack-Frames
+   werden übersprungen.
 
-The text is normalised (stand-alone numbers, durations, hashes, timestamps
-and temporary paths are replaced by placeholders), so the same error on
-another day or a shifted line number gives the same **fingerprint**. A
-category (timeout, network, dependencies, …) comes from keyword rules, the
-more specific ones first. HTTP status codes (429, 502–504) count only next to
-`HTTP/…`, `status` or their reason phrase, never as a bare number such as a
-line number or a test count.
+Der Text wird normalisiert (alleinstehende Zahlen, Dauern, Hashes,
+Zeitstempel und temporäre Pfade werden durch Platzhalter ersetzt), sodass
+derselbe Fehler an einem anderen Tag oder mit verschobener Zeilennummer
+denselben **Fingerprint** ergibt. Eine Kategorie (Timeout, Netzwerk,
+Abhängigkeiten, …) ergibt sich aus Schlüsselwortregeln, die spezifischeren
+zuerst. HTTP-Statuscodes (429, 502–504) zählen nur neben `HTTP/…`, `status`
+oder ihrer Reason-Phrase, nie als bloße Zahl wie eine Zeilennummer oder eine
+Testanzahl.
 
-Logs are written by anyone who can push code, so they are untrusted:
-terminal escape sequences and control characters are removed before anything
-is stored or shown, and logs will reach the model only as data, never as
-instructions (see the [safety model](sicherheitsmodell.md)).
+Logs schreibt jeder, der Code pushen kann, deshalb sind sie nicht
+vertrauenswürdig: Terminal-Escape-Sequenzen und Steuerzeichen werden
+entfernt, bevor etwas gespeichert oder angezeigt wird, und Logs erreichen das
+Modell nur als Daten, nie als Anweisungen (siehe das
+[Sicherheitsmodell](sicherheitsmodell.md)).
 
-## Known limits
+## Bekannte Grenzen
 
-- Changes outside the repository (settings, secrets, outside services) are
-  not visible in run data; "seen once" and "fixed" exist because of that.
-- Recurring errors are suspicion only until the agent has looked at them.
-- The signature heuristics are tuned on real logs (Playwright, npm, Stryker)
-  and will improve; changing them bumps a version so cached signatures are
-  recomputed.
-- Logs older than GitHub's retention (90 days by default) cannot be read.
+- Änderungen außerhalb des Repositorys (Einstellungen, Secrets, externe
+  Dienste) sind in den Laufdaten nicht sichtbar; deshalb gibt es „seen once“
+  und „fixed“.
+- Wiederkehrende Fehler sind nur ein Verdacht, bis der Agent sie sich
+  angesehen hat.
+- Die Signatur-Heuristiken sind an echten Logs (Playwright, npm, Stryker)
+  abgestimmt und werden besser werden; eine Änderung an ihnen erhöht eine
+  Version, sodass gecachte Signaturen neu berechnet werden.
+- Logs, die älter sind als die Aufbewahrungsfrist von GitHub (standardmäßig
+  90 Tage), können nicht gelesen werden.

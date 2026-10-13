@@ -1,16 +1,17 @@
-# Use the chat
+# Den Chat nutzen
 
-Run `flakipype` without a command to open the chat: a conversation on the
-left, the findings of the current scan on the right. Ask questions in plain
-language or use slash commands. Scans and investigations only read. Reruns,
-dispatches and fixes run only after you confirm each one (or within the
-budgets in `/mode auto`); a fix becomes a new branch and a draft pull
-request, never a change to the default branch.
+Starte `flakipype` ohne Befehl, um den Chat zu öffnen: links das Gespräch,
+rechts die Befunde des aktuellen Scans. Stell Fragen in normaler Sprache oder
+nutze Slash-Befehle. Scans und Untersuchungen lesen nur. Reruns, Dispatches
+und Korrekturen laufen erst, wenn du jede einzelne bestätigst (oder innerhalb
+der Budgets in `/mode auto`); eine Korrektur wird ein neuer Branch und ein
+Draft-PR, nie eine Änderung am Standardbranch.
 
-It needs a terminal and a model (see [connect a model](modell-verbinden.md)).
-Without a terminal, `flakipype` prints its help instead.
+Dafür braucht es ein Terminal und ein Modell (siehe
+[Modell verbinden](modell-verbinden.md)). Ohne Terminal gibt `flakipype`
+stattdessen seine Hilfe aus.
 
-## A typical session
+## Eine typische Sitzung
 
 ```text
 /scan                  scan with the configured window; findings appear on the right
@@ -20,92 +21,95 @@ why does the E2E test of Archivist fail?
 /fix 2                 a fix as a draft pull request; review the diff in the dialog
 ```
 
-The chat model scans, lists findings and starts investigations itself when a
-question needs them. The line above the input shows what it is doing.
-Selecting a finding in the sidebar (arrow keys and Enter, or a click) puts
-`/investigate N` into the input, or `/why N` once it has a verdict; nothing
-starts until you press Enter, because investigations cost tokens.
+Das Chat-Modell scannt, listet Befunde und startet Untersuchungen selbst, wenn
+eine Frage sie braucht. Die Zeile über der Eingabe zeigt, was es gerade tut.
+Wählst du in der Seitenleiste einen Befund aus (Pfeiltasten und Enter oder ein
+Klick), steht `/investigate N` in der Eingabe, oder `/why N`, sobald er ein
+Urteil hat; nichts startet, bevor du Enter drückst, denn Untersuchungen kosten
+Tokens.
 
-## Commands
+## Befehle
 
-| Command | Does |
+| Befehl | Wirkung |
 | --- | --- |
-| `/scan [days]` | Scan the workflow runs and number the findings |
-| `/findings`, `/flaky` | List the findings of the current scan |
-| `/investigate N [N …]` | Investigate findings by number; `all` for the flaky jobs and recurring errors; `--fresh` ignores stored verdicts |
-| `/why N` | Show the verdict for finding N (investigates it first if needed) |
-| `/fix N [--fresh]` | Write a fix for finding N and, once you confirm, push it as a draft pull request; `--fresh` drops a fix that was shown but not pushed |
-| `/rerun N [--all]` | Rerun the failed jobs of finding N's newest failing run; `--all` reruns all jobs of its newest run |
-| `/dispatch N [ref] [xK]` | Start finding N's workflow on the default branch or `ref`, K times (1–10) |
-| `/runs` | The runs started in this session and their state |
-| `/cancel R` | Cancel run R (`R1`, `R2`, …) started in this session |
-| `/actions` | The actions (reruns, dispatches, cancels, fixes) requested in this session |
-| `/mode ask\|auto` | Confirm every action (`ask`, the default), or let them run within the budgets (`auto`); `/mode` shows the mode |
-| `/budget` | Tokens used in this session: the chat, its investigations and its fixes |
-| `/sessions` | The ten most recent sessions; those of [unattended runs](zeitgesteuert-ausfuehren.md) end with `· run` |
-| `/resume N` | Continue session N; the next action scans again, with the session's window and repositories on the configured owner and host. A run's session opens as a new chat session with its scan, verdicts and fixes not pushed; its pull requests stay with the timer |
-| `/new` | Start a new session: the configured scan, no findings, a new token count |
-| `/help` | The list of commands |
-| `/quit`, `/exit`, Ctrl+Q | Leave; work still running stops at its next model call |
+| `/scan [days]` | Die Workflow-Läufe scannen und die Befunde nummerieren |
+| `/findings`, `/flaky` | Die Befunde des aktuellen Scans auflisten |
+| `/investigate N [N …]` | Befunde nach Nummer untersuchen; `all` für die instabilen Jobs und wiederkehrenden Fehler; `--fresh` ignoriert gespeicherte Urteile |
+| `/why N` | Das Urteil zu Befund N zeigen (untersucht ihn vorher, falls nötig) |
+| `/fix N [--fresh]` | Eine Korrektur für Befund N schreiben und sie nach deiner Bestätigung als Draft-PR pushen; `--fresh` verwirft eine Korrektur, die gezeigt, aber nicht gepusht wurde |
+| `/rerun N [--all]` | Die fehlgeschlagenen Jobs des neuesten fehlgeschlagenen Laufs von Befund N erneut ausführen; `--all` führt alle Jobs seines neuesten Laufs erneut aus |
+| `/dispatch N [ref] [xK]` | Den Workflow von Befund N auf dem Standardbranch oder `ref` starten, K-mal (1–10) |
+| `/runs` | Die in dieser Sitzung gestarteten Läufe und ihr Zustand |
+| `/cancel R` | Lauf R (`R1`, `R2`, …) abbrechen, der in dieser Sitzung gestartet wurde |
+| `/actions` | Die in dieser Sitzung angeforderten Aktionen (Reruns, Dispatches, Abbrüche, Korrekturen) |
+| `/mode ask\|auto` | Jede Aktion bestätigen (`ask`, der Standard) oder sie innerhalb der Budgets laufen lassen (`auto`); `/mode` zeigt den Modus |
+| `/budget` | In dieser Sitzung verbrauchte Tokens: der Chat, seine Untersuchungen und seine Korrekturen |
+| `/sessions` | Die zehn neuesten Sitzungen; die von [unbeaufsichtigten Läufen](zeitgesteuert-ausfuehren.md) enden auf `· run` |
+| `/resume N` | Sitzung N fortsetzen; die nächste Aktion scannt erneut, mit Zeitfenster und Repositories der Sitzung auf dem konfigurierten Owner und Host. Die Sitzung eines Laufs öffnet sich als neue Chat-Sitzung mit ihrem Scan, ihren Urteilen und nicht gepushten Korrekturen; ihre Pull Requests bleiben beim Timer |
+| `/new` | Eine neue Sitzung starten: der konfigurierte Scan, keine Befunde, ein neuer Token-Zähler |
+| `/help` | Die Liste der Befehle |
+| `/quit`, `/exit`, Ctrl+Q | Beenden; noch laufende Arbeit stoppt beim nächsten Modellaufruf |
 
-## Sessions
+## Sitzungen
 
-Every message is saved: the conversation, the model's history, the scan
-options, the findings list, the started runs, the action budget, fixes
-that were shown but not pushed, and opened pull requests with their
-verification. The mode is not saved, and neither is a question still being
-answered: a session closed in the middle of one resumes before it. Sessions
-live in the cache database next to the scan cache (see
-[configuration](../reference/konfiguration.md)).
+Jede Nachricht wird gespeichert: das Gespräch, der Verlauf des Modells, die
+Scan-Optionen, die Befundliste, die gestarteten Läufe, das Aktionsbudget,
+Korrekturen, die gezeigt, aber nicht gepusht wurden, und geöffnete Pull
+Requests mit ihrer Verifikation. Nicht gespeichert werden der Modus und eine
+Frage, die gerade beantwortet wird: Eine mittendrin geschlossene Sitzung wird
+vor dieser Frage fortgesetzt. Sitzungen liegen in der Cache-Datenbank neben
+dem Scan-Cache (siehe [Konfiguration](../reference/konfiguration.md)).
 
-A session saved for another owner or host resumes on the configured ones and
-says so. A session saved by an older flakipype version, or under another
-model, resumes without the model's earlier reasoning; the conversation itself
-stays.
+Eine Sitzung, die für einen anderen Owner oder Host gespeichert wurde, wird
+auf den konfigurierten fortgesetzt und sagt das. Eine Sitzung, die eine ältere
+flakipype-Version oder ein anderes Modell gespeichert hat, wird ohne die
+frühere Argumentation des Modells fortgesetzt; das Gespräch selbst bleibt.
 
 ## Limits
 
-Each question to the chat model has the per-investigation limits (12 rounds,
-200,000 tokens, 5 minutes of model time); every investigation it starts has
-its own. A question's token limit counts only what the question adds to the
-conversation, not the earlier history that each request sends again, so long
-and resumed sessions keep answering. When a limit is reached, the chat says
-so: ask in smaller steps, start over with `/new`, or raise the limits in the
-`[agent]` section of the configuration. How it works:
-[the agent](../explanation/agent.md).
+Jede Frage an das Chat-Modell hat die Limits einer Untersuchung (12 Runden,
+200.000 Tokens, 5 Minuten Modellzeit); jede Untersuchung, die es startet, hat
+ihre eigenen. Das Token-Limit einer Frage zählt nur, was die Frage dem
+Gespräch hinzufügt, nicht den früheren Verlauf, den jede Anfrage erneut
+sendet; so antworten auch lange und fortgesetzte Sitzungen weiter. Ist ein
+Limit erreicht, sagt der Chat das: Frag in kleineren Schritten, fang mit
+`/new` neu an oder erhöhe die Limits im Abschnitt `[agent]` der
+Konfiguration. So funktioniert es: [der Agent](../explanation/agent.md).
 
-## Reruns and dispatches
+## Reruns und Dispatches
 
-`/rerun`, `/dispatch` and `/cancel`, and the same requests from the chat
-model, open a dialog that says exactly what will run. **Run** starts it;
-**Don't run** (the default, also Escape) does nothing, and the model does not
-ask again in that turn. Started runs appear under **Runs** in the sidebar
-and are polled every 10 seconds. When one finishes, a note says how it
-ended, for example "R1: E2E passed on attempt 2 (failed on attempt 1): a
-proven flaky event".
+`/rerun`, `/dispatch` und `/cancel` sowie dieselben Anfragen des
+Chat-Modells öffnen einen Dialog, der genau sagt, was laufen wird. **Run**
+startet es; **Don't run** (der Standard, auch Escape) tut nichts, und das
+Modell fragt in diesem Zug nicht noch einmal. Gestartete Läufe erscheinen
+unter **Runs** in der Seitenleiste und werden alle 10 Sekunden abgefragt. Ist
+einer fertig, sagt ein Hinweis, wie er ausging, zum Beispiel „R1: E2E passed
+on attempt 2 (failed on attempt 1): a proven flaky event“.
 
-A session allows 10 reruns and dispatches by default; `/new` starts a new
-count. Limits are in the `[actions]` section of the
-[configuration](../reference/konfiguration.md). The rules behind it:
-[actions](../explanation/aktionen.md).
+Eine Sitzung erlaubt standardmäßig 10 Reruns und Dispatches; `/new` beginnt
+eine neue Zählung. Die Limits stehen im Abschnitt `[actions]` der
+[Konfiguration](../reference/konfiguration.md). Die Regeln dahinter:
+[Aktionen](../explanation/aktionen.md).
 
-## Fixes
+## Korrekturen
 
-`/fix N`, or asking the chat to fix a finding, works for findings whose
-reviewed verdict is a flaky test, flaky infrastructure or a configuration
-problem; without a verdict it investigates first. A fixer agent edits an
-in-memory copy of the default branch, code checks the diff and a reviewer
-reads it. Then a dialog shows the facts, the model's explanation and the
-whole diff: **Push** creates a branch `flakipype/fix-…`, one signed commit
-and a draft pull request, and reruns the workflow on the fix branch;
-**Don't push** (the default, also Escape) keeps the fix in the session.
-Ask the chat for changes ("keep the assertion") and it revises that fix;
-`/fix N --fresh` starts over. The verification result arrives as a note and
-as a comment on the pull request. Merging is always up to you.
+`/fix N`, oder die Bitte an den Chat, einen Befund zu korrigieren, funktioniert
+für Befunde, deren geprüftes Urteil ein instabiler Test, instabile
+Infrastruktur oder ein Konfigurationsproblem ist; ohne Urteil wird zuerst
+untersucht. Ein Fixer-Agent bearbeitet eine Kopie des Standardbranches im
+Speicher, Code prüft den Diff und ein Reviewer liest ihn. Dann zeigt ein
+Dialog die Fakten, die Erklärung des Modells und den ganzen Diff: **Push**
+legt einen Branch `flakipype/fix-…`, einen signierten Commit und einen
+Draft-PR an und führt den Workflow auf dem Fix-Branch erneut aus; **Don't
+push** (der Standard, auch Escape) behält die Korrektur in der Sitzung. Bitte
+den Chat um Änderungen („keep the assertion“), und er überarbeitet diese
+Korrektur; `/fix N --fresh` fängt neu an. Das Ergebnis der Verifikation kommt
+als Hinweis und als Kommentar am Pull Request. Mergen bleibt immer dir
+überlassen.
 
-The status line shows the mode. In `/mode auto`, actions run without a
-dialog within the budgets, and a fix with warnings (it hides failures,
-reaches out, or changes `.github/`) is not pushed. A session allows 3 pull
-requests by default (`[fix]` in the
-[configuration](../reference/konfiguration.md)). How it works:
-[fixes](../explanation/korrekturen.md).
+Die Statuszeile zeigt den Modus. In `/mode auto` laufen Aktionen ohne Dialog
+innerhalb der Budgets, und eine Korrektur mit Warnungen (sie verdeckt
+Fehlschläge, greift nach außen oder ändert `.github/`) wird nicht gepusht.
+Eine Sitzung erlaubt standardmäßig 3 Pull Requests (`[fix]` in der
+[Konfiguration](../reference/konfiguration.md)). So funktioniert es:
+[Korrekturen](../explanation/korrekturen.md).

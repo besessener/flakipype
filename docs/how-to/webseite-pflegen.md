@@ -1,38 +1,42 @@
-# Maintain the website
+# Webseite pflegen
 
-The website lives in `site/` as plain HTML and CSS, with no build step. It is
-published at <https://besessener.github.io/flakipype/>. It shares its layout,
-sections and stylesheet with the [PlayMonkey](https://besessener.github.io/PlayMonkey/)
-and [Archivist](https://besessener.github.io/Archivist/) pages; only the texts,
-images, icon and the colour tokens at the top of `style.css` differ. A change
-to the layout or to the shared part of `style.css` goes to all three sites.
+Die Webseite liegt unter `site/` als reines HTML und CSS, ohne Build-Schritt.
+Sie erscheint auf <https://besessener.github.io/flakipype/>. Aufbau,
+Abschnitte und Stylesheet teilt sie mit den Seiten von
+[PlayMonkey](https://besessener.github.io/PlayMonkey/) und
+[Archivist](https://besessener.github.io/Archivist/); nur Texte, Bilder, Icon
+und die Farbtokens oben in `style.css` unterscheiden sich. Eine Änderung am
+Aufbau oder am gemeinsamen Teil von `style.css` gehört in alle drei Seiten.
 
-## Once: switch GitHub Pages on
+## Einmalig: GitHub Pages einschalten
 
-1. Open the repository's Settings → Pages.
-2. Under **Source**, choose **GitHub Actions**.
+1. Öffne im Repository Settings → Pages.
+2. Wähle unter **Source** den Eintrag **GitHub Actions**.
 
-## Change the content
+## Inhalt ändern
 
-1. Edit `site/index.html` or `site/style.css`. Texts are English and match
-   the [README](../../README.md) and the [safety model](../explanation/sicherheitsmodell.md);
-   a claim on the page must be true of the code. Keep the status note current
-   while features are missing.
-2. Open the page locally, e.g. `uv run python -m http.server -d site`, and
-   check light and dark (the system's colour scheme) and a phone-wide window.
+1. Bearbeite `site/index.html` oder `site/style.css`. Texte sind Deutsch,
+   sprechen mit „du“ und passen zur [README](../../README.md) und zum
+   [Sicherheitsmodell](../explanation/sicherheitsmodell.md); was die Seite
+   verspricht, muss der Code halten. Halte den Stand-Hinweis aktuell, solange
+   Funktionen fehlen.
+2. Öffne die Seite lokal, z. B. mit `uv run python -m http.server -d site`,
+   und prüfe Hell und Dunkel (Farben des Systems) und ein handybreites
+   Fenster.
 
-As soon as a change under `site/` lands on `main`, the workflow `pages.yml`
-publishes it. To start it by hand: Actions → Pages → **Run workflow**.
+Sobald eine Änderung unter `site/` auf `main` landet, veröffentlicht der
+Workflow `pages.yml` die Seite. Von Hand startest du ihn unter Actions →
+Pages → **Run workflow**.
 
-## Refresh the screenshots
+## Screenshots erneuern
 
-The images in `site/img/` are the TUI's snapshot tests rendered to PNG, so
-they show the fake world of the tests, never real repositories or names:
+Die Bilder in `site/img/` sind die Snapshot-Tests der TUI, als PNG gerendert.
+Sie zeigen deshalb die Fake-Welt der Tests, nie echte Repositories oder Namen:
 
-- `chat.png` from `tests/tui/__snapshots__/test_chat/test_chat_snapshot.raw`
-- `fix.png` from `tests/tui/__snapshots__/test_chat_fix/test_fix_dialog_snapshot.raw`
+- `chat.png` aus `tests/tui/__snapshots__/test_chat/test_chat_snapshot.raw`
+- `fix.png` aus `tests/tui/__snapshots__/test_chat_fix/test_fix_dialog_snapshot.raw`
 
-The snapshots are SVG. After `uv run pytest tests/tui --snapshot-update`, copy
-one to a file ending in `.svg` and take a 1482 × 1030 screenshot of it with any
-Chromium, for example
+Die Snapshots sind SVG. Kopiere nach `uv run pytest tests/tui --snapshot-update`
+einen davon in eine Datei mit der Endung `.svg` und nimm mit einem beliebigen
+Chromium einen Screenshot von 1482 × 1030 davon auf, zum Beispiel
 `chromium --headless --hide-scrollbars --window-size=1482,1030 --screenshot=site/img/chat.png file://$PWD/chat.svg`.

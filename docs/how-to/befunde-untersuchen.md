@@ -1,15 +1,16 @@
-# Investigate findings
+# Befunde untersuchen
 
-`flakipype investigate` scans, then lets the agent look into findings and
-explain each one with evidence: what causes it, whether it is a flaky test,
-flaky infrastructure, a real bug, a configuration problem or already fixed,
-and what to change. It only reads; nothing in your repositories changes.
+`flakipype investigate` scannt und lässt dann den Agenten die Befunde
+untersuchen und jeden mit Belegen erklären: was ihn verursacht, ob es ein
+instabiler Test, instabile Infrastruktur, ein echter Fehler, ein
+Konfigurationsproblem oder schon behoben ist, und was zu ändern ist. Der
+Befehl liest nur; in deinen Repositories ändert sich nichts.
 
-It needs a model (see [connect a model](modell-verbinden.md)) and costs model
-tokens: with the default limits at most 200,000 per finding and 1,000,000 per
-run.
+Dafür braucht es ein Modell (siehe [Modell verbinden](modell-verbinden.md)),
+und es kostet Modell-Tokens: mit den Standardlimits höchstens 200.000 je
+Befund und 1.000.000 je Lauf.
 
-## Run it
+## Ausführen
 
 ```bash
 flakipype scan                     # note the numbers of the findings
@@ -19,9 +20,10 @@ flakipype investigate --finding 3f9c2a1b  # by reference from `scan --json`
 flakipype investigate --all        # also "seen once" and "fixed"
 ```
 
-Each result shows the classification and confidence, a short summary, the
-cause, a suggested fix, the evidence with quotes (log lines, commits, files)
-and counter-evidence, open questions, and how the review went:
+Jedes Ergebnis zeigt die Einordnung und die Sicherheit, eine kurze
+Zusammenfassung, die Ursache, einen Korrekturvorschlag, die Belege mit Zitaten
+(Log-Zeilen, Commits, Dateien) und Gegenbelege, offene Fragen und wie die
+Prüfung ausging:
 
 ```text
 ╭─ #1 octo-org/app › CI › test ──────────────────────────────────────────────╮
@@ -38,30 +40,31 @@ and counter-evidence, open questions, and how the review went:
 ╰─ flaky · review: accepted: … · 41,230 tokens, 6 rounds ────────────────────╯
 ```
 
-These are the model's assessments. Every quote was checked against what the
-tools returned, and a second model pass reviewed the reasoning, but they are
-judgements, not the scan's proven facts.
+Das sind Einschätzungen des Modells. Jedes Zitat wurde gegen das geprüft, was
+die Werkzeuge geliefert haben, und ein zweiter Modelldurchgang hat die
+Begründung geprüft; trotzdem sind es Urteile, keine vom Scan bewiesenen
+Tatsachen.
 
-## Repeated runs reuse verdicts
+## Wiederholte Läufe nutzen Urteile wieder
 
-A completed verdict is stored and reused until the finding has a newer
-failure. `--fresh` investigates again. Failed investigations (a limit was
-reached, no verdict) are never stored.
+Ein fertiges Urteil wird gespeichert und wiederverwendet, bis der Befund einen
+neueren Fehlschlag hat. `--fresh` untersucht erneut. Gescheiterte
+Untersuchungen (ein Limit wurde erreicht, kein Urteil) werden nie gespeichert.
 
-## Options and output
+## Optionen und Ausgabe
 
-| Option | Meaning |
+| Option | Bedeutung |
 | --- | --- |
-| `--finding N` | Investigate finding N, or the finding with a reference from `flakipype scan --json`; repeatable. `investigate` scans again, and new runs can change the numbers since your scan; a reference always names the same finding. In the chat, after `/resume`, a number that now names another finding is refused once, and the sidebar shows the new numbers |
-| `--all` | Every finding instead of flaky jobs and recurring errors |
-| `--fresh` | Ignore stored verdicts |
-| `--days`, `--repo`, `--owner` | As for `flakipype scan` |
-| `--json` | Results as JSON on stdout, with the full scan under `scan` |
+| `--finding N` | Befund N untersuchen, oder den Befund mit einer Referenz aus `flakipype scan --json`; wiederholbar. `investigate` scannt erneut, und neue Läufe können die Nummern seit deinem Scan verschieben; eine Referenz bezeichnet immer denselben Befund. Im Chat wird nach `/resume` eine Nummer, die jetzt einen anderen Befund bezeichnet, einmal abgelehnt, und die Seitenleiste zeigt die neuen Nummern |
+| `--all` | Jeden Befund statt nur instabiler Jobs und wiederkehrender Fehler |
+| `--fresh` | Gespeicherte Urteile ignorieren |
+| `--days`, `--repo`, `--owner` | Wie bei `flakipype scan` |
+| `--json` | Ergebnisse als JSON auf stdout, mit dem vollständigen Scan unter `scan` |
 
-Exit codes: 0 all investigations completed, 1 one ended without a verdict or
-the scan stopped early, 2 not set up.
+Exit-Codes: 0 alle Untersuchungen abgeschlossen, 1 eine endete ohne Urteil
+oder der Scan brach vorzeitig ab, 2 nicht eingerichtet.
 
-To ask follow-up questions instead, use [the chat](chat-nutzen.md). Limits are in
-the `[agent]` section of the
-[configuration](../reference/konfiguration.md). How it works:
-[the agent](../explanation/agent.md).
+Für Rückfragen nutzt du stattdessen [den Chat](chat-nutzen.md). Die Limits
+stehen im Abschnitt `[agent]` der
+[Konfiguration](../reference/konfiguration.md). So funktioniert es:
+[der Agent](../explanation/agent.md).

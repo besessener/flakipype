@@ -1,79 +1,88 @@
-# Actions: reruns, dispatches and the live run view
+# Aktionen: Reruns, Dispatches und die Live-Ansicht der Läufe
 
-> Status: implemented.
+> Stand: umgesetzt.
 
-Scans and investigations only read. Some questions can only be answered by
-running CI again: does the failed E2E job pass on a rerun of the same
-commit? How often does the workflow fail if it runs five times in a row?
-The chat can start runs to answer them. You confirm each one, and the chat
-shows them live while they run.
+Scans und Untersuchungen lesen nur. Manche Fragen lassen sich nur
+beantworten, indem CI noch einmal läuft: Besteht der fehlgeschlagene E2E-Job,
+wenn derselbe Commit erneut ausgeführt wird? Wie oft schlägt der Workflow
+fehl, wenn er fünfmal hintereinander läuft? Der Chat kann Läufe starten, um
+das zu beantworten. Du bestätigst jeden einzelnen, und der Chat zeigt sie
+live, solange sie laufen.
 
-## Scope
+## Umfang
 
-- **In**: in the chat, rerunning the failed jobs of a run, rerunning a whole
-  run, dispatching a workflow (`workflow_dispatch`) on an existing branch or
-  tag, and cancelling runs flakipype started. A live list shows them, an
-  audit log records them, and a budget limits them.
-- **Out**: headless actions; unattended runs only rerun flakipype's own fix
-  branches, see [unattended runs](unbeaufsichtigte-laeufe.md). Changing code, branches or
-  pull requests and `/mode auto` in the chat are covered in
-  [fixes](korrekturen.md); in `auto` mode these actions run without a dialog within
-  the budget.
+- **Enthalten**: im Chat die fehlgeschlagenen Jobs eines Laufs erneut
+  ausführen, einen ganzen Lauf erneut ausführen, einen Workflow per Dispatch
+  (`workflow_dispatch`) auf einem vorhandenen Branch oder Tag starten und
+  Läufe abbrechen, die flakipype gestartet hat. Eine Live-Liste zeigt sie,
+  ein Audit-Log zeichnet sie auf, und ein Budget begrenzt sie.
+- **Nicht enthalten**: Headless-Aktionen; unbeaufsichtigte Läufe führen nur
+  die eigenen Korrektur-Branches von flakipype erneut aus, siehe
+  [unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md). Code, Branches oder
+  Pull Requests ändern und `/mode auto` im Chat behandelt
+  [Korrekturen](korrekturen.md); im Modus `auto` laufen diese Aktionen ohne
+  Dialog innerhalb des Budgets.
 
-None of these actions writes to a branch: reruns and dispatches run the code
-that is already there. They cost CI minutes, not model tokens. In
-repositories with deployments, a dispatch can do whatever the workflow does,
-which is why each one needs your confirmation.
+Keine dieser Aktionen schreibt auf einen Branch: Reruns und Dispatches führen
+den Code aus, der schon da ist. Sie kosten CI-Minuten, keine Modell-Tokens.
+In Repositories mit Deployments kann ein Dispatch alles tun, was der Workflow
+tut; deshalb braucht jeder deine Bestätigung.
 
-## The actions
+## Die Aktionen
 
-| Action | Tool / command | GitHub API (through `gh api`) | Risk |
+| Aktion | Werkzeug / Befehl | GitHub-API (über `gh api`) | Risiko |
 | --- | --- | --- | --- |
-| Rerun the failed jobs of a run | `rerun_failed` · `/rerun N` | `POST …/actions/runs/{id}/rerun-failed-jobs` | `write` |
-| Rerun a whole run | `rerun_run` · `/rerun N --all` | `POST …/actions/runs/{id}/rerun` | `write` |
-| Dispatch a workflow on a ref | `dispatch` · `/dispatch N [ref] [xK]` | `POST …/actions/workflows/{file}/dispatches` | `write` |
-| Cancel a run flakipype started | `cancel` · `/cancel R` | `POST …/actions/runs/{id}/cancel` | `write` |
-| Show the started runs | `watched_runs` · `/runs` | none; the state comes from polling | `read` |
-| List this session's action requests | `/actions` | none; read from the audit log | – |
+| Die fehlgeschlagenen Jobs eines Laufs erneut ausführen | `rerun_failed` · `/rerun N` | `POST …/actions/runs/{id}/rerun-failed-jobs` | `write` |
+| Einen ganzen Lauf erneut ausführen | `rerun_run` · `/rerun N --all` | `POST …/actions/runs/{id}/rerun` | `write` |
+| Einen Workflow per Dispatch auf einer Ref starten | `dispatch` · `/dispatch N [ref] [xK]` | `POST …/actions/workflows/{file}/dispatches` | `write` |
+| Einen von flakipype gestarteten Lauf abbrechen | `cancel` · `/cancel R` | `POST …/actions/runs/{id}/cancel` | `write` |
+| Die gestarteten Läufe zeigen | `watched_runs` · `/runs` | keine; der Zustand kommt aus dem Polling | `read` |
+| Die Aktionsanfragen dieser Sitzung auflisten | `/actions` | keine; aus dem Audit-Log gelesen | – |
 
-`N` is a finding number, as everywhere in the chat:
+`N` ist eine Befundnummer, wie überall im Chat:
 
-- `/rerun N` reruns the finding's newest run that is still failing.
-- `/rerun N --all` reruns the finding's newest run, whatever its result.
-- `/dispatch N` dispatches the finding's workflow on the repository's
-  default branch, or on `ref` if you give one. `xK` repeats it K times
-  (1–10), and each repeat counts against the budget. A branch or tag ref is
-  resolved to its commit first; an annotated tag is followed to the commit
-  it tags, which the dialog, the audit log and the Runs list show.
+- `/rerun N` führt den neuesten Lauf des Befunds erneut aus, der noch
+  fehlschlägt.
+- `/rerun N --all` führt den neuesten Lauf des Befunds erneut aus, egal mit
+  welchem Ergebnis.
+- `/dispatch N` startet den Workflow des Befunds auf dem Standardbranch des
+  Repositorys oder auf `ref`, wenn du eine angibst. `xK` wiederholt das
+  K-mal (1–10), und jede Wiederholung zählt gegen das Budget. Eine Branch-
+  oder Tag-Ref wird zuerst zu ihrem Commit aufgelöst; einem annotierten Tag
+  wird bis zu dem Commit gefolgt, auf den er zeigt, und diesen zeigen der
+  Dialog, das Audit-Log und die Liste Runs.
 
-`R` is the short number a started run gets in the Runs list (`R1`, `R2`, …).
-The model's tools can also name a specific run id, but only one of the
-finding's runs.
+`R` ist die kurze Nummer, die ein gestarteter Lauf in der Liste Runs bekommt
+(`R1`, `R2`, …). Die Werkzeuge des Modells können auch eine bestimmte Lauf-ID
+nennen, aber nur die eines Laufs des Befunds.
 
-The model gets the same tools. The checks run in code (`actions` package),
-so the model cannot point the tools anywhere it likes:
+Das Modell bekommt dieselben Werkzeuge. Die Prüfungen laufen im Code (Paket
+`actions`), sodass das Modell die Werkzeuge nicht auf beliebige Ziele richten
+kann:
 
-- **Only what the scan found.** Reruns accept only runs of the finding in the
-  current scan. Dispatches accept only the finding's workflow, and only if
-  its workflow file at that ref declares `workflow_dispatch` without required
-  inputs that have no default. The file is read with a YAML parser.
-  flakipype never sends inputs.
-- **Only finished runs.** GitHub reruns only completed runs. A rerun of
-  failed jobs needs a run whose newest attempt failed.
-- **Only existing refs.** The ref must be an existing branch or tag of the
-  repository. flakipype creates nothing.
-- **Only its own runs are cancelled.** Cancel accepts only runs started in
-  this session that have not finished. It never cancels runs someone else
-  started.
-- **Only the configured owner and host.**
+- **Nur, was der Scan gefunden hat.** Reruns akzeptieren nur Läufe des
+  Befunds im aktuellen Scan. Dispatches akzeptieren nur den Workflow des
+  Befunds und nur, wenn seine Workflow-Datei an dieser Ref
+  `workflow_dispatch` ohne Pflichteingaben ohne Standardwert deklariert. Die
+  Datei wird mit einem YAML-Parser gelesen. flakipype sendet nie Eingaben.
+- **Nur abgeschlossene Läufe.** GitHub führt nur abgeschlossene Läufe erneut
+  aus. Ein Rerun fehlgeschlagener Jobs braucht einen Lauf, dessen neuester
+  Versuch fehlgeschlagen ist.
+- **Nur vorhandene Refs.** Die Ref muss ein vorhandener Branch oder Tag des
+  Repositorys sein. flakipype legt nichts an.
+- **Nur eigene Läufe werden abgebrochen.** Abbrechen akzeptiert nur Läufe,
+  die in dieser Sitzung gestartet wurden und noch nicht fertig sind. Läufe,
+  die jemand anderes gestartet hat, bricht es nie ab.
+- **Nur der konfigurierte Owner und Host.**
 
-## Confirmation
+## Bestätigung
 
-The chat stays in `ask` mode, so every `write` action waits for you. Each
-action tool returns a *prepared action*: an action request plus the code that
-runs it. The gate passes the request to the confirmation function and runs
-the action only on "yes". Code builds the request from the validated
-arguments and GitHub's answers, never from text the model wrote:
+Der Chat bleibt im Modus `ask`, also wartet jede `write`-Aktion auf dich.
+Jedes Aktionswerkzeug gibt eine *vorbereitete Aktion* zurück: eine
+Aktionsanfrage plus den Code, der sie ausführt. Das Gate reicht die Anfrage
+an die Bestätigungsfunktion weiter und führt die Aktion nur bei „ja“ aus.
+Der Code baut die Anfrage aus den validierten Argumenten und den Antworten
+von GitHub, nie aus Text, den das Modell geschrieben hat:
 
 ```text
 ╭──────────────────────────────────────────────────────────────────────────╮
@@ -87,44 +96,49 @@ arguments and GitHub's answers, never from text the model wrote:
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
-**Don't run** has the focus, and Escape also declines. In `/mode auto` no
-dialog appears and the action runs within the budget. The agent waits until
-you answer. A declined request goes back to the model as declined by the
-user. For the rest of that turn the model gets an error for any other
-`write` tool, so it cannot ask again in the same question. A `/rerun` or
-`/dispatch` you type yourself also shows the dialog: the gate does not know
-who asked, and that is intended.
+**Don't run** hat den Fokus, und auch Escape lehnt ab. Mit `/mode auto`
+erscheint kein Dialog, und die Aktion läuft innerhalb des Budgets. Der Agent
+wartet, bis du antwortest. Eine abgelehnte Anfrage geht als vom Benutzer
+abgelehnt an das Modell zurück. Für den Rest dieser Runde bekommt das Modell
+für jedes andere `write`-Werkzeug einen Fehler, damit es in derselben Frage
+nicht noch einmal fragen kann. Auch ein `/rerun` oder `/dispatch`, das du
+selbst tippst, zeigt den Dialog: Das Gate weiß nicht, wer gefragt hat, und
+das ist so gewollt.
 
-In code, a tool's risk level is fixed. A `write` or `critical` tool that
-returns plain text instead of a prepared action is a programming error
-(`TypeError`), so a tool cannot skip the gate. Without a window to ask in
-(headless commands), the confirmation function declines everything.
+Im Code ist die Risikostufe eines Werkzeugs fest. Ein `write`- oder
+`critical`-Werkzeug, das statt einer vorbereiteten Aktion reinen Text
+zurückgibt, ist ein Programmierfehler (`TypeError`), sodass kein Werkzeug das
+Gate umgehen kann. Ohne Fenster, in dem gefragt werden kann
+(Headless-Befehle), lehnt die Bestätigungsfunktion alles ab.
 
 ## Budget
 
-| Limit | Default | Setting |
+| Limit | Standard | Einstellung |
 | --- | --- | --- |
-| Reruns and dispatches per chat session | 10 | `actions.max_per_session` (1–100) |
-| Runs watched at the same time | 10 | `actions.max_watched` (1–50) |
-| How long a run is watched | 6 hours | `actions.watch_hours` (1–24) |
+| Reruns und Dispatches pro Chat-Sitzung | 10 | `actions.max_per_session` (1–100) |
+| Gleichzeitig beobachtete Läufe | 10 | `actions.max_watched` (1–50) |
+| Wie lange ein Lauf beobachtet wird | 6 Stunden | `actions.watch_hours` (1–24) |
 
-Every started rerun and every started repeat of a dispatch counts once;
-cancelling does not. The count is part of the session, so `/resume` does not
-reset it, but `/new` does. A request that does not fit the budget or the
-watch limit fails with a message before any dialog is shown, for example
-"Action budget used up: 10 of 10 reruns and dispatches in this session".
-The budget is checked again when the confirmed action starts, because a
-fix's verification rerun may have used the last slots while the dialog was
-open; the action then does not run and is audited as `not run`. If a
-repeated dispatch fails partway, the runs that did start stay counted and
-watched, and the answer and the audit entry name them next to the error.
+Jeder gestartete Rerun und jede gestartete Wiederholung eines Dispatches
+zählt einmal; Abbrechen zählt nicht. Der Zähler gehört zur Sitzung, also
+setzt `/resume` ihn nicht zurück, `/new` aber schon. Eine Anfrage, die nicht
+ins Budget oder ins Beobachtungslimit passt, scheitert mit einer Meldung,
+bevor ein Dialog erscheint, zum Beispiel
+„Action budget used up: 10 of 10 reruns and dispatches in this session“.
+Das Budget wird noch einmal geprüft, wenn die bestätigte Aktion startet, weil
+der Prüf-Rerun einer Korrektur die letzten Plätze verbraucht haben kann,
+während der Dialog offen war; die Aktion läuft dann nicht und wird als
+`not run` protokolliert. Scheitert ein wiederholter Dispatch mittendrin,
+bleiben die Läufe, die schon gestartet sind, gezählt und beobachtet, und die
+Antwort und der Audit-Eintrag nennen sie neben dem Fehler.
 
-## The live run view
+## Die Live-Ansicht der Läufe
 
-The sidebar shows a second list, **Runs**, under the findings, as soon as a
-run was started. Each run shows its repository, workflow, label and state:
-`queued`, `in progress` with failed (`✗`) and running (`⟳`) jobs,
-`✓ passed`, `✗ failed`, `cancelled`, or `no longer watched`.
+Die Seitenleiste zeigt unter den Befunden eine zweite Liste, **Runs**, sobald
+ein Lauf gestartet wurde. Jeder Lauf zeigt sein Repository, seinen Workflow,
+seine Bezeichnung und seinen Zustand: `queued`, `in progress` mit
+fehlgeschlagenen (`✗`) und laufenden (`⟳`) Jobs, `✓ passed`, `✗ failed`,
+`cancelled` oder `no longer watched`.
 
 ```text
 Runs
@@ -136,78 +150,91 @@ R3 app · E2E dispatch 2/3
   queued
 ```
 
-- Unfinished runs are polled every 10 seconds in the background, through the
-  same serial `gh` queue as everything else. A run is polled until it
-  finishes or its watch time is over. A run first polled after its watch
-  time (one a later session took over) is still read once, so a run that
-  finished meanwhile keeps its result.
-- **Finding the run.** A rerun keeps its run id and waits for the next
-  attempt number. A dispatch gets the new run's id from GitHub. On GitHub
-  Enterprise Server versions that do not return it, flakipype looks for
-  `workflow_dispatch` runs on that ref by the logged-in user since the
-  dispatch, and takes the oldest one no other started run has claimed.
-- **When a run finishes**, a note in the conversation says so, for example
-  "R1: E2E passed on attempt 2 (failed on attempt 1): a proven flaky event".
-  `watched_runs` gives the model the same facts. The next scan picks the run
-  up like any other, so a passing rerun becomes evidence of flakiness
-  without new detection rules.
-- When all runs of a repeated dispatch have finished, a note sums them up:
-  "E2E on 3f2a9c1: 2 of 3 passed".
-- A rate limit pauses the round: the runs show "waiting for GitHub's rate
-  limit", and the next poll tries again. Other errors show next to the run
-  and do not stop the others.
+- Unfertige Läufe werden im Hintergrund alle 10 Sekunden abgefragt, über
+  dieselbe serielle `gh`-Warteschlange wie alles andere. Ein Lauf wird
+  abgefragt, bis er fertig ist oder seine Beobachtungszeit abgelaufen ist.
+  Ein Lauf, der erst nach seiner Beobachtungszeit zum ersten Mal abgefragt
+  wird (einer, den eine spätere Sitzung übernommen hat), wird trotzdem
+  einmal gelesen, sodass ein Lauf, der inzwischen fertig ist, sein Ergebnis
+  behält.
+- **Den Lauf finden.** Ein Rerun behält seine Lauf-ID und wartet auf die
+  nächste Versuchsnummer. Ein Dispatch bekommt die ID des neuen Laufs von
+  GitHub. Auf Versionen von GitHub Enterprise Server, die sie nicht
+  zurückgeben, sucht flakipype seit dem Dispatch nach
+  `workflow_dispatch`-Läufen auf dieser Ref vom angemeldeten Benutzer und
+  nimmt den ältesten, den kein anderer gestarteter Lauf beansprucht hat.
+- **Wenn ein Lauf fertig ist**, sagt das ein Hinweis in der Unterhaltung, zum
+  Beispiel
+  „R1: E2E passed on attempt 2 (failed on attempt 1): a proven flaky event“.
+  `watched_runs` gibt dem Modell dieselben Fakten. Der nächste Scan erfasst
+  den Lauf wie jeden anderen, sodass ein bestandener Rerun ohne neue
+  Erkennungsregeln zum Beleg für Instabilität wird.
+- Sind alle Läufe eines wiederholten Dispatches fertig, fasst ein Hinweis sie
+  zusammen: „E2E on 3f2a9c1: 2 of 3 passed“.
+- Ein Rate Limit pausiert die Runde: Die Läufe zeigen
+  „waiting for GitHub's rate limit“, und die nächste Abfrage versucht es
+  erneut. Andere Fehler erscheinen neben dem Lauf und halten die anderen
+  nicht auf.
 
-Started runs, their state and the budget count are saved in the session. A
-resumed session polls the runs that have not finished.
+Gestartete Läufe, ihr Zustand und der Budgetzähler werden in der Sitzung
+gespeichert. Eine fortgesetzte Sitzung fragt die Läufe ab, die noch nicht
+fertig sind.
 
-## Audit log
+## Audit-Log
 
-Every action request is stored in the cache database (table `action_log`),
-whether it ran or not. Each entry holds the time, session, tool, who asked
-(`model`, `command`, or `run` for [unattended runs](unbeaufsichtigte-laeufe.md)), the
-request text, the answer (`confirmed`, `declined`, `auto`, `not run in auto
-mode` or `report only`), the outcome (GitHub's answer or the error) and the
-run id. The reruns and dispatches that verify a fix are recorded too, as
-`verify_rerun` and `verify_dispatch` with the answer `covered by the push`,
-also when GitHub refuses them (`failed: …`).
-`/actions` lists this session's entries. The log is append-only: nothing in
-flakipype updates or deletes it, apart from deleting the cache file.
+Jede Aktionsanfrage wird in der Cache-Datenbank gespeichert (Tabelle
+`action_log`), ob sie ausgeführt wurde oder nicht. Jeder Eintrag enthält
+Zeit, Sitzung, Werkzeug, wer gefragt hat (`model`, `command` oder `run` für
+[unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)), den Anfragetext, die
+Antwort (`confirmed`, `declined`, `auto`, `not run in auto
+mode` oder `report only`), das Ergebnis (die Antwort von GitHub oder den
+Fehler) und die Lauf-ID. Die Reruns und Dispatches, die eine Korrektur
+prüfen, werden ebenfalls aufgezeichnet, als `verify_rerun` und
+`verify_dispatch` mit der Antwort `covered by the push`, auch wenn GitHub sie
+ablehnt (`failed: …`).
+`/actions` listet die Einträge dieser Sitzung. Das Log wird nur ergänzt:
+Nichts in flakipype ändert oder löscht es, außer dem Löschen der
+Cache-Datei.
 
-## Permissions and errors
+## Berechtigungen und Fehler
 
-Rerunning, dispatching and cancelling need write access to Actions. A classic
-token or a `gh auth login` needs the `repo` scope, which is the default. A
-fine-grained token needs **Actions: read and write**. `doctor` reports
-missing scopes where GitHub shows them (classic tokens), with a
-`gh auth refresh` command that names the `gh` flakipype uses. Otherwise a
-`403` explains which permission is missing, and nothing is retried. A `403`
-from GitHub's rate limit says so instead and asks to try again after the
-limit resets.
+Erneut ausführen, Dispatches und Abbrechen brauchen Schreibzugriff auf
+Actions. Ein klassisches Token oder ein `gh auth login` braucht den Scope
+`repo`, der Standard ist. Ein Fine-grained Token braucht
+**Actions: read and write**. `doctor` meldet fehlende Scopes, wo GitHub sie
+anzeigt (klassische Tokens), mit einem `gh auth refresh`-Befehl, der das
+`gh` nennt, das flakipype verwendet. Sonst erklärt ein `403`, welche
+Berechtigung fehlt, und nichts wird wiederholt. Ein `403` wegen des Rate
+Limits von GitHub sagt stattdessen das und bittet, es nach dem Zurücksetzen
+des Limits erneut zu versuchen.
 
-Other GitHub errors become tool errors with GitHub's message, so the model
-and you see what went wrong.
+Andere GitHub-Fehler werden zu Werkzeugfehlern mit der Meldung von GitHub,
+damit das Modell und du seht, was schiefgegangen ist.
 
-## Safety, summarised
+## Sicherheit, zusammengefasst
 
-- No branch, tag, file or pull request is created or changed. The
-  default-branch rule is untouched.
-- Every action is confirmed in a dialog. The gate enforces this in code, and
-  the dialog text comes from code.
-- Targets are limited to what the scan found and what flakipype started.
-- A per-session budget, a watch limit, an audit log, and loop detection as
-  for every tool.
-- Logs of rerun jobs are data, like all logs.
+- Kein Branch, Tag, keine Datei und kein Pull Request wird angelegt oder
+  geändert. Die Regel zum Standardbranch bleibt unberührt.
+- Jede Aktion wird in einem Dialog bestätigt. Das Gate erzwingt das im Code,
+  und der Dialogtext kommt aus dem Code.
+- Ziele sind auf das beschränkt, was der Scan gefunden und flakipype
+  gestartet hat.
+- Ein Budget pro Sitzung, ein Beobachtungslimit, ein Audit-Log und
+  Schleifenerkennung wie bei jedem Werkzeug.
+- Logs erneut ausgeführter Jobs sind Daten, wie alle Logs.
 
-## Testing
+## Tests
 
-- The gate: requests per risk level, confirm and decline, no second request
-  after a decline, and writing tools that return text.
-- The `actions` package against an in-memory GitHub: targets outside the
-  scan, refs, dispatchable workflows, the budget and the watch limit, audit
-  entries, polling with a fake clock (state changes, dispatched runs without
-  an id, watch time, rate limits), and session state.
-- `RunControl` against the `gh` stub with recorded responses: reruns,
-  dispatch (with a run id, and without one plus the search), cancel, `403`.
-- The chat commands and the model's tool use with the scripted fake model,
-  including a declined request.
-- The confirmation dialog and the Runs list: Pilot tests and snapshots.
+- Das Gate: Anfragen pro Risikostufe, Bestätigen und Ablehnen, keine zweite
+  Anfrage nach einer Ablehnung und schreibende Werkzeuge, die Text
+  zurückgeben.
+- Das Paket `actions` gegen ein GitHub im Speicher: Ziele außerhalb des
+  Scans, Refs, per Dispatch startbare Workflows, das Budget und das
+  Beobachtungslimit, Audit-Einträge, Polling mit einer Fake-Uhr
+  (Zustandswechsel, gestartete Läufe ohne ID, Beobachtungszeit, Rate Limits)
+  und Sitzungszustand.
+- `RunControl` gegen den `gh`-Stub mit aufgezeichneten Antworten: Reruns,
+  Dispatch (mit Lauf-ID und ohne, plus die Suche), Abbrechen, `403`.
+- Die Chat-Befehle und die Werkzeugnutzung des Modells mit dem vorgegebenen
+  Fake-Modell, einschließlich einer abgelehnten Anfrage.
+- Der Bestätigungsdialog und die Liste Runs: Pilot-Tests und Snapshots.
