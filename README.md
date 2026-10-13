@@ -53,6 +53,7 @@ sh install.sh
 
 With uv already installed: `uv tool install git+https://github.com/besessener/flakipype@v0.1.0`.
 Step by step: [getting started](docs/tutorials/getting-started.md).
+Releases and changes: [GitHub Releases](https://github.com/besessener/flakipype/releases).
 
 ## Usage
 
@@ -82,8 +83,8 @@ uv sync
 uv run poe check
 ```
 
-Details: [development setup](docs/tutorials/development-setup.md) and
-[commands](docs/reference/commands.md).
+Details: [development setup](docs/tutorials/development-setup.md),
+[commands](docs/reference/commands.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation
 

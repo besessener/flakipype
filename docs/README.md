@@ -25,6 +25,7 @@ Organised by [Diátaxis](https://diataxis.fr/): by what you need right now.
 
 **Developing flakipype**
 
+- [Contributing](../CONTRIBUTING.md) – set up, work, open a pull request, release.
 - [Run CI locally with act](how-to/run-ci-locally.md) – the Linux gate on Windows.
 - [Maintain the website](how-to/maintain-the-website.md) – `site/`, screenshots and the Pages workflow.
 
