@@ -104,11 +104,33 @@ def test_jwts_are_masked_where_they_start(text: str, masked: str) -> None:
     assert Masker().mask(text) == masked
 
 
-def test_masking_a_long_dotless_line_takes_linear_time() -> None:
-    line = "eyJ-" * 250_000
+UNTERMINATED_HEADER = "-----BEGIN " + "PRIVATE KEY-----"
 
+
+@pytest.mark.parametrize(
+    ("line", "masked"),
+    [
+        ("eyJ-" * 250_000, "eyJ-" * 250_000),
+        # Quadratic before: every header searched the rest of the line for an END line.
+        ((UNTERMINATED_HEADER + ".") * 40_000, "[masked: private key]." * 40_000),
+    ],
+    ids=["dotless jwt starts", "unterminated key headers"],
+)
+def test_masking_a_long_crafted_line_takes_linear_time(line: str, masked: str) -> None:
     started = time.perf_counter()
-    masked = Masker().mask(line)
+    result = Masker().mask(line)
 
-    assert masked == line
+    assert result == masked
     assert time.perf_counter() - started < 1
+
+
+def test_each_key_is_masked_through_its_own_end_line() -> None:
+    first = KEY_BLOCK.replace("MIIEow", "first")
+    text = f"{first}\nbetween\n{KEY_BLOCK}\n{UNTERMINATED_HEADER}\nabc\n.after"
+
+    masked = Masker().mask(text)
+
+    assert (
+        masked
+        == "[masked: private key]\nbetween\n[masked: private key]\n[masked: private key].after"
+    )

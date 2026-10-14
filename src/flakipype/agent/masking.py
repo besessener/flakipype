@@ -12,16 +12,16 @@ _TOKEN_RUN = re.compile(r"[A-Za-z0-9_.-]+")
 _JWT_START = re.compile(r"(?:^|(?<=-))eyJ")
 _JWT_SEGMENT = 10
 _JWT_PARTS = 3
+_PRIVATE_KEY = f"{MASK_MARKER}private key]"
+_KEY_LABEL = r"[A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----"
+_KEY_BEGIN = re.compile(f"-----BEGIN {_KEY_LABEL}")
+_KEY_END = re.compile(f"-----END {_KEY_LABEL}")
+# Without its END line, only the key body is masked, never the rest of the prompt.
+_UNTERMINATED_KEY = re.compile(f"-----BEGIN {_KEY_LABEL}" + r"(?:[A-Za-z0-9+/=:,\s-]|\\n)*")
 
 # Ordered: specific token formats first, generic assignments last. Group "keep" is preserved.
-# JWTs are masked before these, by _mask_jwts.
+# JWTs and private keys are masked before these, by _mask_jwts and _mask_private_keys.
 _PATTERNS = (
-    # Without its END line, only the key body is masked, never the rest of the prompt.
-    ("private key", re.compile(
-        r"(?P<keep>)-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----"
-        r"(?:.*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|(?:[A-Za-z0-9+/=:,\s-]|\\n)*)",
-        re.DOTALL,
-    )),
     ("github token", re.compile(
         r"(?P<keep>)\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})"
     )),
@@ -52,9 +52,24 @@ class Masker:
         for secret in self.known_secrets:
             text = text.replace(secret, f"{MASK_MARKER}configured secret]")
         text = _TOKEN_RUN.sub(_mask_jwts, text)
+        text = _mask_private_keys(text)
         for kind, pattern in _PATTERNS:
             text = pattern.sub(rf"\g<keep>{MASK_MARKER}{kind}]", text)
         return text
+
+
+def _mask_private_keys(text: str) -> str:
+    """Masks each key through its END line; each search for an END runs once, so in linear time."""
+    parts: list[str] = []
+    position = 0
+    while (begin := _KEY_BEGIN.search(text, position)) is not None:
+        end = _KEY_END.search(text, begin.end())
+        # No END after this BEGIN means none after any later BEGIN either.
+        if end is None:
+            break
+        parts += [text[position : begin.start()], _PRIVATE_KEY]
+        position = end.end()
+    return "".join(parts) + _UNTERMINATED_KEY.sub(_PRIVATE_KEY, text[position:])
 
 
 def _mask_jwts(run: re.Match[str]) -> str:
