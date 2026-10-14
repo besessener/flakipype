@@ -104,7 +104,10 @@ die ersten Scans den Cache deshalb über mehrere Läufe auf.
 Es werden höchstens 1.000 Repositories eines Owners gescannt; eine längere
 Liste wird abgeschnitten und in den Problemen des Scans genannt, und `--repo`
 wählt andere aus. Ein Scan, den das Rate-Limit von GitHub gestoppt hat,
-nutzt trotzdem jeden gecachten Job und jedes gecachte Log-Ergebnis.
+nutzt trotzdem jeden gecachten Job und jedes gecachte Log-Ergebnis: Auch
+wenn er schon beim Auflisten der Läufe stoppt, laufen die späteren Schritte
+weiter, lesen aber nichts mehr von GitHub, sondern nur noch aus dem Cache.
+Der Scan gilt dann als unvollständig.
 
 Anfragen laufen nacheinander, wie GitHub es empfiehlt, um seine sekundären
 Rate-Limits zu vermeiden. Auf einem echten Konto (18 Repositories, etwa

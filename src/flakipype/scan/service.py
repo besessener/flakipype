@@ -86,6 +86,8 @@ class _Scan:
     problems: list[str] = field(default_factory=list)
     logs_not_read: int = 0
     attempts_not_read: int = 0
+    # Set by a stop: the later stages still load the cache but read nothing from GitHub.
+    stopped: bool = False
 
     @property
     def host(self) -> str:
@@ -139,11 +141,10 @@ class ScanService:
                 f"{REPOSITORY_LIMIT} were scanned. Choose repositories with --repo."
             )
         repositories = select_repositories(listed, request.repositories)
-        complete = self._stage(scan, lambda: self._read_runs(scan, repositories))
-        complete = complete and self._stage(scan, lambda: self._read_jobs(scan))
-        # Cached logs count even when the scan stopped before it could read new ones.
+        self._stage(scan, lambda: self._read_runs(scan, repositories))
+        self._stage(scan, lambda: self._read_jobs(scan))
         to_read = self._cached_logs(scan)
-        complete = complete and self._stage(scan, lambda: self._read_logs(scan, to_read))
+        self._stage(scan, lambda: self._read_logs(scan, to_read))
         proven = find_flaky_failures(scan.runs, scan.jobs)
         unproven = unproven_failures(scan.runs, scan.jobs, proven)
         ranking = classify(
@@ -161,20 +162,19 @@ class ScanService:
             ),
             problems=scan.problems,
             logs_not_read=scan.logs_not_read,
-            complete=complete,
+            complete=not scan.stopped,
             evidence=Evidence(scan.runs, scan.jobs, scan.signatures),
             attempts_not_read=scan.attempts_not_read,
         )
 
     @staticmethod
-    def _stage(scan: _Scan, read: Callable[[], None]) -> bool:
-        """False when a rate limit stopped the stage; the scan keeps what it has."""
+    def _stage(scan: _Scan, read: Callable[[], None]) -> None:
+        """A rate limit stops the stage; the scan keeps what it has."""
         try:
             read()
         except _RateLimitReachedError as error:
             scan.problems.append(f"Stopped early: {error}. Run the scan again later.")
-            return False
-        return True
+            scan.stopped = True
 
     def _read_runs(self, scan: _Scan, repositories: Sequence[Repository]) -> None:
         total = len(repositories)
@@ -199,7 +199,7 @@ class ScanService:
         )
         scan.jobs = self._cache.cached_jobs(scan.host, refs)
         missing = [ref for ref in refs if ref not in scan.jobs]
-        to_read = missing[: scan.request.max_job_reads]
+        to_read = [] if scan.stopped else missing[: scan.request.max_job_reads]
         scan.attempts_not_read = len(missing)
         repository_of = {run.run_id: run.repository for run in scan.runs}
         for done, ref in enumerate(to_read):
@@ -233,7 +233,7 @@ class ScanService:
         return [(job_id, repository_of[job_id]) for job_id in missing]
 
     def _read_logs(self, scan: _Scan, missing: list[tuple[int, str]]) -> None:
-        to_read = missing[: scan.request.max_log_downloads]
+        to_read = [] if scan.stopped else missing[: scan.request.max_log_downloads]
         for done, (job_id, repository) in enumerate(to_read):
             scan.on_progress(Progress(Stage.LOGS, done, len(to_read), f"{repository} job {job_id}"))
             read = partial(self._read_log, repository, job_id)

@@ -290,6 +290,21 @@ def test_rate_limit_stops_early_but_keeps_what_was_found(cache: ScanCache) -> No
     assert report.runs == 2
 
 
+def test_rate_limit_while_listing_runs_still_uses_cached_jobs_and_logs(cache: ScanCache) -> None:
+    actions = flaky_world()
+    scanner = service(actions, cache)
+    scanner.scan(request())
+    actions.calls.clear()
+    actions.runs_by_repository["octo-org/docs"] = ApiRateLimitError("API rate limit exceeded", 403)
+
+    report = scanner.scan(request())
+
+    assert not report.complete
+    assert actions.calls == ["repositories octo-org", f"runs {APP}", "runs octo-org/docs"]
+    (flaky,) = report.ranking.flaky
+    assert flaky.signatures[0].category.value == "timeout"
+
+
 def test_rate_limit_while_reading_logs_counts_the_unread_ones(cache: ScanCache) -> None:
     actions = flaky_world()
     actions.logs[11] = ApiRateLimitError("API rate limit exceeded", 403)
