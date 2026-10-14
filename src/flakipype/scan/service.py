@@ -1,6 +1,7 @@
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import StrEnum
 from functools import partial
 from typing import Protocol
 
@@ -28,6 +29,9 @@ from flakipype.github.actions import (
 from flakipype.scan.progress import Progress, ProgressListener, Stage, ignore_progress
 from flakipype.store.database import LogResult, LogState, ScanCache
 
+# Calls in a row that got no answer before a scan stops; each one can wait for gh's timeout.
+NO_ANSWER_LIMIT = 5
+
 
 class ActionsSource(Protocol):
     def repositories(self, owner: str) -> list[Repository]: ...
@@ -50,6 +54,14 @@ class ScanRequest:
     max_job_reads: int = 500
 
 
+class ScanStop(StrEnum):
+    """Why a scan stopped before it read everything it could."""
+
+    RATE_LIMIT = "GitHub's rate limit"
+    TIME_LIMIT = "the time limit"
+    NO_ANSWER = "GitHub not answering"
+
+
 @dataclass(frozen=True)
 class ScanReport:
     owner: str
@@ -65,14 +77,19 @@ class ScanReport:
     evidence: Evidence = field(default_factory=Evidence)
     # Attempts whose jobs were not read yet (limit or early stop); later scans continue.
     attempts_not_read: int = 0
+    stopped_by: ScanStop | None = None
 
     @property
     def findings(self) -> list[Finding]:
         return number_findings(self.ranking, self.recurring)
 
 
-class _RateLimitReachedError(Exception):
+class _ScanStoppedError(Exception):
     """Stops a scan early; the report still contains everything found so far."""
+
+    def __init__(self, reason: ScanStop, detail: str) -> None:
+        super().__init__(detail)
+        self.reason = reason
 
 
 @dataclass
@@ -80,6 +97,7 @@ class _Scan:
     request: ScanRequest
     window: TimeWindow
     on_progress: ProgressListener
+    out_of_time: Callable[[], bool]
     runs: list[WorkflowRun] = field(default_factory=list)
     jobs: dict[AttemptRef, list[JobResult]] = field(default_factory=dict)
     signatures: dict[int, ErrorSignature] = field(default_factory=dict)
@@ -87,7 +105,8 @@ class _Scan:
     logs_not_read: int = 0
     attempts_not_read: int = 0
     # Set by a stop: the later stages still load the cache but read nothing from GitHub.
-    stopped: bool = False
+    stopped_by: ScanStop | None = None
+    no_answers_in_a_row: int = 0
 
     @property
     def host(self) -> str:
@@ -108,6 +127,10 @@ def select_repositories(
     ]
 
 
+def no_time_limit() -> bool:
+    return False
+
+
 def _log_result(log: str | None) -> LogResult:
     if log is None:
         return LogResult(LogState.UNAVAILABLE)
@@ -126,12 +149,16 @@ class ScanService:
         self._now = now
 
     def scan(
-        self, request: ScanRequest, on_progress: ProgressListener = ignore_progress
+        self,
+        request: ScanRequest,
+        on_progress: ProgressListener = ignore_progress,
+        *,
+        out_of_time: Callable[[], bool] = no_time_limit,
     ) -> ScanReport:
         """Raises GitHubApiError only if the repositories cannot be listed at all."""
         end = self._now()
         window = TimeWindow(end - timedelta(days=request.window_days), end)
-        scan = _Scan(request, window, on_progress)
+        scan = _Scan(request, window, on_progress, out_of_time)
         on_progress(Progress(Stage.REPOSITORIES, 0, 1, request.owner))
         listed = self._actions.repositories(request.owner)
         if len(listed) > REPOSITORY_LIMIT:
@@ -162,19 +189,20 @@ class ScanService:
             ),
             problems=scan.problems,
             logs_not_read=scan.logs_not_read,
-            complete=not scan.stopped,
+            complete=scan.stopped_by is None,
             evidence=Evidence(scan.runs, scan.jobs, scan.signatures),
             attempts_not_read=scan.attempts_not_read,
+            stopped_by=scan.stopped_by,
         )
 
     @staticmethod
     def _stage(scan: _Scan, read: Callable[[], None]) -> None:
-        """A rate limit stops the stage; the scan keeps what it has."""
+        """A stop ends the stage; the scan keeps what it has."""
         try:
             read()
-        except _RateLimitReachedError as error:
+        except _ScanStoppedError as error:
             scan.problems.append(f"Stopped early: {error}. Run the scan again later.")
-            scan.stopped = True
+            scan.stopped_by = error.reason
 
     def _read_runs(self, scan: _Scan, repositories: Sequence[Repository]) -> None:
         total = len(repositories)
@@ -199,7 +227,7 @@ class ScanService:
         )
         scan.jobs = self._cache.cached_jobs(scan.host, refs)
         missing = [ref for ref in refs if ref not in scan.jobs]
-        to_read = [] if scan.stopped else missing[: scan.request.max_job_reads]
+        to_read = [] if scan.stopped_by else missing[: scan.request.max_job_reads]
         scan.attempts_not_read = len(missing)
         repository_of = {run.run_id: run.repository for run in scan.runs}
         for done, ref in enumerate(to_read):
@@ -233,7 +261,7 @@ class ScanService:
         return [(job_id, repository_of[job_id]) for job_id in missing]
 
     def _read_logs(self, scan: _Scan, missing: list[tuple[int, str]]) -> None:
-        to_read = [] if scan.stopped else missing[: scan.request.max_log_downloads]
+        to_read = [] if scan.stopped_by else missing[: scan.request.max_log_downloads]
         for done, (job_id, repository) in enumerate(to_read):
             scan.on_progress(Progress(Stage.LOGS, done, len(to_read), f"{repository} job {job_id}"))
             read = partial(self._read_log, repository, job_id)
@@ -269,11 +297,23 @@ def _seen_at(run: WorkflowRun, job: JobResult) -> datetime:
 def _guarded[Result](
     scan: _Scan, call: Callable[[], Result], *, repository: str, action: str
 ) -> Result | None:
-    """Run one GitHub call: a rate limit stops the scan, any other error skips this item."""
+    """Run one GitHub call: a stop ends the scan, any other error skips this item."""
+    if scan.out_of_time():
+        raise _ScanStoppedError(ScanStop.TIME_LIMIT, "the time limit is reached")
     try:
-        return call()
+        result = call()
     except ApiRateLimitError as error:
-        raise _RateLimitReachedError(str(error)) from error
+        raise _ScanStoppedError(ScanStop.RATE_LIMIT, str(error)) from error
     except GitHubApiError as error:
         scan.problems.append(f"{repository}: could not {action}: {error}")
+        _count_no_answer(scan, error)
         return None
+    scan.no_answers_in_a_row = 0
+    return result
+
+
+def _count_no_answer(scan: _Scan, error: GitHubApiError) -> None:
+    scan.no_answers_in_a_row = scan.no_answers_in_a_row + 1 if error.is_no_answer else 0
+    if scan.no_answers_in_a_row >= NO_ANSWER_LIMIT:
+        detail = f"GitHub did not answer {NO_ANSWER_LIMIT} calls in a row"
+        raise _ScanStoppedError(ScanStop.NO_ANSWER, detail) from error

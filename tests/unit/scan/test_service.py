@@ -6,7 +6,13 @@ import pytest
 
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError, Repository
 from flakipype.scan.progress import Progress, Stage
-from flakipype.scan.service import ScanRequest, ScanService, select_repositories
+from flakipype.scan.service import (
+    NO_ANSWER_LIMIT,
+    ScanRequest,
+    ScanService,
+    ScanStop,
+    select_repositories,
+)
 from flakipype.store.database import ScanCache
 
 from support.builders import job, run
@@ -303,6 +309,54 @@ def test_rate_limit_while_listing_runs_still_uses_cached_jobs_and_logs(cache: Sc
     assert actions.calls == ["repositories octo-org", f"runs {APP}", "runs octo-org/docs"]
     (flaky,) = report.ranking.flaky
     assert flaky.signatures[0].category.value == "timeout"
+
+
+def test_the_time_limit_stops_the_scan_but_keeps_the_cache(cache: ScanCache) -> None:
+    actions = flaky_world()
+    scanner = service(actions, cache)
+    scanner.scan(request())
+    actions.calls.clear()
+
+    report = scanner.scan(request(), out_of_time=lambda: len(actions.calls) >= 2)
+
+    assert actions.calls == ["repositories octo-org", f"runs {APP}"]
+    assert (report.complete, report.stopped_by) == (False, ScanStop.TIME_LIMIT)
+    assert report.problems == [
+        "Stopped early: the time limit is reached. Run the scan again later."
+    ]
+    assert report.ranking.flaky[0].signatures
+
+
+def no_answer_world(names: list[str]) -> FakeActions:
+    timeout = GitHubApiError("gh did not answer within 60 s; check the network")
+    return FakeActions(
+        repositories_found=[Repository(f"octo-org/{name}", "main") for name in names],
+        runs_by_repository={f"octo-org/{name}": timeout for name in names if name != "ok"},
+    )
+
+
+def test_github_not_answering_stops_the_scan(cache: ScanCache) -> None:
+    actions = no_answer_world([f"r{number}" for number in range(NO_ANSWER_LIMIT + 2)])
+
+    report = service(actions, cache).scan(request())
+
+    assert len([call for call in actions.calls if call.startswith("runs")]) == NO_ANSWER_LIMIT
+    assert (report.complete, report.stopped_by) == (False, ScanStop.NO_ANSWER)
+    assert report.problems[-1] == (
+        f"Stopped early: GitHub did not answer {NO_ANSWER_LIMIT} calls in a row. "
+        "Run the scan again later."
+    )
+
+
+def test_an_answer_in_between_keeps_the_scan_going(cache: ScanCache) -> None:
+    missing = [f"r{number}" for number in range(NO_ANSWER_LIMIT - 1)]
+    actions = no_answer_world([*missing, "ok", *missing, "gone", *missing])
+    actions.runs_by_repository["octo-org/gone"] = GitHubApiError("gh: Not Found (HTTP 404)", 404)
+
+    report = service(actions, cache).scan(request())
+
+    assert report.complete
+    assert len(report.problems) == 3 * (NO_ANSWER_LIMIT - 1) + 1
 
 
 def test_rate_limit_while_reading_logs_counts_the_unread_ones(cache: ScanCache) -> None:

@@ -74,7 +74,7 @@ Wie die Status entschieden werden: [wie Instabilität erkannt wird](../explanati
 | `schema_version` | int | Formatversion, derzeit `1` |
 | `owner`, `host` | string | Was gescannt wurde |
 | `window.start`, `window.end` | UTC-Zeitstempel | Läufe, die in diesem Zeitraum erstellt wurden |
-| `complete` | bool | `false`, wenn der Scan früh beendet wurde (Rate-Limit) |
+| `complete` | bool | `false`, wenn der Scan früh beendet wurde (Rate-Limit, Zeitlimit eines Laufs oder GitHub antwortet nicht) |
 | `repositories` | int | Gescannte Repositories (keine archivierten, keine Forks) |
 | `runs` | int | Im Zeitfenster aufgelistete Workflow-Läufe |
 | `logs_not_read` | int | Fehlgeschlagene Jobs, deren Log noch nicht gelesen wurde (Limit oder früher Abbruch) |

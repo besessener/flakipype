@@ -37,6 +37,10 @@ _NORMAL_ENDS = frozenset({Status.COMPLETED, Status.BUDGET})
 _NO_VERDICT_REMEMBERED = frozenset({Status.NO_VERDICT, Status.LOOP})
 
 
+class RunTerminatedError(Exception):
+    """The run was told to stop (SIGTERM, e.g. from systemd); it ends with its summary."""
+
+
 class FixOutcomeKind(StrEnum):
     OPENED = "opened"
     KEPT = "kept"
@@ -134,6 +138,8 @@ class RunService:
                 self._progress.problems.append(f"GitHub: {error}")
             if self._gate.mode is Mode.AUTO:
                 self._poll_until(deadline)
+        except RunTerminatedError as error:
+            self._progress.problems.append(str(error))
         finally:
             # Also when a step crashes: its tokens count toward the daily limit.
             self._save()
@@ -149,14 +155,14 @@ class RunService:
 
     def _scan_and_fix(self, deadline: datetime) -> None:
         workspace, stops = self._workspace, self._progress.stops
-        report = workspace.scan_report()
+        report = workspace.scan_report(out_of_time=lambda: self._clock.now() >= deadline)
         self._save()
-        if not report.complete:
-            # Investigations would only see GitHub refuse their tools, and keep those verdicts.
-            stops.append("GitHub's rate limit; investigations and fixes continue in the next run")
-            return
         if self._clock.now() >= deadline:
             stops.append(f"the time limit of {self._limits.minutes} minutes")
+            return
+        if report.stopped_by is not None:
+            # Investigations would only see GitHub refuse their tools, and keep those verdicts.
+            stops.append(f"{report.stopped_by}; investigations and fixes continue in the next run")
             return
         if self._limits.tokens <= 0:
             stops.append("the token limit: today's tokens are used up")

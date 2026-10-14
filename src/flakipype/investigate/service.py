@@ -11,7 +11,7 @@ from flakipype.agent.pipeline import FindingResult, reviewed
 from flakipype.agent.verdict import Verdict
 from flakipype.flaky.findings import Evidence, Finding, FindingKind
 from flakipype.scan.progress import ProgressListener, ignore_progress
-from flakipype.scan.service import ScanReport, ScanRequest, ScanService
+from flakipype.scan.service import ScanReport, ScanRequest, ScanService, no_time_limit
 from flakipype.store.database import ScanCache
 
 DEFAULT_KINDS = (FindingKind.FLAKY, FindingKind.RECURRING)
@@ -149,9 +149,13 @@ class InvestigationService:
         return self.investigate(report, request, on_event)
 
     def scan(
-        self, request: ScanRequest, on_progress: ProgressListener = ignore_progress
+        self,
+        request: ScanRequest,
+        on_progress: ProgressListener = ignore_progress,
+        *,
+        out_of_time: Callable[[], bool] = no_time_limit,
     ) -> ScanReport:
-        return self._scan.scan(request, on_progress)
+        return self._scan.scan(request, on_progress, out_of_time=out_of_time)
 
     def budget_for(self, request: InvestigationRequest) -> RunBudget:
         """The token budget investigate uses for the request; it counts even if a step crashes."""
