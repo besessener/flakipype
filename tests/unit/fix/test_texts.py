@@ -16,7 +16,7 @@ from flakipype.fix.texts import (
     rate_text,
     verification_text,
 )
-from flakipype.flaky.findings import Evidence
+from flakipype.flaky.findings import Evidence, FindingKind
 
 from support.builders import run
 from support.fake_anthropic import verdict_input
@@ -49,6 +49,15 @@ def test_the_marker_is_stable_and_hides_the_identity() -> None:
     assert marker.startswith("<!-- flakipype:finding=")
     assert "octo-org" not in marker
     assert marker != finding_marker(e2e_finding(repository="octo-org/other"))
+
+
+def test_the_marker_names_the_place_not_the_kind() -> None:
+    flaky = e2e_finding()
+    recurring = replace(flaky, kind=FindingKind.RECURRING, fingerprint="f" * 12)
+    other_step = replace(flaky, key=replace(flaky.key, step="Lint"))
+
+    assert finding_marker(recurring) == finding_marker(flaky)
+    assert finding_marker(other_step) != finding_marker(flaky)
 
 
 def test_the_failure_rate_on_the_default_branch() -> None:

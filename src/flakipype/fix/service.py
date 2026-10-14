@@ -22,7 +22,7 @@ from flakipype.fix.texts import (
     PullRequestFacts,
     branch_name,
     failure_rate,
-    identity_marker,
+    pull_markers,
     pull_request_body,
 )
 from flakipype.fix.verify import Stage, Verification, Verifier
@@ -136,7 +136,8 @@ class FixService:
                     "as branches of the repository itself, not through forks."
                 )
                 raise ToolError(message)
-            self._check_no_open_pull(finding.key.repository, finding.identity, finding.number)
+            markers = pull_markers(finding)
+            self._check_no_open_pull(finding.key.repository, markers, finding.number)
             proposal = self._proposals.get(finding.identity)
             if proposal is None or instructions:
                 proposal = self._new_proposal(target, access.default_branch, instructions)
@@ -152,7 +153,7 @@ class FixService:
                 else FixNotMadeError
             )
             raise error(message, unified_diff(list(proposal.changes)))
-        return self._prepared(proposal)
+        return self._prepared(proposal, markers)
 
     def adopt(self, pulls: list[OpenedPull]) -> None:
         """Continue verifying pull requests an earlier session opened; costs no budget."""
@@ -207,14 +208,13 @@ class FixService:
             return None
         return max(0.0, (self.deadline - self._now()).total_seconds())
 
-    def _check_no_open_pull(self, repository: str, identity: str, number: int) -> None:
-        marker = identity_marker(identity)
+    def _check_no_open_pull(self, repository: str, markers: frozenset[str], number: int) -> None:
         for pull in self._pulls.open_pulls(repository):
             # Only a branch in the repository itself with the marker code writes first counts;
             # anyone can open a fork pull request with the same branch name and marker.
             own = pull.head_repository.lower() == repository.lower()
-            first_line = pull.body.splitlines()[:1]
-            if own and pull.branch.startswith(BRANCH_PREFIX) and first_line == [marker]:
+            first_line = next(iter(pull.body.splitlines()), "")
+            if own and pull.branch.startswith(BRANCH_PREFIX) and first_line in markers:
                 message = f"An open flakipype pull request for #{number} exists: {pull.url}"
                 raise ToolError(message)
 
@@ -265,7 +265,7 @@ class FixService:
         self._proposals[finding.identity] = proposal
         return proposal
 
-    def _prepared(self, proposal: Proposal) -> PreparedAction:
+    def _prepared(self, proposal: Proposal, markers: frozenset[str]) -> PreparedAction:
         details = self._details(proposal)
         request = ActionRequest(
             "Push fix and open a draft pull request?",
@@ -291,9 +291,7 @@ class FixService:
             # Another flakipype (the chat, a run) may have opened one since the fixer started.
             try:
                 with _from_github():
-                    self._check_no_open_pull(
-                        proposal.repository, proposal.identity, proposal.finding
-                    )
+                    self._check_no_open_pull(proposal.repository, markers, proposal.finding)
             except ToolError as error:
                 record(answer, f"not pushed: {error}", status=AuditStatus.REFUSED)
                 raise

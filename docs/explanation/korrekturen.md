@@ -48,9 +48,14 @@ deine Entscheidung.
    ungeprüfte Urteile werden mit Begründung abgelehnt. Gibt es für den Befund
    schon einen offenen Pull Request von flakipype, verlinkt `/fix` diesen,
    statt einen zweiten zu öffnen; gefunden wird er über eine versteckte
-   Markierung (einen Hash des Befunds) in der ersten Zeile der
-   Pull-Request-Beschreibung, auf einem Branch unter `flakipype/` im
-   Repository selbst; der Pull Request eines Forks zählt nie.
+   Markierung in der ersten Zeile der Pull-Request-Beschreibung, auf einem
+   Branch unter `flakipype/` im Repository selbst; der Pull Request eines
+   Forks zählt nie. Die Markierung ist ein Hash von Repository,
+   Workflow-Datei, Job und Schritt, nicht der Art des Befunds: Wird aus
+   einem wiederkehrenden Fehler mit offenem Pull Request später ein
+   nachweislich instabiler Befund, bleibt es derselbe Pull Request. Die
+   Markierung älterer Versionen enthielt die Art; solche Pull Requests werden
+   gefunden, solange der Befund dieselbe Art hat.
 2. **Push-Zugriff.** flakipype liest `permissions.push` des Repositorys,
    bevor der Fixer startet. Fehlt er, bricht `/fix` ab und sagt das. Keine
    Forks.

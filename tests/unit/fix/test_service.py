@@ -1,3 +1,4 @@
+import hashlib
 import json
 from dataclasses import replace
 
@@ -13,9 +14,9 @@ from flakipype.fix.service import (
     FixTarget,
     FixUnavailableError,
 )
-from flakipype.fix.texts import finding_marker
+from flakipype.fix.texts import PullRequestFacts, Rate, finding_marker, pull_request_body
 from flakipype.fix.verify import Stage, Verification
-from flakipype.flaky.findings import Finding
+from flakipype.flaky.findings import Finding, FindingKind
 from flakipype.flaky.signature import Category, ErrorSignature
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError, api_error
 from flakipype.github.gh import GhResult
@@ -127,6 +128,42 @@ def test_an_open_flakipype_pull_request_is_linked_instead(cache: ScanCache) -> N
     with pytest.raises(ToolError, match=r"An open flakipype pull request for #2 exists: .+/pull/5"):
         world.fixes.prepare(target())
     assert world.fixer.requests == []
+
+
+def test_a_pull_request_for_the_finding_under_another_kind_is_linked_instead(
+    cache: ScanCache,
+) -> None:
+    world = FixWorld(cache)
+    flaky = e2e_finding()
+    # The first run saw a recurring error and opened a pull request; now it is proven flaky.
+    recurring = replace(flaky, kind=FindingKind.RECURRING, fingerprint="f" * 12)
+    body = pull_request_body(
+        PullRequestFacts(recurring, verdict("flaky_test"), Rate(1, 2, "main"), (), 3), "Waits."
+    )
+    world.github.open = [
+        PullRequest(5, "https://github.com/octo-org/app/pull/5", "flakipype/fix-e2e-1", body,
+                    "octo-org/app"),
+    ]  # fmt: skip
+
+    with pytest.raises(ToolError, match=r"An open flakipype pull request for #2 exists: .+/pull/5"):
+        world.fixes.prepare(target(flaky))
+    assert world.fixer.requests == []
+
+
+def test_a_pull_request_with_the_marker_of_older_versions_is_still_found(
+    cache: ScanCache,
+) -> None:
+    world = FixWorld(cache)
+    finding = e2e_finding()
+    # Older versions hashed the identity, which includes the kind.
+    digest = hashlib.sha256(finding.identity.encode()).hexdigest()[:12]
+    world.github.open = [
+        PullRequest(6, "https://github.com/octo-org/app/pull/6", "flakipype/fix-e2e-1",
+                    f"<!-- flakipype:finding={digest} -->\n## Flaky", "octo-org/app"),
+    ]  # fmt: skip
+
+    with pytest.raises(ToolError, match=r"An open flakipype pull request for #2 exists: .+/pull/6"):
+        world.fixes.prepare(target(finding))
 
 
 def test_an_outsiders_pull_request_with_the_marker_does_not_block_the_fix(
