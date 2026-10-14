@@ -45,7 +45,11 @@ printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive --secret-store 
 
 Speichert auch `gh` sein Token im Schlüsselbund, melde dich mit
 `gh auth login --insecure-storage` erneut an; dann liegt es in der eigenen
-Konfigurationsdatei von `gh`.
+Konfigurationsdatei von `gh`. Ein Lauf, der `gh` nicht angemeldet findet,
+nennt diesen Befehl ebenfalls.
+
+Ein gesperrter Schlüsselbund hält einen Lauf nicht auf: Antwortet er nicht
+innerhalb von 15 Sekunden, endet der Lauf mit Code 2 und dem Befehl oben.
 
 ## 4. Den Timer installieren
 
@@ -57,9 +61,15 @@ flakipype daemon install --print              # only show the unit files
 
 `install` führt zuerst `flakipype doctor` über `systemd-run --user` aus, in
 derselben Umgebung wie der Timer; schlägt das fehl, wird nichts installiert,
-und die Ausgabe sagt, warum. Dann schreibt es `flakipype.service` und
+und die Ausgabe sagt, warum. systemd beendet diese Prüfung nach spätestens
+300 Sekunden. Dann schreibt es `flakipype.service` und
 `flakipype.timer` nach `~/.config/systemd/user/` und startet den Timer. Führe
 `install` erneut aus, um den Zeitplan zu ändern.
+
+Liegt der Key im System-Schlüsselbund, warnt `install`: Die Prüfung lief,
+während du angemeldet warst, aber ein Timer, der nach einem Neustart vor
+deiner Anmeldung startet, findet den Schlüsselbund gesperrt. Schritt 3 legt
+den Key in eine Datei.
 
 Ohne Lingering läuft ein User-Timer nur, solange du angemeldet bist. So läuft
 er auf einem Server ohne Anmeldesitzung:

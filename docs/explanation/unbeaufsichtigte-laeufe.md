@@ -220,13 +220,24 @@ ist gesperrt. Deshalb:
   Sitzung lesen kann.
 - Ein gesperrter oder nicht erreichbarer Schlüsselbund ist ein typisierter
   Fehler: Exit-Code 2 und genau dieser nächste Schritt, nie ein Traceback.
+  flakipype fragt den Schlüsselbund in einem eigenen Daemon-Thread und
+  wartet höchstens 15 Sekunden: Der Secret Service wartet sonst ohne Limit
+  auf eine Entsperr-Abfrage, die unter einem Timer niemand beantwortet, und
+  ein hängender D-Bus-Aufruf hält den Prozess nicht am Leben.
+- Das null-Backend von keyring zählt für `auto` als kein Schlüsselbund.
+  Setup liest den Key nach dem Speichern zurück, und ein Key, der in der
+  Datei fehlt, nennt ebenfalls den Schritt mit `--secret-store file`: Sonst
+  schickte „Führe setup aus“ dich im Kreis.
 - `doctor` sagt, welcher Speicher den Key hält.
-- `daemon install` prüft, bevor es irgendetwas installiert (unten).
+- `daemon install` prüft, bevor es irgendetwas installiert (unten), und
+  warnt, wenn der Key im Schlüsselbund liegt.
 
 Das GitHub-Token bleibt die Anmeldung von `gh`. Bewahrt `gh` es im
 Schlüsselbund auf, gilt dasselbe für `gh`; `gh auth login --insecure-storage`
 bewahrt es stattdessen in der eigenen Konfigurationsdatei von `gh` auf
-([Zeitgesteuert ausführen](../how-to/zeitgesteuert-ausfuehren.md)).
+([Zeitgesteuert ausführen](../how-to/zeitgesteuert-ausfuehren.md)). Findet
+ein Lauf oder `doctor` `gh` nicht angemeldet, nennt die Meldung diesen
+Befehl.
 
 ## `flakipype daemon`
 
@@ -284,10 +295,13 @@ WantedBy=timers.target
 
 **Prüfungen vor der Installation.** `daemon install` prüft den Zeitplan mit
 `systemd-analyze calendar` und führt
-`systemd-run --user --wait --pipe --collect <flakipype> doctor` aus, sodass
-`doctor` in derselben Umgebung läuft wie später der Timer. Schlägt eines
-davon fehl, wird nichts geschrieben, und die Ausgabe sagt, warum,
-typischerweise der Schlüsselbund. Der Pfad zur ausführbaren Datei und der
+`systemd-run --user --wait --pipe --collect --property=RuntimeMaxSec=300
+<flakipype> doctor` aus, sodass `doctor` in derselben Umgebung läuft wie
+später der Timer. systemd beendet die Prüfung selbst nach 300 Sekunden, bevor
+flakipype nach 600 Sekunden aufhört, auf `systemd-run` zu warten; so läuft
+keine vergessene Prüfung weiter, und ein Befehl, der nicht fertig wird, ist
+eine Meldung, kein Traceback. Schlägt eines davon fehl, wird nichts
+geschrieben, und die Ausgabe sagt, warum, typischerweise der Schlüsselbund. Der Pfad zur ausführbaren Datei und der
 Zeitplan dürfen keine Zeichen enthalten, die einer Unit-Datei Zeilen
 hinzufügen könnten. Lehnt systemd ab, nachdem die Dateien geschrieben sind,
 sagt die Meldung, wo sie liegen und dass `daemon uninstall` sie entfernt.

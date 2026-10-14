@@ -99,7 +99,7 @@ store = "auto"
 | `run.max_prs_per_day` | `3` | 1–20 Draft-PRs, die alle Läufe der letzten 24 Stunden öffnen dürfen |
 | `run.max_actions_per_day` | `20` | 1–200 Reruns und Dispatches, die alle Läufe der letzten 24 Stunden starten dürfen |
 | `run.max_tokens_per_day` | `3000000` | 10k–50M Tokens, die alle Läufe der letzten 24 Stunden verbrauchen dürfen |
-| `secrets.store` | `auto` | `auto` (der System-Keyring, oder `secrets.json`, wo es keinen gibt), `keyring` oder `file` |
+| `secrets.store` | `auto` | `auto` (der System-Keyring, oder `secrets.json`, wo es keinen gibt oder nur das null-Backend von keyring), `keyring` oder `file` |
 
 In einem Lauf sind `fix.max_prs_per_session`, `actions.max_per_session` und
 `agent.max_tokens_per_run` die Limits dieses einen Laufs, und Untersuchungen
@@ -124,6 +124,26 @@ Ein gesperrter oder nicht erreichbarer Keyring, typischerweise unter einem
 systemd-Timer ohne Desktop-Sitzung, wird mit Exit-Code 2 und dem nächsten
 Schritt gemeldet:
 `flakipype setup --non-interactive --secret-store file --api-key-stdin`.
+
+- Antwortet der Keyring nicht innerhalb von 15 Sekunden, etwa weil er auf
+  eine Entsperr-Abfrage wartet, die niemand beantwortet, gilt er als
+  gesperrt. Ein Lauf hängt dann nie bis zum Timeout der systemd-Unit.
+- `auto` behandelt das null-Backend von keyring
+  (`PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`) wie einen
+  fehlenden Keyring und nimmt `secrets.json`.
+- Nach dem Speichern liest setup den Key aus dem Keyring zurück. Behält das
+  Backend ihn nicht, endet setup mit Exit-Code 2 und demselben nächsten
+  Schritt, statt „Saved“ zu melden.
+- Fehlt der Key in `secrets.json`, nennen `run`, `investigate` und `chat`
+  denselben nächsten Schritt, `doctor` ebenso, wenn sonst nichts fehlt. Hat
+  setup den Key in einer Desktop-Sitzung im Keyring gespeichert, erreicht ein
+  Timer ohne Session-Bus ihn nicht; setup dort erneut auszuführen, änderte
+  nichts.
+- Ist `gh` nicht angemeldet, nennen `run` und `doctor` neben
+  `flakipype setup` auch
+  `gh auth login --hostname <host> --insecure-storage`: Ohne
+  Desktop-Sitzung kann `gh` ein Token im Keyring ebenso wenig lesen.
+
 `secrets.json` wird als Ganzes über eine temporäre Datei ersetzt, sodass ein
 fehlgeschlagener Schreibvorgang (volle Festplatte) die vorherige Datei
 behält.

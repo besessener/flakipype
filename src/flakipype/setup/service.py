@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from flakipype.config.paths import AppPaths
-from flakipype.config.secrets import LLM_API_KEY, SecretStore
+from flakipype.config.secrets import LLM_API_KEY, FileSecretStore, SecretStore
 from flakipype.config.settings import (
     GitHubSettings,
     LlmSettings,
@@ -94,6 +94,10 @@ class SetupService:
     @property
     def secret_location(self) -> str:
         return self._secrets.location
+
+    @property
+    def keeps_key_in_file(self) -> bool:
+        return isinstance(self._secrets, FileSecretStore)
 
     def load(self) -> SetupState:
         has_api_key = self._secrets.get(LLM_API_KEY) is not None

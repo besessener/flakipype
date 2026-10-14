@@ -2,12 +2,13 @@ import errno
 import os
 import stat
 import sys
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
 from keyring.backend import KeyringBackend
-from keyring.backends import fail
+from keyring.backends import fail, null
 from keyring.errors import KeyringError
 
 from flakipype.config.secrets import (
@@ -57,6 +58,43 @@ def test_keyring_errors_become_secret_store_errors() -> None:
         store.get("name")
     with pytest.raises(SecretStoreError, match="locked"):
         store.put("name", "value")
+
+
+class LockedKeyring(MemoryKeyring):
+    """Waits for an unlock prompt nobody answers, as the Secret Service does without a session."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.unlocked = threading.Event()
+
+    def get_password(self, service: str, username: str) -> str | None:
+        self.unlocked.wait()
+        return super().get_password(service, username)
+
+
+@pytest.fixture
+def locked_keyring() -> Iterator[LockedKeyring]:
+    backend = LockedKeyring()
+    yield backend
+    backend.unlocked.set()
+
+
+def test_a_keyring_that_does_not_answer_is_an_error(locked_keyring: LockedKeyring) -> None:
+    store = KeyringSecretStore(locked_keyring, wait_seconds=0.05)
+
+    with pytest.raises(SecretStoreError, match=r"did not answer within 0\.05 s"):
+        store.get("llm-api-key")
+
+    waiting = [thread for thread in threading.enumerate() if thread.name == "keyring"]
+    assert waiting
+    assert all(thread.daemon for thread in waiting)
+
+
+def test_a_keyring_that_keeps_nothing_is_an_error_when_saving() -> None:
+    store = KeyringSecretStore(null.Keyring())
+
+    with pytest.raises(SecretStoreError, match="accepted the secret but does not return it"):
+        store.put("llm-api-key", "value-1")
 
 
 def test_file_store_round_trip(tmp_path: Path) -> None:
@@ -129,11 +167,16 @@ def no_keyring() -> KeyringBackend:
     return fail.Keyring()
 
 
+def null_keyring() -> KeyringBackend:
+    return null.Keyring()
+
+
 @pytest.mark.parametrize(
     ("choice", "backend", "expected"),
     [
         (SecretStoreChoice.AUTO, MemoryKeyring, KeyringSecretStore),
         (SecretStoreChoice.AUTO, no_keyring, FileSecretStore),
+        (SecretStoreChoice.AUTO, null_keyring, FileSecretStore),
         (SecretStoreChoice.KEYRING, MemoryKeyring, KeyringSecretStore),
         (SecretStoreChoice.KEYRING, no_keyring, KeyringSecretStore),
         (SecretStoreChoice.FILE, MemoryKeyring, FileSecretStore),
