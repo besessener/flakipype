@@ -2,10 +2,12 @@ from pathlib import Path
 
 import click
 import pytest
+from keyring.backends import fail
 from typer.testing import CliRunner, Result
 
 from flakipype.agent.tools import Mode
 from flakipype.cli import app, wiring
+from flakipype.config.secrets import FileSecretStore, KeyringSecretStore
 from flakipype.setup.daemon import CommandResult, Daemon, UnitOptions
 
 from support.fake_daemon import FakeRunner
@@ -24,6 +26,8 @@ def systemd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
 
     monkeypatch.setattr(wiring, "unit_options", unit_options)
     monkeypatch.setattr(wiring, "require_configuration", lambda: None)
+    store = FileSecretStore(tmp_path / "secrets.json")
+    monkeypatch.setattr(wiring, "configured_secret_store", lambda: store)
     return fake
 
 
@@ -47,7 +51,22 @@ def test_install_starts_the_timer_and_passes_on_notes(systemd: FakeRunner) -> No
     assert result.exit_code == 0, result.output
     assert "Installed and started flakipype.timer (Mon..Fri 06:00) in" in output_of(result)
     assert "Note: The timer only runs while you are logged in." in output_of(result)
+    assert "system keyring" not in output_of(result)
     assert systemd.calls[0] == "systemd-analyze calendar Mon..Fri 06:00"
+
+
+def test_install_warns_when_the_key_is_in_the_system_keyring(
+    systemd: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = KeyringSecretStore(fail.Keyring())
+    monkeypatch.setattr(wiring, "configured_secret_store", lambda: store)
+
+    result = runner.invoke(app, ["daemon", "install"])
+
+    assert result.exit_code == 0, result.output
+    assert "Note: The API key is in the system keyring" in output_of(result)
+    assert "--secret-store file --api-key-stdin" in output_of(result)
+    assert systemd.calls
 
 
 def test_a_failed_install_says_why(systemd: FakeRunner) -> None:

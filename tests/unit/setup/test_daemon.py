@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,7 +63,10 @@ def test_install_checks_then_writes_and_starts_the_timer(tmp_path: Path) -> None
     assert warnings == []
     assert runner.calls == [
         "systemd-analyze calendar daily",
-        "systemd-run --user --wait --pipe --collect --quiet /home/me/.local/bin/flakipype doctor",
+        (
+            "systemd-run --user --wait --pipe --collect --quiet --property=RuntimeMaxSec=300 "
+            "/home/me/.local/bin/flakipype doctor"
+        ),
         "systemctl --user daemon-reload",
         "systemctl --user enable --now flakipype.timer",
         "loginctl show-user me --property=Linger --value",
@@ -156,6 +160,22 @@ def test_commands_run_without_a_shell() -> None:
 
     assert (done.code, done.output) == (3, "out")
     assert (missing.code, missing.output) == (127, "flakipype-no-such-program is not installed")
+
+
+def test_a_command_that_does_not_finish_is_stopped_and_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def hangs(arguments: list[str], **_: object) -> None:
+        raise subprocess.TimeoutExpired(arguments, timeout=600)
+
+    monkeypatch.setattr(subprocess, "run", hangs)
+
+    stuck = run_command(["systemd-run", "--user", "--wait"])
+
+    assert (stuck.code, stuck.output) == (
+        124,
+        "systemd-run did not finish within 600 s and was stopped",
+    )
 
 
 def test_the_executable_is_the_installed_command(tmp_path: Path) -> None:

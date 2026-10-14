@@ -3,10 +3,11 @@ from pathlib import Path
 
 import click
 import pytest
+from keyring.backends import null
 from typer.testing import CliRunner, Result
 
 from flakipype.cli import app, setup_commands, wiring
-from flakipype.config.secrets import LLM_API_KEY, SecretStoreError
+from flakipype.config.secrets import LLM_API_KEY, KeyringSecretStore, SecretStoreError
 from flakipype.config.settings import SecretStoreChoice, load_settings
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.setup.service import SetupService
@@ -69,6 +70,27 @@ def test_headless_setup_saves_the_secret_store(
     assert result.exit_code == 0, result.output
     assert chosen_stores == [SecretStoreChoice.FILE]
     assert load_settings(world.paths.config_file).secrets.store is SecretStoreChoice.FILE
+
+
+def test_a_keyring_that_keeps_nothing_explains_the_file_store(
+    world: SetupWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = SetupService(
+        paths=world.paths,
+        secrets=KeyringSecretStore(null.Keyring()),
+        gh=world.gh,
+        check_llm=world.llm,
+    )
+    monkeypatch.setattr(wiring, "build_setup_service", lambda _: service)
+    arguments = ["setup", "--non-interactive", "--model", "m-1", "--owner", "octo-org"]
+
+    result = runner.invoke(app, [*arguments, "--api-key-stdin"], input="key-1\n")
+
+    assert result.exit_code == 2
+    text = " ".join(output_of(result).split())
+    assert "accepted the secret but does not return it" in text
+    assert "--secret-store file --api-key-stdin" in text
+    assert "Saved" not in text
 
 
 @pytest.mark.parametrize("command", [["doctor"], ["setup", "--non-interactive"]])

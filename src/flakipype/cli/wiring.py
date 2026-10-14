@@ -26,7 +26,13 @@ from flakipype.agent.pipeline import AgentConfig, investigate_finding
 from flakipype.agent.tools import Confirmer, HeadlessGate, Mode, PolicyGate
 from flakipype.cli.readiness import NotReadyError, check_logged_in, check_run_owner
 from flakipype.config.paths import AppPaths, app_paths
-from flakipype.config.secrets import LLM_API_KEY, SecretStore, SecretStoreError, secret_store
+from flakipype.config.secrets import (
+    LLM_API_KEY,
+    FileSecretStore,
+    SecretStore,
+    SecretStoreError,
+    secret_store,
+)
 from flakipype.config.settings import (
     FixSettings,
     SecretStoreChoice,
@@ -106,6 +112,11 @@ def build_setup_service(choice: SecretStoreChoice | None = None) -> SetupService
         gh=_managed_gh(paths),
         check_llm=check_llm_endpoint,
     )
+
+
+def configured_secret_store() -> SecretStore:
+    paths = _paths()
+    return _secret_store(paths, _ready_settings(paths).secrets.store)
 
 
 def build_daemon() -> Daemon:
@@ -212,7 +223,9 @@ def _open_agentic() -> Generator[_Agentic]:
         message = f"Cannot read the API key from the {secrets.location}: {error}. {KEY_IN_A_FILE}"
         raise NotReadyError(message) from error
     if not api_key:
-        message = f"No API key stored. {RUN_SETUP}"
+        # Setup may have kept the key in a keyring this environment cannot reach; setup again loops.
+        next_step = KEY_IN_A_FILE if isinstance(secrets, FileSecretStore) else RUN_SETUP
+        message = f"No API key stored in the {secrets.location}. {next_step}"
         raise NotReadyError(message)
     gh = _gh_cli(paths, settings.github.host)
     config = _agent_config(settings, api_key, gh)

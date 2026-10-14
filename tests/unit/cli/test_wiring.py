@@ -10,7 +10,7 @@ import httpx2
 import keyring
 import pytest
 from anthropic import Anthropic
-from keyring.backends import fail
+from keyring.backends import fail, null
 
 from flakipype.agent.investigator import Status
 from flakipype.agent.tools import ActionRequest, Mode, ToolError
@@ -20,6 +20,7 @@ from flakipype.cli.wiring import (
     build_daemon,
     build_setup_service,
     check_llm_endpoint,
+    configured_secret_store,
     open_chat,
     open_investigation,
     open_run,
@@ -89,6 +90,35 @@ def test_the_setup_service_uses_the_chosen_or_saved_store(
     write_config(isolated_home, config)
 
     assert build_setup_service(choice).secret_location.startswith(location)
+
+
+def test_the_configured_secret_store_is_the_one_a_run_reads(isolated_home: Path) -> None:
+    write_config(isolated_home, '[secrets]\nstore = "keyring"\n')
+
+    assert configured_secret_store().location.startswith("system keyring")
+
+
+def test_a_key_missing_from_the_file_points_to_the_file_store(isolated_home: Path) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n')
+
+    with (
+        pytest.raises(
+            NotReadyError, match=r"No API key stored in the file .*--secret-store file --api-key"
+        ),
+        open_investigation(),
+    ):
+        pass
+
+
+def test_a_key_missing_from_the_keyring_points_to_setup(isolated_home: Path) -> None:
+    write_config(isolated_home, '[llm]\nmodel = "m-1"\n\n[secrets]\nstore = "keyring"\n')
+    keyring.set_keyring(null.Keyring())
+
+    with (
+        pytest.raises(NotReadyError, match=r"in the system keyring .*Run `flakipype setup`\.$"),
+        open_investigation(),
+    ):
+        pass
 
 
 def test_an_unreadable_keyring_is_not_ready(isolated_home: Path) -> None:
@@ -183,7 +213,11 @@ def test_a_run_without_a_gh_login_is_not_ready(
     fake_gh.record(USER_CALL, stderr="gh auth login", exit_code=4)
 
     with (
-        pytest.raises(NotReadyError, match=r"gh is not logged in to github\.com"),
+        pytest.raises(
+            NotReadyError,
+            match=r"gh is not logged in to github\.com.*gh auth login --hostname github\.com "
+            r"--insecure-storage",
+        ),
         open_run(Mode.AUTO, lambda _: ScanRequest("octo-org", "github.com", 30, 50)),
     ):
         pass

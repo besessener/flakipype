@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from flakipype.config.secrets import KeyringSecretStore, SecretStore
 from flakipype.config.settings import MAX_RUN_MINUTES
+from flakipype.setup.doctor import KEY_IN_A_FILE
 
 SERVICE = "flakipype.service"
 TIMER = "flakipype.timer"
@@ -17,6 +19,9 @@ _SAFE_PATH = re.compile(r"^/[A-Za-z0-9/._+-]+$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _STOP_MARGIN_MINUTES = 10
 _COMMAND_SECONDS = 600
+# systemd stops the check itself before run_command gives up on systemd-run, so none outlives it.
+_DOCTOR_SECONDS = 300
+_TIMED_OUT = 124
 _NOT_FOUND = 127
 
 
@@ -47,7 +52,21 @@ def run_command(arguments: list[str]) -> CommandResult:
         )
     except FileNotFoundError:
         return CommandResult(_NOT_FOUND, f"{arguments[0]} is not installed")
+    except subprocess.TimeoutExpired:
+        message = f"{arguments[0]} did not finish within {_COMMAND_SECONDS} s and was stopped"
+        return CommandResult(_TIMED_OUT, message)
     return CommandResult(done.returncode, (done.stdout + done.stderr).strip())
+
+
+def keyring_warnings(store: SecretStore) -> list[str]:
+    """A timer that starts before anyone logs in finds the system keyring locked."""
+    if not isinstance(store, KeyringSecretStore):
+        return []
+    message = (
+        f"The API key is in the {store.location}, which a timer usually cannot read while you "
+        f"are logged out. {KEY_IN_A_FILE}"
+    )
+    return [message]
 
 
 def installed_executable(argv0: str, which: Callable[[str], str | None]) -> Path:
@@ -155,7 +174,7 @@ class Daemon:
     def _check_doctor(self, executable: Path) -> None:
         checked = self._run(
             ["systemd-run", "--user", "--wait", "--pipe", "--collect", "--quiet",
-             executable.as_posix(), "doctor"]
+             f"--property=RuntimeMaxSec={_DOCTOR_SECONDS}", executable.as_posix(), "doctor"]
         )  # fmt: skip
         if checked.code != 0:
             message = (

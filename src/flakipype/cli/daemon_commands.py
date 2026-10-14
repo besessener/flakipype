@@ -6,7 +6,7 @@ from rich.console import Console
 from flakipype.agent.tools import Mode
 from flakipype.cli import wiring
 from flakipype.cli.errors import command_errors, error_console, print_error
-from flakipype.setup.daemon import DaemonError, render_units
+from flakipype.setup.daemon import DaemonError, keyring_warnings, render_units
 
 EXIT_FAILED = 1
 
@@ -41,7 +41,10 @@ def install(
         with command_errors(error_console()):
             wiring.require_configuration()
         service = wiring.build_daemon()
-        warnings = service.install(options)
+        warnings = [
+            *service.install(options),
+            *keyring_warnings(wiring.configured_secret_store()),
+        ]
     except DaemonError as error:
         print_error(error_console(), "Not installed", error)
         raise typer.Exit(EXIT_FAILED) from error
