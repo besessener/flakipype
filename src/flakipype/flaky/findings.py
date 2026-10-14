@@ -49,6 +49,12 @@ class Finding:
         return "|".join(parts)
 
     @property
+    def place(self) -> str:
+        """Where it fails, whatever kind a scan gives it; a recurring error can turn out flaky."""
+        key = self.key
+        return f"{key.repository}|{key.workflow_path}|{key.job}|{key.step}"
+
+    @property
     def reference(self) -> str:
         """A short form of the identity; unlike the number, it names the same finding later."""
         return hashlib.sha256(self.identity.encode("utf-8")).hexdigest()[:_REFERENCE_LENGTH]

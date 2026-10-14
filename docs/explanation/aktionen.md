@@ -190,7 +190,13 @@ Zeit, Sitzung, Werkzeug, wer gefragt hat (`model`, `command` oder `run` für
 [unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)), den Anfragetext, die
 Antwort (`confirmed`, `declined`, `auto`, `not run in auto
 mode` oder `report only`), das Ergebnis (die Antwort von GitHub oder den
-Fehler) und die Lauf-ID. Die Reruns und Dispatches, die eine Korrektur
+Fehler) und die Lauf-ID. Dazu kommen ein Status (`done`: auf GitHub
+geschehen, `declined`: nicht erlaubt, `refused`: von einer Prüfung vor GitHub
+abgelehnt, `failed`: von GitHub abgelehnt oder fehlgeschlagen) und die Zahl
+der Reruns, Dispatches oder Pull Requests, die der Eintrag gestartet hat (ein
+Dispatch mit drei Läufen zählt drei). Code liest nur Status und Zahl, nie den
+Ergebnistext; Einträge älterer Versionen bekommen beides beim Öffnen der
+Datenbank einmal aus ihrem Ergebnistext. Die Reruns und Dispatches, die eine Korrektur
 prüfen, werden ebenfalls aufgezeichnet, als `verify_rerun` und
 `verify_dispatch` mit der Antwort `covered by the push`, auch wenn GitHub sie
 ablehnt (`failed: …`).

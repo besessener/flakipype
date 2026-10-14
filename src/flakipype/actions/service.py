@@ -22,7 +22,7 @@ from flakipype.flaky.findings import Evidence, Finding
 from flakipype.flaky.model import FAILED_CONCLUSIONS, WorkflowRun
 from flakipype.github.actions import GitHubApiError
 from flakipype.github.runs import RunState
-from flakipype.store.audit import AuditEntry, AuditLog
+from flakipype.store.audit import AuditEntry, AuditLog, AuditStatus
 
 # The audit answer of a verification run: the confirmation of the fix's push covers it.
 COVERED_BY_PUSH = "covered by the push"
@@ -98,7 +98,7 @@ class ActionService:
             try:
                 self._runs.rerun(run.repository, run.run_id)
             except GitHubApiError as error:
-                self._record_covered("verify_rerun", run, f"failed: {error}")
+                self._record_covered("verify_rerun", run, error)
                 raise
             self.used += 1
         started = self._watch.add(
@@ -107,7 +107,7 @@ class ActionService:
                 before=run.conclusion, status="queued", conclusion=None, detail="", done=False,
             )
         )  # fmt: skip
-        self._record_covered("verify_rerun", started, f"Started R{started.number}.")
+        self._record_covered("verify_rerun", started)
         return started
 
     def dispatch_authorised(self, template: WatchedRun) -> WatchedRun:
@@ -119,11 +119,11 @@ class ActionService:
                     template.repository, template.workflow_path, template.ref
                 )
             except GitHubApiError as error:
-                self._record_covered("verify_dispatch", template, f"failed: {error}")
+                self._record_covered("verify_dispatch", template, error)
                 raise
             self.used += 1
         started = self._watch.add(replace(template, run_id=run_id, started=self._now()))
-        self._record_covered("verify_dispatch", started, f"Started R{started.number}.")
+        self._record_covered("verify_dispatch", started)
         return started
 
     def adopt(self, runs: list[WatchedRun]) -> None:
@@ -308,12 +308,18 @@ class ActionService:
             message = "the action budget of this session is used up"
             raise ActionRefusedError(message)
 
-    def _record_covered(self, action: str, run: WatchedRun, outcome: str) -> None:
+    def _record_covered(
+        self, action: str, run: WatchedRun, error: GitHubApiError | None = None
+    ) -> None:
+        """A verification run that started, one rerun or dispatch, or GitHub's error for it."""
+        status = AuditStatus.FAILED if error else AuditStatus.DONE
         self._audit.record(
             AuditEntry(
                 time=self._now().isoformat(), session=self.session, action=action,
                 origin=self._origin, request=f"{run.title} on {run.ref} @ {run.commit[:7]}",
-                answer=COVERED_BY_PUSH, outcome=outcome, run_id=run.run_id,
+                answer=COVERED_BY_PUSH,
+                outcome=f"failed: {error}" if error else f"Started R{run.number}.",
+                status=status, spent=int(status is AuditStatus.DONE), run_id=run.run_id,
             )
         )  # fmt: skip
 
@@ -325,12 +331,13 @@ class ActionService:
     ) -> PreparedAction:
         origin = self._origin
 
-        def record(answer: str, outcome: str, run_id: int | None = None) -> None:
+        def record(answer: str, *, status: AuditStatus, started: Started) -> None:
             text = "\n".join([request.title, *request.details])
             self._audit.record(
                 AuditEntry(
                     time=self._now().isoformat(), session=self.session, action=action,
-                    origin=origin, request=text, answer=answer, outcome=outcome, run_id=run_id,
+                    origin=origin, request=text, answer=answer, outcome=started.outcome,
+                    status=status, spent=started.spent, run_id=started.run_id,
                 )
             )  # fmt: skip
 
@@ -343,12 +350,20 @@ class ActionService:
                     started = start()
                     self.used += started.spent
             except ToolError as error:
-                record(answer.value, f"not run: {error}")
+                record(answer.value, status=AuditStatus.REFUSED, started=_none(f"not run: {error}"))
                 raise
             except GitHubApiError as error:
-                record(answer.value, f"failed: {error}")
+                record(answer.value, status=AuditStatus.FAILED, started=_none(f"failed: {error}"))
                 raise ToolError(refusal(error)) from error
-            record(answer.value, started.outcome, started.run_id)
+            record(answer.value, status=AuditStatus.DONE, started=started)
             return started.outcome
 
-        return PreparedAction(request, run, lambda answer: record(answer.value, "not run"))
+        def decline(answer: Answer) -> None:
+            record(answer.value, status=AuditStatus.DECLINED, started=_none("not run"))
+
+        return PreparedAction(request, run, decline)
+
+
+def _none(outcome: str) -> Started:
+    """What an action that did not start records: no run, nothing spent."""
+    return Started(outcome, None)

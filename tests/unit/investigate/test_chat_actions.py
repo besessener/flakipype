@@ -153,7 +153,7 @@ def test_sessions_from_before_actions_resume_with_a_fresh_budget(cache: ScanCach
     chat.handle("/rerun 3")
     document = json.loads(cache.sessions.load(1) or "{}")
     del document["actions"]
-    cache.sessions.update(1, now=NOW.isoformat(), data=json.dumps(document))
+    cache.sessions.update(1, now=NOW.isoformat(), data=json.dumps(document), tokens=0)
 
     chat.handle("/resume 1")
 

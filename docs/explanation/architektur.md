@@ -86,7 +86,8 @@ cli                               Typer entry point, composition root (cli/wirin
   Signaturalgorithmus und werden neu berechnet, wenn er sich ändert. Lauflisten werden nicht zwischengespeichert:
   Sie abzurufen ist günstig, und sie ändern sich ständig. Chat- und
   Laufsitzungen werden ebenfalls dort gespeichert, als ein JSON-Dokument pro
-  Sitzung, ebenso das nur ergänzte Audit-Log der Aktionsanfragen
+  Sitzung mit den verbrauchten Tokens in einer eigenen Spalte, ebenso das nur
+  ergänzte Audit-Log der Aktionsanfragen mit einem Status pro Eintrag
   (`audit.py`). Die Datenbank nutzt das WAL-Journal von SQLite, sodass Chat
   und Lauf sie gemeinsam nutzen können; `lock.py` hält einen zweiten
   `flakipype run` über die eigene Dateisperre von SQLite fern, die das

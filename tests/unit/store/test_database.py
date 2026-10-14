@@ -191,3 +191,36 @@ def test_a_version_one_cache_is_migrated_and_its_signatures_recomputed(tmp_path:
         assert migrated.log_results(HOST, [11]) == {}
 
     assert schema_version(path) == len(MIGRATIONS)
+
+
+def test_audit_entries_and_run_tokens_of_a_version_seven_cache_get_their_columns(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "cache.sqlite3"
+    with closing(sqlite3.connect(path)) as connection, connection:
+        for script in MIGRATIONS[:7]:
+            connection.executescript(script)
+        connection.execute("PRAGMA user_version = 7")
+        connection.executemany(
+            "INSERT INTO action_log (time, session, action, origin, request, answer, outcome) "
+            "VALUES ('2026-10-09T06:00:00+00:00', 's', ?, 'run', 'r', 'auto', ?)",
+            [("fix", "Opened draft pull request #12"), ("fix", "pushed, no pull request: x"),
+             ("fix", "failed: the commit failed"), ("fix", "not pushed: an open one exists"),
+             ("fix", "not pushed"), ("dispatch", "Started R1, R2: E2E on main."),
+             ("rerun_failed", "not run"), ("cancel", "Cancel requested for R1.")],
+        )  # fmt: skip
+        connection.execute(
+            "INSERT INTO sessions (title, created, updated, data, kind) VALUES "
+            "('run', '2026-10-09T06:00:00+00:00', '', '{\"tokens\": 700}', 'run'), "
+            "('chat', '2026-10-09T06:00:00+00:00', '', '{\"tokens\": 9}', 'chat')"
+        )
+
+    with ScanCache.open(path) as migrated:
+        entries = migrated.audit.since("")
+        tokens = migrated.sessions.run_tokens_since("")
+
+    assert [(entry.status.value, entry.spent) for entry in entries] == [
+        ("done", 1), ("done", 1), ("failed", 0), ("refused", 0), ("declined", 0),
+        ("done", 1), ("declined", 0), ("done", 0),
+    ]  # fmt: skip
+    assert tokens == 700

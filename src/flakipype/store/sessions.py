@@ -34,10 +34,12 @@ class SessionStore:
             )
         return int(cursor.lastrowid or 0)
 
-    def update(self, session_id: int, *, now: str, data: str) -> None:
+    def update(self, session_id: int, *, now: str, data: str, tokens: int) -> None:
+        """`tokens` is what the session used so far; the daily limits add up those of runs."""
         with self._db:
             self._db.execute(
-                "UPDATE sessions SET updated = ?, data = ? WHERE id = ?", (now, data, session_id)
+                "UPDATE sessions SET updated = ?, data = ?, tokens = ? WHERE id = ?",
+                (now, data, tokens, session_id),
             )
 
     def load(self, session_id: int) -> str | None:
@@ -69,8 +71,7 @@ class SessionStore:
     def run_tokens_since(self, since: str) -> int:
         """Tokens of the run sessions created at or after `since` (ISO time)."""
         row = self._db.execute(
-            "SELECT COALESCE(SUM(json_extract(data, '$.tokens')), 0) FROM sessions "
-            "WHERE kind = ? AND created >= ?",
+            "SELECT COALESCE(SUM(tokens), 0) FROM sessions WHERE kind = ? AND created >= ?",
             (SessionKind.RUN.value, since),
         ).fetchone()
         return int(row[0])
