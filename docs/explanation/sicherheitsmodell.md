@@ -68,7 +68,10 @@ wird. Einzelheiten zu Reruns und Dispatches: [Aktionen](aktionen.md).
 
 Job-Logs, Workflow-Dateien, Quellcode und Issue- oder PR-Text können Text
 enthalten, den irgendwer geschrieben hat. Sie gehen immer als Daten markiert
-an das Modell, nie als Anweisungen. Aktionen kommen nur aus deiner Anfrage
+an das Modell, nie als Anweisungen. Ein schließendes Tag im Text, egal in
+welcher Groß- und Kleinschreibung und mit welchen Leerzeichen
+(`</LOG>`, `</ log>`), wird entschärft, sodass er sein Datenelement nicht
+vorzeitig beenden kann. Aktionen kommen nur aus deiner Anfrage
 oder dem eingestellten Modus.
 
 ## Secrets bleiben lokal
