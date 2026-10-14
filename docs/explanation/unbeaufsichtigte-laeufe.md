@@ -387,10 +387,15 @@ Fake-Modell getestet.
 
 - Der Lauf-Service über GitHub-Fakes im Speicher und einem Fake-Agenten und
   -Fixer, mit einer einstellbaren Uhr: beide Modi, eine Korrektur mit
-  Warnungen, eine an ausführbarem Code, eine abgelehnte Korrektur, die nicht erneut versucht wird (auch
-  in einem Probelauf), jedes Limit, das Zeitlimit mit übrig gebliebenen
-  Verifikationen, die der nächste `auto`-Lauf zu Ende führt, eine
-  fehlgeschlagene Auslieferung, die Sitzung, die er für den Chat hinterlässt.
+  Warnungen, eine an ausführbarem Code, eine abgelehnte Korrektur, die nicht
+  erneut versucht wird (auch in einem Probelauf), jedes Limit, das Zeitlimit
+  mit übrig gebliebenen Verifikationen, die der nächste `auto`-Lauf zu Ende
+  führt, eine fehlgeschlagene Auslieferung, die Sitzung, die er für den Chat
+  hinterlässt.
+- Die echte Verdrahtung in `open_run` gegen den `gh`-Stub: Ein Lauf in `ask`
+  meldet nur (`report only`) und schickt keinen schreibenden Aufruf an
+  GitHub; nach den Pull Requests, die Läufe heute schon geöffnet haben, lehnt
+  er jede weitere Korrektur mit der Budget-Meldung ab.
 - Eine Zeile für jeden Befund, der nicht korrigiert wurde, und
   Untersuchungen ohne Urteil, die der nächste Lauf bis zu einem neueren
   Fehlschlag überspringt.
