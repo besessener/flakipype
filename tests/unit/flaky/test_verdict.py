@@ -61,6 +61,35 @@ def test_still_failing_has_no_passing_since() -> None:
     assert verdict(flaky, min_runs=2) is Verdict.FLAKY
 
 
+def test_a_rerun_pass_before_a_same_commit_failure_is_flaky() -> None:
+    sha = "c" * 40
+    runs = [run(1, attempt=2), run(3, conclusion="failure", sha=sha), run(4, sha=sha)]
+
+    flaky = ranked(runs, {1: 1, 3: 1})
+
+    assert verdict(flaky, min_runs=2) is Verdict.FLAKY
+
+
+def test_a_rerun_pass_after_a_same_commit_failure_is_flaky() -> None:
+    sha = "c" * 40
+    runs = [run(1, sha=sha), run(2, conclusion="failure", sha=sha), run(3, attempt=2)]
+
+    flaky = ranked(runs, {2: 1, 3: 1})
+
+    assert flaky.passing_since is None
+    assert verdict(flaky, min_runs=2) is Verdict.FLAKY
+
+
+def test_passing_since_skips_the_last_runs_own_rerun() -> None:
+    sha = "c" * 40
+    runs = [run(1, sha=sha), run(2, conclusion="failure", sha=sha), run(3, attempt=2), run(4)]
+
+    flaky = ranked(runs, {2: 1, 3: 1})
+
+    assert flaky.passing_since == START + timedelta(hours=4)
+    assert verdict(flaky, min_runs=2) is Verdict.FLAKY
+
+
 def test_classify_keeps_the_ranking_order_in_each_group() -> None:
     flaky = ranked([run(1, attempt=2), run(2), run(5, attempt=2)], {1: 1, 5: 1})
     once = ranked([run(1, attempt=2)], {1: 1})

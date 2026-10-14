@@ -18,7 +18,7 @@ from flakipype.investigate.service import (
     Selection,
 )
 from flakipype.scan.progress import Progress
-from flakipype.scan.service import ScanReport, ScanRequest
+from flakipype.scan.service import ScanReport, ScanRequest, no_time_limit
 
 type ActivityListener = Callable[[str], None]
 
@@ -74,9 +74,9 @@ class ChatWorkspace:
     def findings(self) -> str:
         return findings_text(self._report().findings)
 
-    def scan_report(self) -> ScanReport:
-        """The current scan; scans first if there is none."""
-        return self._report()
+    def scan_report(self, out_of_time: Callable[[], bool] = no_time_limit) -> ScanReport:
+        """The current scan; scans first if there is none, stopping once out of time."""
+        return self.report or self._run_scan(out_of_time)
 
     def finding_list(self) -> list[Finding]:
         return self.report.findings if self.report else []
@@ -160,8 +160,8 @@ class ChatWorkspace:
     def _report(self) -> ScanReport:
         return self.report or self._run_scan()
 
-    def _run_scan(self) -> ScanReport:
-        report = self._service.scan(self.request, self._scan_progress)
+    def _run_scan(self, out_of_time: Callable[[], bool] = no_time_limit) -> ScanReport:
+        report = self._service.scan(self.request, self._scan_progress, out_of_time=out_of_time)
         self.report = report
         self.results = {}
         self.on_activity("")

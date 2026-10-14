@@ -1,4 +1,8 @@
 import json
+import signal
+from collections.abc import Generator
+from contextlib import contextmanager
+from types import FrameType
 from typing import Annotated
 
 import typer
@@ -11,6 +15,7 @@ from flakipype.cli.errors import EXIT_INCOMPLETE, LOGIN_EXPIRED, command_errors,
 from flakipype.cli.run_report import render_run, run_as_json
 from flakipype.cli.scan_command import ScanOptions
 from flakipype.store.lock import RunLockedError
+from flakipype.unattended.service import RunTerminatedError
 
 EXIT_LOCKED = 3
 
@@ -44,7 +49,8 @@ def run(  # noqa: PLR0913 - Typer maps every command line option to one paramete
         with command_errors(errors), wiring.open_run(mode, options.request) as service:
             if errors.is_terminal:
                 service.show_activity(lambda text: _show(errors, text))
-            report = service.run()
+            with _sigterm_ends_the_run():
+                report = service.run()
     except RunLockedError as error:
         errors.print(Text.assemble(("Not started:", "yellow"), f" {error}."))
         raise typer.Exit(EXIT_LOCKED) from error
@@ -56,6 +62,22 @@ def run(  # noqa: PLR0913 - Typer maps every command line option to one paramete
         errors.print(LOGIN_EXPIRED)
     if not report.complete:
         raise typer.Exit(EXIT_INCOMPLETE)
+
+
+@contextmanager
+def _sigterm_ends_the_run() -> Generator[None]:
+    """Python's default SIGTERM skips every `finally`; the run ends with its summary instead."""
+    previous = signal.signal(signal.SIGTERM, _terminate)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def _terminate(number: int, frame: FrameType | None) -> None:
+    del number, frame
+    message = "stopped by SIGTERM before it finished (systemctl stop or the unit's timeout)"
+    raise RunTerminatedError(message)
 
 
 def _show(console: Console, text: str) -> None:

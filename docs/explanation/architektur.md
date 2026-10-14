@@ -71,8 +71,10 @@ cli                               Typer entry point, composition root (cli/wirin
   instabil sein können, und für den letzten Versuch fehlgeschlagener Läufe,
   liest eine begrenzte Zahl von Logs und liefert die Einordnungen (instabil,
   einmal gesehen, behoben) plus wiederkehrende Fehler ohne Nachweis. Ein
-  Rate Limit stoppt ihn vorzeitig mit einem Bericht dessen, was gefunden
-  wurde; andere Fehler überspringen den Eintrag und werden aufgelistet. Der
+  Rate Limit, das Zeitlimit eines unbeaufsichtigten Laufs oder ein GitHub,
+  das mehrmals hintereinander nicht antwortet, stoppt ihn vorzeitig mit
+  einem Bericht dessen, was gefunden wurde; andere Fehler überspringen den
+  Eintrag und werden aufgelistet. Der
   Fortschritt wird als Ereignisse gemeldet, sodass CLI und TUI ihn auf ihre
   eigene Weise zeigen können.
 - **`store`** verwaltet den SQLite-Cache unter `$XDG_DATA_HOME/flakipype`:

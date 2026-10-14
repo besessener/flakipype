@@ -20,10 +20,15 @@ def verdict(job: FlakyJob, min_runs: int) -> Verdict:
     if job.affected_runs < min_runs:
         return Verdict.SEEN_ONCE
     # One run cannot recur; with min_runs = 1 the user asked to count it anyway. A job with no
-    # pass since its failures is not fixed: it is investigated like a flaky one.
-    if job.affected_runs > 1 and not job.recurred and job.passing_since is not None:
+    # pass since its failures, or one that passed on rerun, is not fixed: it is investigated.
+    if job.affected_runs > 1 and not job.recurred and _passed_after_a_change(job):
         return Verdict.FIXED
     return Verdict.FLAKY
+
+
+def _passed_after_a_change(job: FlakyJob) -> bool:
+    # A rerun tests the same code, so a pass on rerun proves a flake wherever it sits in time.
+    return job.passing_since is not None and job.rerun_passed == 0
 
 
 @dataclass(frozen=True)

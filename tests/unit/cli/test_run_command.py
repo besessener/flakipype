@@ -1,8 +1,10 @@
 import io
 import json
+import os
+import signal
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
 import click
@@ -21,6 +23,7 @@ from flakipype.store.lock import RunLockedError
 from flakipype.unattended.limits import Usage
 from flakipype.unattended.service import RunService
 
+from support.fake_actions import FakeActions
 from support.fake_investigation import world
 from support.fake_run import ClassifyingAgent, RunWorld, limits
 
@@ -194,6 +197,34 @@ def test_scan_problems_and_unread_verifications_are_in_the_summary(cache: ScanCa
         "octo-org/app#12: 0 of 3 runs, continues in the next run "
         "(GitHub did not answer: Server Error (HTTP 500))"
     ) in text
+
+
+@dataclass
+class TerminatedGitHub(FakeActions):
+    """systemd stops the run while it reads the first log."""
+
+    def job_log(self, repository: str, job_id: int) -> str | None:
+        os.kill(os.getpid(), signal.SIGTERM)
+        return super().job_log(repository, job_id)
+
+
+def test_sigterm_ends_the_run_with_its_summary(
+    monkeypatch: pytest.MonkeyPatch, cache: ScanCache
+) -> None:
+    world_run = RunWorld(cache, source=TerminatedGitHub(**vars(world())))
+
+    @contextmanager
+    def open_run(*_: object) -> Generator[RunService]:
+        yield world_run.service()
+
+    monkeypatch.setattr(wiring, "open_run", open_run)
+    before = signal.getsignal(signal.SIGTERM)
+
+    result = runner.invoke(app, ["run"])
+
+    assert result.exit_code == 1
+    assert "Problems: stopped by SIGTERM before it finished" in result.stdout
+    assert signal.getsignal(signal.SIGTERM) == before
 
 
 def test_progress_goes_to_a_terminal_on_stderr(

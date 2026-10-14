@@ -41,9 +41,14 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    ([Verifikationen](#verifikationen-über-läufe-hinweg)) und sofort in der
    Sitzung des neuen Laufs gespeichert, sodass ein Lauf, der später abstürzt,
    sie trotzdem weitergibt.
-3. **Scan** des konfigurierten Owners, wie `flakipype scan` es macht. Ein
-   Scan, den das Rate-Limit von GitHub gestoppt hat, beendet den Schritt
-   hier: Untersuchungen würden nur sehen, wie GitHub ihre Werkzeuge
+3. **Scan** des konfigurierten Owners, wie `flakipype scan` es macht. Vor
+   jeder Anfrage an GitHub prüft der Scan `run.max_minutes`; ist die Zeit
+   um, stoppt er wie bei einem Rate-Limit und gilt als unvollständig. Er
+   stoppt auch, wenn GitHub fünf Anfragen hintereinander nicht beantwortet
+   (Zeitüberschreitung, kein Netz, Serverfehler), statt Tausende Anfragen
+   je bis zu 60 Sekunden warten zu lassen. Ein Scan, den das Rate-Limit,
+   das Zeitlimit oder ein schweigendes GitHub gestoppt hat, beendet den
+   Schritt hier: Untersuchungen würden nur sehen, wie GitHub ihre Werkzeuge
    ablehnt, also warten sie und die Korrekturen auf den nächsten Lauf.
    Lässt GitHub die Läufe eines Repositorys nicht auflisten (zum Beispiel
    ein Fine-grained-Token ohne „Actions: read“), ist dieses Repository gar
@@ -300,11 +305,15 @@ WantedBy=timers.target
 - `TimeoutStartSec` ist der höchste erlaubte Wert für `run.max_minutes` (720)
   plus 10 Minuten. Das ist eine Rückfallgrenze: Der Lauf behält sein eigenes
   `run.max_minutes`, und eine spätere Änderung dieser Einstellung braucht
-  keine neue Unit. Ein Schritt, der beim Erreichen des Limits schon läuft
-  (der Scan, eine Untersuchung, der letzte Modellaufruf einer Korrektur),
-  wird trotzdem fertig, sodass ein Lauf ein paar Minuten nach
-  `run.max_minutes` enden kann, aber nie auch nur in der Nähe des Limits der
-  Unit.
+  keine neue Unit. Der Scan stoppt nach der Anfrage, die beim Erreichen des
+  Limits läuft. Ein anderer Schritt, der dann schon läuft (eine
+  Untersuchung, der letzte Modellaufruf einer Korrektur), wird trotzdem
+  fertig, sodass ein Lauf ein paar Minuten nach `run.max_minutes` enden
+  kann, aber nie auch nur in der Nähe des Limits der Unit.
+- Schickt systemd trotzdem `SIGTERM` (`systemctl stop` oder das Limit der
+  Unit), endet der Lauf mit seiner Zusammenfassung: Er speichert seine
+  Sitzung, gibt die Zusammenfassung mit dem Problem `stopped by SIGTERM`
+  aus und endet mit Exit-Code 1.
 - `Type=oneshot` bedeutet, dass systemd den Dienst nie zweimal gleichzeitig
   startet; die Laufsperre deckt manuelle Läufe ab.
 - Unit-Dateien, die flakipype nicht geschrieben hat (keine Zeile
@@ -434,7 +443,8 @@ Fake-Modell getestet.
   `doctor`, fremder Unit-Dateien und eines abgelehnten Starts.
 - Der Schlüsselbund-Fehler und jeder Wert von `secrets.store`.
 - Die Zusammenfassung, ihr JSON und jeder Exit-Code von `run`; die
-  `daemon`-Befehle.
+  `daemon`-Befehle; ein Scan, der am Zeitlimit stoppt, und ein `SIGTERM`
+  mitten im Lauf, der trotzdem die Zusammenfassung ausgibt.
 - `install.sh` und der Smoke-Test mit ShellCheck (`shellcheck-py`) in
   `poe check`, ein Test, dass das Skript die Version aus `pyproject.toml`
   installiert, und Ende-zu-Ende im Smoke-Job.

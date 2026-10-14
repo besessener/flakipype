@@ -13,15 +13,19 @@ from flakipype.agent.tools import Mode
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings, Settings
 from flakipype.flaky.findings import Evidence, Finding
+from flakipype.flaky.model import JobResult
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import PullRequest
 from flakipype.github.runs import CommitRun
+from flakipype.scan.service import ScanStop
 from flakipype.store.database import ScanCache
 from flakipype.store.sessions import SessionKind
 from flakipype.unattended.limits import day_usage, run_limits_for
-from flakipype.unattended.service import FixOutcomeKind, RunReport
+from flakipype.unattended.service import FixOutcomeKind, RunReport, RunTerminatedError
 
+from support.fake_actions import FakeActions
 from support.fake_fix import CHANGE, FIX_COMMIT, PROSE, Clock, FakeFixer, fixed
+from support.fake_investigation import world as github_world
 from support.fake_run import NOW, ClassifyingAgent, RunWorld, limits
 from support.fake_runs import passed_job, state
 
@@ -413,6 +417,33 @@ def test_no_investigation_starts_after_the_time_limit(cache: ScanCache) -> None:
     assert report.stops == ("the time limit of 120 minutes",)
 
 
+@dataclass
+class SlowGitHub(FakeActions):
+    """Each job read takes an hour on the run's clock."""
+
+    clock: Clock = field(default_factory=Clock)
+
+    def attempt_jobs(self, repository: str, run_id: int, attempt: int) -> list[JobResult]:
+        self.clock.advance(hours=1)
+        return super().attempt_jobs(repository, run_id, attempt)
+
+
+def test_the_scan_stops_at_the_time_limit(cache: ScanCache) -> None:
+    clock = Clock(NOW)
+    source = SlowGitHub(**vars(github_world()), clock=clock)
+
+    report = run_once(RunWorld(cache, clock=clock, source=source))
+
+    assert [call for call in source.calls if call.startswith("jobs")] == [
+        "jobs octo-org/app 4/1",
+        "jobs octo-org/app 3/1",
+    ]
+    assert report.scan is not None
+    assert report.scan.stopped_by is ScanStop.TIME_LIMIT
+    assert (report.results, report.stops) == ((), ("the time limit of 120 minutes",))
+    assert not report.complete
+
+
 def test_a_fix_gets_at_most_the_time_the_run_has_left(cache: ScanCache) -> None:
     world = RunWorld(cache, limits=limits(minutes=30))
 
@@ -530,6 +561,22 @@ def test_a_scan_stopped_by_the_rate_limit_investigates_nothing(cache: ScanCache)
         "GitHub's rate limit; investigations and fixes continue in the next run",
     )
     assert not report.complete
+
+
+def test_a_terminated_run_ends_with_its_summary(cache: ScanCache) -> None:
+    world = RunWorld(cache)
+    service = world.service()
+
+    def terminate_after_an_investigation(text: str) -> None:
+        if text.startswith("Investigated"):
+            raise RunTerminatedError("stopped by SIGTERM")
+
+    service.show_activity(terminate_after_an_investigation)
+    report = service.run()
+
+    assert report.problems == ("stopped by SIGTERM",)
+    assert not report.complete
+    assert cache.sessions.run_tokens_since("") == report.tokens > 0
 
 
 def test_activity_is_shown_while_it_runs(cache: ScanCache) -> None:
