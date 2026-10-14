@@ -45,7 +45,7 @@ from flakipype.llm.client import LlmEndpoint
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.scan.service import ScanRequest, ScanService
 from flakipype.setup.daemon import UnitOptions
-from flakipype.store.audit import AuditEntry
+from flakipype.store.audit import AuditEntry, AuditStatus
 from flakipype.store.database import ScanCache
 from flakipype.store.lock import RunLockedError
 from flakipype.unattended.service import FixOutcomeKind, RunService
@@ -518,7 +518,7 @@ def test_a_run_refuses_fixes_beyond_the_pull_requests_runs_opened_today(
             AuditEntry(
                 time=(RUN_NOW - timedelta(hours=3)).isoformat(), session="run 1", action="fix",
                 origin="run", request="Push fix and open a draft pull request?", answer="auto",
-                outcome="Opened draft pull request #7",
+                outcome="Opened draft pull request #7", status=AuditStatus.DONE, spent=1,
             )
         )  # fmt: skip
     built: list[FixService] = []
@@ -528,7 +528,9 @@ def test_a_run_refuses_fixes_beyond_the_pull_requests_runs_opened_today(
         return built[-1]
 
     monkeypatch.setattr(wiring, "FixService", keep)
-    target = FixTarget(e2e_finding(), e2e_evidence(), verdict(), "accepted: ok")
+    target = FixTarget(
+        e2e_finding(), e2e_evidence(), verdict(), ReviewState.ANSWERED, "accepted: ok"
+    )
 
     with open_run(Mode.AUTO, lambda _: SCAN) as service:
         with pytest.raises(ToolError, match=r"Pull request budget used up: 0 of 0"):
