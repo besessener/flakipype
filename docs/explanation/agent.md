@@ -305,8 +305,12 @@ Befunds auftaucht oder sich seine Art ändert (etwa von instabil zu behoben);
 `/investigate --fresh` erzwingt ein neues. Das hält wiederholte Läufe
 günstig und stabil. Nur Urteile, auf die der Reviewer geantwortet hat,
 werden behalten: Konnte das Review nicht laufen (etwa wegen eines
-HTTP-Fehlers), beginnt die nächste Untersuchung von vorn, und Urteile, die
-ältere Versionen so behalten haben, werden nicht wiederverwendet.
+HTTP-Fehlers) oder endete die Überarbeitung ohne Urteil, beginnt die nächste
+Untersuchung von vorn. Ob ein Urteil geprüft ist, steht als eigener Zustand
+neben dem Urteil (`answered`, `unavailable`, `revision_ended`,
+`nothing_submitted`); der Text des Reviews dient nur der Anzeige. Urteile,
+die ältere Versionen ohne diesen Zustand gespeichert haben, gelten als nicht
+geprüft und werden nicht wiederverwendet.
 Untersuchungen ohne Urteil werden ebenfalls nicht behalten; nur
 [unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md) merken sie sich, damit
 sie nicht jeden Tag für dieselbe Sackgasse bezahlen.

@@ -3,6 +3,7 @@
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
 from flakipype.fix.verify import Stage, Verification
 
@@ -21,6 +22,8 @@ class Proposal:
     changes: tuple[FileChange, ...]
     warnings: tuple[str, ...]
     accepted: bool
+    review_state: ReviewState
+    # For display only; decisions use accepted and review_state.
     review: str
     # Filled in when the pull request exists.
     verification: Verification
@@ -42,6 +45,8 @@ class Proposal:
             **data,
             "changes": tuple(FileChange(**change) for change in data["changes"]),
             "warnings": tuple(data["warnings"]),
+            # Saved before the state was kept: retried like a review that could not run.
+            "review_state": ReviewState(data.get("review_state", ReviewState.UNAVAILABLE)),
             "verification": Verification.from_dict(data["verification"]),
         }
         return cls(**fields)

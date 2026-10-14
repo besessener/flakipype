@@ -14,7 +14,7 @@ from flakipype.agent.messages import ModelSettings
 from flakipype.agent.pipeline import finding_text
 from flakipype.agent.prompts import FIX_REVIEWER_SYSTEM, data_block
 from flakipype.agent.reviewer import Reviewer, ReviewKind, ReviewUnavailableError
-from flakipype.agent.verdict import Verdict
+from flakipype.agent.verdict import ReviewState, Verdict
 from flakipype.agent.workcopy import FileChange, RepositoryFiles, WorkingCopy, unified_diff
 from flakipype.flaky.findings import Evidence, Finding
 
@@ -60,6 +60,8 @@ class FixResult:
     proposal: FixProposal | None
     changes: tuple[FileChange, ...]
     accepted: bool
+    review_state: ReviewState
+    # For display only; decisions use accepted and review_state.
     review: str
     detail: str
     tokens: int
@@ -115,10 +117,12 @@ def propose_fix(config: FixConfig, request: FixRequest) -> FixResult:
     reviewer = Reviewer(client=config.client, settings=config.settings, budget=budget)
     task = fix_task(request)
 
-    def result(outcome: FixOutcome, review: str, *, accepted: bool = False) -> FixResult:
+    def result(
+        outcome: FixOutcome, *, state: ReviewState, review: str = "", accepted: bool = False
+    ) -> FixResult:
         changes = tuple(copy.changes())
         return FixResult(
-            outcome.status, outcome.proposal, changes, accepted, review, outcome.detail,
+            outcome.status, outcome.proposal, changes, accepted, state, review, outcome.detail,
             budget.tokens,
         )  # fmt: skip
 
@@ -128,25 +132,32 @@ def propose_fix(config: FixConfig, request: FixRequest) -> FixResult:
 
     outcome = fixer.start(task)
     if outcome.proposal is None:
-        return result(outcome, "")
+        return result(outcome, state=ReviewState.NOTHING_SUBMITTED)
     try:
         review = reviewed(outcome.proposal)
     except ReviewUnavailableError as error:
-        return result(outcome, f"not reviewed: {error}")
+        return result(outcome, state=ReviewState.UNAVAILABLE, review=f"not reviewed: {error}")
     if review.decision is not FixDecision.REVISE:
-        return result(outcome, _describe(review), accepted=review.decision is FixDecision.ACCEPT)
+        return result(
+            outcome, state=ReviewState.ANSWERED, review=_describe(review),
+            accepted=review.decision is FixDecision.ACCEPT,
+        )  # fmt: skip
     revised = fixer.revise(review.points or [review.reason])
     if revised.proposal is None:
-        return result(revised, f"sent back, revision ended: {revised.detail}")
+        return result(
+            revised, state=ReviewState.REVISION_ENDED,
+            review=f"sent back, revision ended: {revised.detail}",
+        )  # fmt: skip
     try:
         second = reviewed(revised.proposal)
     except ReviewUnavailableError as error:
-        return result(revised, f"revised, not reviewed again: {error}")
+        return result(
+            revised, state=ReviewState.UNAVAILABLE, review=f"revised, not reviewed again: {error}"
+        )
     return result(
-        revised,
-        "revised, then " + _describe(second),
+        revised, state=ReviewState.ANSWERED, review="revised, then " + _describe(second),
         accepted=second.decision is FixDecision.ACCEPT,
-    )
+    )  # fmt: skip
 
 
 def _describe(review: FixReview) -> str:

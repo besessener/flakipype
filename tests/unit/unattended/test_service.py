@@ -10,6 +10,7 @@ from flakipype.agent.fixer import FixStatus
 from flakipype.agent.investigator import Status
 from flakipype.agent.pipeline import FindingResult
 from flakipype.agent.tools import Mode
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings, Settings
 from flakipype.flaky.findings import Evidence, Finding
@@ -130,9 +131,11 @@ def test_a_rejected_fix_is_remembered(cache: ScanCache) -> None:
 @pytest.mark.parametrize(
     "result",
     [
-        FixResult(FixStatus.MODEL_ERROR, None, (), accepted=False, review="",
+        FixResult(FixStatus.MODEL_ERROR, None, (), accepted=False,
+                  review_state=ReviewState.NOTHING_SUBMITTED, review="",
                   detail="Error code: 529 - overloaded", tokens=5),
-        fixed(accepted=False, review="not reviewed: Error code: 529 - overloaded"),
+        fixed(accepted=False, review="not reviewed: Error code: 529 - overloaded",
+              review_state=ReviewState.UNAVAILABLE),
     ],
 )  # fmt: skip
 def test_a_model_error_during_the_fix_fails_the_run_and_is_tried_again(
@@ -241,16 +244,18 @@ def test_an_investigation_without_verdict_is_not_repeated_until_a_newer_failure(
 
 
 @pytest.mark.parametrize(
-    "review",
+    ("state", "review"),
     [
-        "not reviewed: Error code: 400 - tool_choice is not supported",
-        "sent back, revision ended: Error code: 529 - overloaded",
+        (ReviewState.UNAVAILABLE, "not reviewed: Error code: 400 - tool_choice is not supported"),
+        (ReviewState.REVISION_ENDED, "sent back, revision ended: Error code: 529 - overloaded"),
     ],
 )
 def test_every_investigated_finding_says_why_it_was_not_fixed(
-    cache: ScanCache, review: str
+    cache: ScanCache, state: ReviewState, review: str
 ) -> None:
-    report = run_once(RunWorld(cache, agent=ClassifyingAgent(reviews={1: review})))
+    agent = ClassifyingAgent(reviews={1: (state, review)})
+
+    report = run_once(RunWorld(cache, agent=agent))
 
     unreviewed = (
         f"not fixed: the verdict was not reviewed ({review}); the next run investigates it again"

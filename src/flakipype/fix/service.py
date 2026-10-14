@@ -10,9 +10,8 @@ from flakipype.actions.service import ActionService
 from flakipype.actions.targets import check_owner
 from flakipype.agent.fix_pipeline import FixRequest, FixResult
 from flakipype.agent.fixer import FixStatus
-from flakipype.agent.pipeline import reviewed
 from flakipype.agent.tools import ActionRequest, Answer, PreparedAction, ToolError
-from flakipype.agent.verdict import Classification, Verdict
+from flakipype.agent.verdict import Classification, ReviewState, Verdict
 from flakipype.agent.workcopy import unified_diff
 from flakipype.config.settings import FixSettings
 from flakipype.fix.checks import DiffLimits, change_errors, change_warnings
@@ -30,14 +29,12 @@ from flakipype.fix.verify import Stage, Verification, Verifier
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import PullRequest, RepositoryAccess
-from flakipype.store.audit import AuditEntry, AuditLog
+from flakipype.store.audit import AuditEntry, AuditLog, AuditStatus
 
 FIXABLE = frozenset(
     {Classification.FLAKY_TEST, Classification.FLAKY_INFRASTRUCTURE, Classification.CONFIGURATION}
 )
 _PATHS_SHOWN = 3
-# Reviews that could not run, e.g. on an HTTP error; the fix itself may be fine.
-_REVIEW_UNAVAILABLE = ("not reviewed", "revised, not reviewed again")
 
 type ProposeFix = Callable[[FixRequest], FixResult]
 
@@ -71,8 +68,9 @@ class FixTarget:
     finding: Finding
     evidence: Evidence
     verdict: Verdict
-    # How the verdict's review went, as the investigation reports it.
-    review: str
+    review_state: ReviewState
+    # How the verdict's review went, as the investigation reports it; for display only.
+    review: str = ""
 
 
 @contextmanager
@@ -147,9 +145,10 @@ class FixService:
                 f"No pull request for #{finding.number}: the review {proposal.review}. "
                 "Ask for changes, or /fix N --fresh to start over. The diff:"
             )
+            # A review that could not run is the model's failure; the fix itself may be fine.
             error = (
                 FixUnavailableError
-                if proposal.review.startswith(_REVIEW_UNAVAILABLE)
+                if proposal.review_state is ReviewState.UNAVAILABLE
                 else FixNotMadeError
             )
             raise error(message, unified_diff(list(proposal.changes)))
@@ -253,7 +252,8 @@ class FixService:
             finding=finding.number, identity=finding.identity, base=base, commit=commit,
             title=result.proposal.title, explanation=result.proposal.explanation,
             body=pull_request_body(facts, result.proposal.explanation), changes=result.changes,
-            warnings=warnings, accepted=result.accepted, review=result.review,
+            warnings=warnings, accepted=result.accepted, review_state=result.review_state,
+            review=result.review,
             verification=Verification(
                 pull_number=0, repository=key.repository, workflow_path=key.workflow_path,
                 workflow_name=key.workflow_name, job=key.job,
@@ -278,12 +278,12 @@ class FixService:
         )
         session, origin = self._actions.session, self._actions.origin
 
-        def record(answer: Answer, outcome: str) -> None:
+        def record(answer: Answer, outcome: str, *, status: AuditStatus) -> None:
             self._audit.record(
                 AuditEntry(
                     time=self._now().isoformat(), session=session, action="fix", origin=origin,
                     request="\n".join([request.title, *details]), answer=answer.value,
-                    outcome=outcome,
+                    outcome=outcome, status=status, spent=int(status is AuditStatus.DONE),
                 )
             )  # fmt: skip
 
@@ -295,7 +295,7 @@ class FixService:
                         proposal.repository, proposal.identity, proposal.finding
                     )
             except ToolError as error:
-                record(answer, f"not pushed: {error}")
+                record(answer, f"not pushed: {error}", status=AuditStatus.REFUSED)
                 raise
             try:
                 outcome = self._deliver(proposal)
@@ -303,15 +303,17 @@ class FixService:
                 # Counted like an opened pull request, so no run pushes it again and again.
                 self.opened += 1
                 self._proposals.pop(proposal.identity, None)
-                record(answer, f"pushed, no pull request: {error}")
+                record(answer, f"pushed, no pull request: {error}", status=AuditStatus.DONE)
                 raise FixPushedError(str(error)) from error
             except DeliveryError as error:
-                record(answer, f"failed: {error}")
+                record(answer, f"failed: {error}", status=AuditStatus.FAILED)
                 raise FixDeliveryError(str(error)) from error
-            record(answer, outcome)
+            record(answer, outcome, status=AuditStatus.DONE)
             return outcome
 
-        return PreparedAction(request, run, lambda answer: record(answer, "not pushed"))
+        return PreparedAction(
+            request, run, lambda answer: record(answer, "not pushed", status=AuditStatus.DECLINED)
+        )
 
     def _details(self, proposal: Proposal) -> tuple[str, ...]:
         changes = proposal.changes
@@ -370,7 +372,7 @@ def _check_fixable(target: FixTarget) -> None:
             "flaky tests, flaky infrastructure and configuration problems."
         )
         raise ToolError(message)
-    if not reviewed(target.review):
+    if not target.review_state.reviewed:
         message = (
             f"The verdict for #{number} was not reviewed ({target.review or 'no review'}); "
             f"investigate it again with /investigate {number} --fresh before fixing it."

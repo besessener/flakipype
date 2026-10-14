@@ -6,15 +6,9 @@ from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.investigator import Status
 from flakipype.agent.masking import Masker
 from flakipype.agent.messages import ModelSettings
-from flakipype.agent.pipeline import (
-    AgentConfig,
-    FindingResult,
-    finding_text,
-    investigate_finding,
-    reviewed,
-)
+from flakipype.agent.pipeline import AgentConfig, FindingResult, finding_text, investigate_finding
 from flakipype.agent.reviewer import Reviewer, ReviewUnavailableError
-from flakipype.agent.verdict import Decision, Verdict
+from flakipype.agent.verdict import Decision, ReviewState, Verdict
 
 from support.fake_anthropic import (
     ScriptedModel,
@@ -65,6 +59,7 @@ def test_accepted_verdict() -> None:
     assert result.verdict is not None
     assert result.verdict.confidence.value == "high"
     assert result.review == "accepted: checked"
+    assert result.review_state is ReviewState.ANSWERED
     assert (result.rounds, result.tokens) == (3, 3_600)
     reviewer_request = model.requests[2]
     # Some models only accept tool_choice auto; the reviewer is asked, not forced.
@@ -83,6 +78,7 @@ def test_downgrade() -> None:
     assert result.verdict is not None
     assert result.verdict.confidence.value == "medium"
     assert result.review == "downgrade: checked"
+    assert result.review_state.reviewed
 
 
 def test_sent_back_once_then_accepted() -> None:
@@ -118,6 +114,7 @@ def test_a_second_revise_counts_as_low_confidence() -> None:
     assert result.verdict is not None
     assert result.verdict.confidence.value == "low"
     assert result.review.startswith("revised, then revise")
+    assert result.review_state is ReviewState.ANSWERED
 
 
 def test_revision_that_ends_without_verdict_keeps_the_first_at_low_confidence() -> None:
@@ -132,7 +129,8 @@ def test_revision_that_ends_without_verdict_keeps_the_first_at_low_confidence() 
     assert result.verdict.confidence.value == "low"
     assert result.review.startswith("sent back, revision ended")
     # The reviewer never accepted a verdict, so it may not be fixed.
-    assert not reviewed(result.review)
+    assert result.review_state is ReviewState.REVISION_ENDED
+    assert not result.review_state.reviewed
 
 
 def test_two_submissions_in_one_response_can_still_be_sent_back() -> None:
@@ -148,7 +146,7 @@ def test_two_submissions_in_one_response_can_still_be_sent_back() -> None:
     result = investigate(model)
 
     assert result.review == "revised, then accepted: checked"
-    assert reviewed(result.review)
+    assert result.review_state.reviewed
     revision = model.tool_results(2)
     assert "Which commit?" in revision["toolu_2"]["content"]
     assert revision["toolu_3"]["is_error"] is True
@@ -169,6 +167,7 @@ def test_unavailable_reviews_leave_the_verdict_unreviewed() -> None:
 
     assert first.review.startswith("not reviewed")
     assert second.review.startswith("revised, second review unavailable")
+    assert first.review_state is second.review_state is ReviewState.UNAVAILABLE
     assert second.verdict is not None
 
 
@@ -187,6 +186,7 @@ def test_failed_investigation_is_not_reviewed() -> None:
     result = investigate(ScriptedModel([message(text("no idea")), message(text("still none"))]))
 
     assert (result.status, result.verdict, result.review) == (Status.NO_VERDICT, None, "")
+    assert result.review_state is ReviewState.NOTHING_SUBMITTED
 
 
 def reviewer_for(model: ScriptedModel) -> Reviewer:

@@ -1,11 +1,18 @@
+import json
 from dataclasses import replace
 
 import pytest
 
 from flakipype.agent.tools import Answer, ToolError
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings
-from flakipype.fix.service import FixDeliveryError, FixNotMadeError, FixTarget
+from flakipype.fix.service import (
+    FixDeliveryError,
+    FixNotMadeError,
+    FixTarget,
+    FixUnavailableError,
+)
 from flakipype.fix.texts import finding_marker
 from flakipype.fix.verify import Stage, Verification
 from flakipype.flaky.findings import Finding
@@ -14,6 +21,7 @@ from flakipype.github.actions import ApiRateLimitError, GitHubApiError, api_erro
 from flakipype.github.gh import GhResult
 from flakipype.github.pulls import PullRequest
 from flakipype.github.runs import CommitRun
+from flakipype.store.audit import AuditStatus
 from flakipype.store.database import ScanCache
 
 from support.fake_fix import (
@@ -35,21 +43,29 @@ WORKFLOW_CHANGE = FileChange(E2E, "on: push\njobs: {}\n", "on:\n  push:\njobs: {
 
 
 def target(
-    finding: Finding | None = None, *, classification: str = "flaky_test", review: str = "accepted"
+    finding: Finding | None = None,
+    *,
+    classification: str = "flaky_test",
+    review: tuple[ReviewState, str] = (ReviewState.ANSWERED, "accepted"),
 ) -> FixTarget:
     signature = ErrorSignature(Category.TIMEOUT, "wait timed out", "f" * 12, "excerpt")
     evidence = replace(e2e_evidence(), signatures={41: signature})
-    return FixTarget(finding or e2e_finding(), evidence, verdict(classification), review)
+    return FixTarget(finding or e2e_finding(), evidence, verdict(classification), *review)
 
 
 @pytest.mark.parametrize(
     ("fix_target", "problem"),
     [
         (target(classification="real_bug"), "#2 is real bug: flakipype fixes only flaky tests"),
-        (target(review="not reviewed: HTTP 500"), r"not reviewed \(not reviewed: HTTP 500\)"),
-        (target(review=""), r"not reviewed \(no review\); investigate it again with /investigate"),
-        (target(review="sent back, revision ended: Stopped at 200,000 tokens."),
+        (target(review=(ReviewState.UNAVAILABLE, "not reviewed: HTTP 500")),
+         r"not reviewed \(not reviewed: HTTP 500\)"),
+        (target(review=(ReviewState.UNAVAILABLE, "")),
+         r"not reviewed \(no review\); investigate it again with /investigate"),
+        (target(review=(ReviewState.REVISION_ENDED, "sent back, revision ended: Stopped at x.")),
          r"not reviewed \(sent back, revision ended: Stopped at"),
+        # The state decides, not the wording of the text.
+        (target(review=(ReviewState.UNAVAILABLE, "accepted: looks right")),
+         r"not reviewed \(accepted: looks right\)"),
         (target(e2e_finding(repository="other/app")), "does not belong to the configured owner"),
     ],
 )  # fmt: skip
@@ -252,6 +268,7 @@ def test_a_confirmed_fix_is_delivered_and_audited(cache: ScanCache) -> None:
         "fix", "model", "confirmed", outcome,
     )  # fmt: skip
     assert entry.request.startswith("Push fix and open a draft pull request?\nocto-org/app")
+    assert (entry.status, entry.spent) == (AuditStatus.DONE, 1)
 
 
 def test_a_fix_whose_verification_ends_at_once_says_so(cache: ScanCache) -> None:
@@ -277,6 +294,7 @@ def test_a_declined_fix_is_kept_and_audited(cache: ScanCache) -> None:
     assert len(world.fixes.state()["proposals"]) == 1
     (entry,) = cache.audit.entries(world.actions.session)
     assert (entry.origin, entry.answer, entry.outcome) == ("command", "declined", "not pushed")
+    assert (entry.status, entry.spent) == (AuditStatus.DECLINED, 0)
 
 
 def test_a_failed_delivery_is_reported_and_audited(cache: ScanCache) -> None:
@@ -290,6 +308,7 @@ def test_a_failed_delivery_is_reported_and_audited(cache: ScanCache) -> None:
     assert world.fixes.opened == 0
     (entry,) = cache.audit.entries(world.actions.session)
     assert entry.outcome.startswith("failed: Branch flakipype/fix-e2e-")
+    assert (entry.status, entry.spent) == (AuditStatus.FAILED, 0)
 
 
 def opened_fix(world: FixWorld) -> None:
@@ -410,6 +429,7 @@ def test_a_pull_request_opened_meanwhile_stops_the_push(cache: ScanCache) -> Non
     assert world.github.drafts == []
     (entry,) = cache.audit.entries(world.actions.session)
     assert entry.outcome.startswith("not pushed: An open flakipype pull request")
+    assert (entry.status, entry.spent) == (AuditStatus.REFUSED, 0)
 
 
 def test_fixes_that_were_not_made_and_failed_deliveries_have_their_own_errors(
@@ -424,3 +444,28 @@ def test_fixes_that_were_not_made_and_failed_deliveries_have_their_own_errors(
         rejected.fixes.prepare(target())
     with pytest.raises(FixDeliveryError, match="opening the pull request failed"):
         prepared.run(Answer.AUTO)
+
+
+def test_a_fix_whose_review_could_not_run_is_unavailable_whatever_the_text(
+    cache: ScanCache,
+) -> None:
+    result = fixed(accepted=False, review="rejected: no", review_state=ReviewState.UNAVAILABLE)
+    world = FixWorld(cache, fixer=FakeFixer([result]))
+
+    with pytest.raises(FixUnavailableError):
+        world.fixes.prepare(target())
+
+
+def test_a_proposal_saved_before_the_review_state_counts_as_unavailable(cache: ScanCache) -> None:
+    world = FixWorld(cache, fixer=FakeFixer([fixed(accepted=False, review="rejected: no")]))
+    with pytest.raises(FixNotMadeError):
+        world.fixes.prepare(target())
+    state = json.loads(json.dumps(world.fixes.state()))
+    del state["proposals"][0]["review_state"]
+
+    resumed = FixWorld(cache)
+    resumed.fixes.restore(state)
+
+    with pytest.raises(FixUnavailableError):
+        resumed.fixes.prepare(target())
+    assert resumed.fixer.requests == []

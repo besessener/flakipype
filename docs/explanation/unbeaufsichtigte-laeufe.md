@@ -176,8 +176,10 @@ Stunden, sodass ein kurzes Timer-Intervall sie nicht vervielfachen kann:
 | Tokens in 24 Stunden | 3.000.000 | `run.max_tokens_per_day` (10k–50M) |
 
 Pull Requests und Aktionen in 24 Stunden werden aus dem Audit-Log gezählt
-(Einträge mit dem Ursprung `run`, die ausgeführt wurden); Tokens aus den
-Laufsitzungen. Der Chat zählt nicht gegen die Tageslimits, und Läufe zählen
+(Einträge mit dem Ursprung `run` und dem Status `done`, jeweils mit der Zahl
+der gestarteten Läufe, sodass ein Dispatch mit mehreren Läufen jeden zählt;
+siehe [Audit-Log](aktionen.md#audit-log)); Tokens aus der Token-Spalte der
+Laufsitzungen, die jeder Lauf bei jedem Speichern schreibt. Der Chat zählt nicht gegen die Tageslimits, und Läufe zählen
 nicht gegen die des Chats. Ein erreichtes Limit stoppt, was es begrenzt:
 keine weiteren Korrekturen nach dem Pull-Request-Limit, keine Untersuchung
 mehr, wenn die heutigen Tokens aufgebraucht sind, und keine weitere Korrektur

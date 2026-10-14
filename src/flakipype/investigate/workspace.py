@@ -145,9 +145,10 @@ class ChatWorkspace:
         before = self.fixes.tokens
         self.on_activity(f"Fixing #{finding} {target.key.job}")
         try:
-            return self.fixes.prepare(
-                FixTarget(target, report.evidence, result.verdict, result.review), instructions
+            fix_target = FixTarget(
+                target, report.evidence, result.verdict, result.review_state, result.review
             )
+            return self.fixes.prepare(fix_target, instructions)
         finally:
             self.tokens += self.fixes.tokens - before
             self.on_activity("")

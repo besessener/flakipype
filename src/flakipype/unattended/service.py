@@ -9,7 +9,6 @@ from typing import Any
 
 from flakipype.agent.investigator import Status
 from flakipype.agent.orchestrator import workspace_tools
-from flakipype.agent.pipeline import reviewed
 from flakipype.agent.tools import HeadlessGate, Mode, ToolDeclinedError, ToolError
 from flakipype.agent.workcopy import unified_diff
 from flakipype.fix.service import (
@@ -297,8 +296,9 @@ class RunService:
 
     def _save(self) -> None:
         self._cache.sessions.update(
-            self._session_id, now=self._clock.now().isoformat(), data=json.dumps(self._document())
-        )
+            self._session_id, now=self._clock.now().isoformat(), data=json.dumps(self._document()),
+            tokens=self._workspace.tokens,
+        )  # fmt: skip
 
     def _document(self) -> dict[str, Any]:
         workspace, progress = self._workspace, self._progress
@@ -340,7 +340,7 @@ def _not_fixable(result: InvestigationResult) -> str:
     if verdict.classification not in FIXABLE:
         label = verdict.classification.value.replace("_", " ")
         return f"not fixed: {label}, which flakipype does not fix"
-    if not reviewed(result.review):
+    if not result.review_state.reviewed:
         return (
             f"not fixed: the verdict was not reviewed ({_first_line(result.review)}); "
             "the next run investigates it again"

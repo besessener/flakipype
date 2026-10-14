@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from flakipype.actions.service import ActionService
 from flakipype.agent.fix_pipeline import FixRequest, FixResult
 from flakipype.agent.fixer import FixProposal, FixStatus
-from flakipype.agent.verdict import Verdict
+from flakipype.agent.verdict import ReviewState, Verdict
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import ActionSettings, FixSettings
 from flakipype.fix.delivery import Delivery
@@ -71,15 +71,20 @@ def fixed(
     *,
     accepted: bool = True,
     review: str = "accepted: ok",
+    review_state: ReviewState = ReviewState.ANSWERED,
 ) -> FixResult:
     return FixResult(
         status=FixStatus.PROPOSED, proposal=FixProposal(title=TITLE, explanation=EXPLANATION),
-        changes=changes, accepted=accepted, review=review, detail="", tokens=1_000,
+        changes=changes, accepted=accepted, review_state=review_state, review=review, detail="",
+        tokens=1_000,
     )  # fmt: skip
 
 
 def no_fix(detail: str) -> FixResult:
-    return FixResult(FixStatus.NO_FIX, None, (), accepted=False, review="", detail=detail, tokens=5)
+    return FixResult(
+        FixStatus.NO_FIX, None, (), accepted=False, review_state=ReviewState.NOTHING_SUBMITTED,
+        review="", detail=detail, tokens=5,
+    )  # fmt: skip
 
 
 @dataclass

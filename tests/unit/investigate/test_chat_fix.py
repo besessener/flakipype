@@ -209,7 +209,7 @@ def test_sessions_from_before_fixes_resume_without_them(cache: ScanCache) -> Non
     chat.handle("/fix 1")
     document = json.loads(cache.sessions.load(1) or "{}")
     del document["fix"]
-    cache.sessions.update(1, now=NOW.isoformat(), data=json.dumps(document))
+    cache.sessions.update(1, now=NOW.isoformat(), data=json.dumps(document), tokens=0)
 
     chat.handle("/resume 1")
 

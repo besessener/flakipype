@@ -2,6 +2,7 @@ from dataclasses import replace
 
 import pytest
 
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
 from flakipype.fix.delivery import DeliveryError
 from flakipype.fix.state import Proposal
@@ -36,7 +37,7 @@ def proposal(*changes: FileChange) -> Proposal:
     return Proposal(
         finding=2, identity="flaky|octo-org/app|e2e", base="main", commit=COMMIT, title=TITLE,
         explanation=EXPLANATION, body="body", changes=changes or (CHANGE,), warnings=(),
-        accepted=True, review="accepted: ok",
+        accepted=True, review_state=ReviewState.ANSWERED, review="accepted: ok",
         verification=replace(verification(), pull_number=0, commit=COMMIT),
     )  # fmt: skip
 

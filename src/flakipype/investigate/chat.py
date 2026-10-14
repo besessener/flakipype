@@ -293,7 +293,9 @@ class ChatService:
                     first[:_TITLE_LENGTH], now=now, data=data
                 )
             else:
-                self._sessions.update(self._session.session_id, now=now, data=data)
+                self._sessions.update(
+                    self._session.session_id, now=now, data=data, tokens=self.tokens
+                )
 
     def _document(self) -> dict[str, Any]:
         return {

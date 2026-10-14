@@ -14,6 +14,7 @@ from keyring.backends import fail
 
 from flakipype.agent.investigator import Status
 from flakipype.agent.tools import ActionRequest, Mode, ToolError
+from flakipype.agent.verdict import ReviewState
 from flakipype.cli import wiring
 from flakipype.cli.wiring import (
     NotReadyError,
@@ -393,7 +394,7 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
         assert chat.handle("/mode auto")[1].text.startswith("Mode: auto.")
         fixes = chat.workspace.fixes
         fixes.opened = 2
-        target = FixTarget(e2e_finding(), e2e_evidence(), verdict(), "accepted: ok")
+        target = FixTarget(e2e_finding(), e2e_evidence(), verdict(), ReviewState.ANSWERED)
         with pytest.raises(ToolError, match="Pull request budget used up: 2 of 2"):
             fixes.prepare(target)
         chat.close()
