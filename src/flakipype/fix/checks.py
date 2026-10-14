@@ -1,4 +1,4 @@
-"""Deterministic checks of a fix's diff: errors send it back, warnings need a person."""
+"""Deterministic checks of a fix's diff: errors send it back; warnings and code need a person."""
 
 import json
 import re
@@ -32,6 +32,13 @@ _REACHES_OUT = re.compile(
 _TEST_DECLARATION = re.compile(
     r"^\s*((async\s+)?def test_|(it|test|describe)(\.\w+)*\(|func Test|@Test\b)"
 )
+_PROSE_SUFFIXES = (".md", ".markdown", ".rst", ".adoc")
+# Instructions for coding agents, which a workflow may run with the repository's secrets.
+_AGENT_INSTRUCTIONS = frozenset({"agents.md", "claude.md", "gemini.md"})
+# Folders whose files tests read as input.
+_TEST_FOLDERS = frozenset({"test", "tests", "spec", "specs", "__tests__", "fixtures", "testdata"})
+# Prose that doc tools run: doctest prompts, code fences, reStructuredText directives.
+_CODE_IN_PROSE = re.compile(r">>>|```|~~~|^\s*\.\.\s+\S+::", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -80,6 +87,21 @@ def change_warnings(changes: list[FileChange]) -> list[str]:
         if change.path.startswith(_GITHUB):
             warnings.append(f"changes .github/: {change.path}")
     return warnings
+
+
+def executable_paths(changes: list[FileChange]) -> list[str]:
+    """Changed files that may run as code or feed it: everything except plain documentation."""
+    return [change.path for change in changes if not _is_prose(change)]
+
+
+def _is_prose(change: FileChange) -> bool:
+    *folders, name = change.path.lower().split("/")
+    return (
+        name.endswith(_PROSE_SUFFIXES)
+        and name not in _AGENT_INSTRUCTIONS
+        and not any(folder.startswith(".") or folder in _TEST_FOLDERS for folder in folders)
+        and not _CODE_IN_PROSE.search(change.after)
+    )
 
 
 def _matches(pattern: re.Pattern[str], lines: list[str]) -> list[str]:

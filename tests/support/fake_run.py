@@ -22,7 +22,7 @@ from flakipype.unattended.service import RunClock, RunService
 from support.builders import START
 from support.fake_actions import FakeActions
 from support.fake_anthropic import verdict_input
-from support.fake_fix import Clock, FakeFixer, FakePullRequests
+from support.fake_fix import PROSE, Clock, FakeFixer, FakePullRequests, fixed
 from support.fake_investigation import SCAN, world
 from support.fake_runs import FakeRuns
 
@@ -78,7 +78,7 @@ class RunWorld:
     agent: ClassifyingAgent = field(default_factory=ClassifyingAgent)
     runs: FakeRuns = field(default_factory=FakeRuns)
     github: FakePullRequests = field(default_factory=FakePullRequests)
-    fixer: FakeFixer = field(default_factory=FakeFixer)
+    fixer: FakeFixer = field(default_factory=lambda: FakeFixer([fixed((PROSE,))]))
     fix_settings: FixSettings = field(default_factory=FixSettings)
     sleeps: list[float] = field(default_factory=list)
 

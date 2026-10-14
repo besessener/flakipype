@@ -113,7 +113,11 @@ Deterministisch, vor dem Reviewer und vor jedem Dialog:
 Die ersten vier sind Fehler: Die Korrektur geht an den Fixer zurück. Die
 letzten drei sind **Warnungen**: Im Modus `ask` erscheinen sie oben in der
 Bestätigung und im Pull Request; im Modus `auto` wird eine Korrektur mit
-einer davon nicht gepusht (siehe [Modi](#modi)).
+einer davon nicht gepusht (siehe [Modi](#modi)). Die Warnungen sind eine
+Musterliste: Sie finden die üblichen Formen, nicht jede (eine
+zusammengesetzte URL, `dict(os.environ)` oder `--reruns` in einer
+Konfigurationsdatei fallen nicht auf). Darum hängt `auto` nicht von ihnen
+ab, sondern pusht nur reine Dokumentation.
 
 ## Reviewer
 
@@ -166,8 +170,9 @@ als reiner Text, nie als Markup. Eine abgelehnte Korrektur bleibt in der
 Sitzung (auch über `/resume` hinweg): `/fix N` zeigt sie erneut, ohne den
 Fixer laufen zu lassen, `/fix N --fresh` fängt neu an, und du kannst das
 Modell um Änderungen bitten, die es dem Werkzeug `fix` als `instructions`
-übergibt; der Fixer startet dann vom früheren Diff am selben festgelegten
-Commit. Alles andere folgt dem Gate wie bei den [Aktionen](aktionen.md): keine
+übergibt. Der Fixer bekommt sie als Daten markiert, weil das Modell darin
+Log- oder Repository-Text zitieren kann, und startet vom früheren Diff am
+selben festgelegten Commit. Alles andere folgt dem Gate wie bei den [Aktionen](aktionen.md): keine
 zweite Schreibanfrage nach einer Ablehnung im selben Zug und ein Eintrag im
 Audit-Log für jede Anfrage.
 
@@ -306,20 +311,40 @@ zeigt ihn an.
 | | `ask` | `auto` |
 | --- | --- | --- |
 | Reruns, Dispatches, Abbrüche (`write`) | Dialog | laufen im Rahmen des Budgets |
-| Push und Draft-PR (`critical`) | Dialog mit dem Diff | läuft im Rahmen des Budgets, wenn es keine Warnung gibt |
+| Push und Draft-PR (`critical`) | Dialog mit dem Diff | läuft im Rahmen des Budgets, wenn die Korrektur nur Dokumentation ändert und keine Warnung hat |
+| Korrektur an ausführbarem Code (unten) | Dialog mit dem Diff | nicht gepusht; aufbewahrt für `/mode ask` |
 | Korrektur mit Warnung (verbirgt Fehlschläge, greift nach außen, `.github/`) | Dialog zeigt die Warnungen | nicht gepusht; aufbewahrt für `/mode ask` |
 | Draft-Pull-Request | immer | immer |
 
-Die Regel für `.github/` gibt es, weil ein gepushter Branch im selben
-Repository dessen `push`-Workflows mit den Secrets des Repositorys auslöst,
-mit den Workflow-Dateien aus diesem Branch, bevor irgendjemand den Pull
-Request prüft. Job-Logs und Dateien im Repository können Text enthalten, der
-versucht, das Modell zu steuern; im Modus `ask` siehst du vorher jede Zeile
-des Diffs, im Modus `auto` lehnt der Code die Änderungen ab, die Secrets
-preisgeben oder Fehlschläge verbergen könnten. Audit-Einträge halten `auto`
-als Antwort fest, oder `not run in auto mode` für eine Korrektur mit
-Warnungen; diese Korrektur bleibt für `/mode ask` und `/fix N` in der
-Sitzung.
+Ausführbar ist jede geänderte Datei außer reiner Dokumentation. Als reine
+Dokumentation zählt nur eine Datei mit der Endung `.md`, `.markdown`, `.rst`
+oder `.adoc`, die
+
+- nicht in einem versteckten Ordner (`.github/`, `.claude/` …) oder einem
+  Testordner (`test`, `tests`, `spec`, `specs`, `__tests__`, `fixtures`,
+  `testdata`) liegt,
+- keine Anweisungsdatei für Coding-Agenten ist (`AGENTS.md`, `CLAUDE.md`,
+  `GEMINI.md`), die ein Workflow mit Secrets lesen könnte,
+- und nach der Änderung nichts enthält, das ein Doku-Werkzeug ausführen
+  könnte: keinen Doctest-Prompt `>>>`, keinen Codeblock mit ` ``` ` oder
+  `~~~` und keine reStructuredText-Direktive (`.. name::`).
+
+Alles andere gilt als ausführbar, auch `.txt`, Konfiguration, Manifeste wie
+`package.json` oder `requirements.txt`, `Makefile`, `conftest.py` und das
+YAML von Workflows und Actions. Im Zweifel ist eine Datei ausführbar.
+
+Die Regel gibt es, weil ein gepushter Branch im selben Repository dessen
+`push`-Workflows mit den Secrets des Repositorys auslöst, mit den
+Workflow-Dateien und dem Code aus diesem Branch, bevor irgendjemand den Pull
+Request prüft. Job-Logs und Dateien im Repository, auch die eines Pull
+Requests aus einem Fork, können Text enthalten, der versucht, das Modell zu
+steuern. Die Warnungen und der Reviewer fangen die üblichen Fälle ab, aber
+eine Musterliste findet nur bekannte Formen, und der Reviewer ist selbst ein
+Modell. Garantiert ist, was der Code durchsetzt: Im Modus `ask` siehst du
+vorher jede Zeile des Diffs, im Modus `auto` kommt ausführbarer Code nie ohne
+dich auf einen Branch. Audit-Einträge halten `auto` als Antwort fest, oder
+`not run in auto mode` für eine Korrektur, die eine Person braucht; diese
+Korrektur bleibt für `/mode ask` und `/fix N` in der Sitzung.
 
 ## Budget
 
@@ -378,6 +403,7 @@ supported in this repository“), enthält die Meldung sie.
   Fehlers, nachdem der Branch angelegt wurde.
 - Auslieferung, Verifikation (durchgelaufen, gleiche Signatur, andere
   Signatur, nicht verifizierbar) und der Kommentartext mit einer Fake-Uhr.
-- Das Gate in beiden Modi, einschließlich Warnungen in `auto`.
+- Das Gate in beiden Modi, einschließlich Warnungen und ausführbarem Code in
+  `auto`.
 - Die Bestätigung mit einem Diff und der Modus in der Statuszeile:
   Pilot-Tests und Snapshots.

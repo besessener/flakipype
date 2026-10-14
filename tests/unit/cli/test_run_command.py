@@ -82,7 +82,7 @@ def test_run_in_ask_mode_as_json(opened: list[tuple[Mode, ScanRequest]]) -> None
     fix, real_bug = exported["fixes"]
     assert (fix["finding"], fix["kind"]) == (1, "kept")
     assert (real_bug["finding"], real_bug["kind"]) == (3, "skipped")
-    assert "+await rows.waitFor()" in fix["diff"]
+    assert "+Wait for the rows." in fix["diff"]
     assert exported["investigations"][0] == {
         "finding": 1, "status": "completed", "classification": "flaky_test",
         "review": "accepted: ok", "from_cache": False,

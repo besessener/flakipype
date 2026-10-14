@@ -272,7 +272,7 @@ class FixService:
             details,
             model_text=f"{proposal.title}\n\n{proposal.explanation}",
             diff=unified_diff(list(proposal.changes)),
-            needs_person="the diff has warnings" if proposal.warnings else "",
+            needs_person=proposal.needs_person,
             confirm_label="Push",
             decline_label="Don't push",
         )

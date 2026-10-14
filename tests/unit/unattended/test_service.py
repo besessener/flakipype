@@ -21,7 +21,7 @@ from flakipype.store.sessions import SessionKind
 from flakipype.unattended.limits import day_usage, run_limits_for
 from flakipype.unattended.service import FixOutcomeKind, RunReport
 
-from support.fake_fix import CHANGE, FIX_COMMIT, Clock, FakeFixer, fixed
+from support.fake_fix import CHANGE, FIX_COMMIT, PROSE, Clock, FakeFixer, fixed
 from support.fake_run import NOW, ClassifyingAgent, RunWorld, limits
 from support.fake_runs import passed_job, state
 
@@ -79,7 +79,7 @@ def test_the_run_session_is_named_in_local_time(cache: ScanCache) -> None:
 
 
 def test_ask_mode_only_reports_and_keeps_the_fix(cache: ScanCache) -> None:
-    world = RunWorld(cache, mode=Mode.ASK)
+    world = RunWorld(cache, mode=Mode.ASK, fixer=FakeFixer([fixed((CHANGE,))]))
 
     report = run_once(world)
 
@@ -111,6 +111,22 @@ def test_a_fix_with_warnings_is_kept_and_not_tried_again(cache: ScanCache) -> No
     assert second.fixes[0].text.startswith("not tried again: an earlier run did not push its fix")
     assert len(fixer.requests) == 1
     assert first.complete
+
+
+def test_auto_mode_keeps_a_fix_that_changes_code_for_a_person(cache: ScanCache) -> None:
+    fixer = FakeFixer([fixed((PROSE, CHANGE))])
+    world = RunWorld(cache, fixer=fixer)
+
+    first = run_once(world)
+    second = run_once(RunWorld(cache, fixer=fixer))
+
+    assert first.fixes[0].kind is FixOutcomeKind.KEPT
+    assert first.fixes[0].text == (
+        f"not pushed: it changes files that can run as code: {CHANGE.path} (kept for the chat)"
+    )
+    assert world.github.drafts == []
+    assert cache.audit.since("2026")[0].answer == "not run in auto mode"
+    assert second.fixes[0].text.startswith("not tried again: an earlier run did not push its fix")
 
 
 def test_a_rejected_fix_is_remembered(cache: ScanCache) -> None:
@@ -327,7 +343,8 @@ class SlowFixer(FakeFixer):
 def test_the_time_limit_stops_before_the_scan_ends_and_between_fixes(cache: ScanCache) -> None:
     clock = Clock(NOW)
     both = ClassifyingAgent(flaky=frozenset({1, 3}))
-    report = run_once(RunWorld(cache, clock=clock, agent=both, fixer=SlowFixer(clock=clock)))
+    slow = SlowFixer([fixed((PROSE,))], clock=clock)
+    report = run_once(RunWorld(cache, clock=clock, agent=both, fixer=slow))
     none_left = run_once(RunWorld(cache, limits=limits(minutes=0)))
 
     assert kinds(report) == [(1, FixOutcomeKind.OPENED), REAL_BUG]
