@@ -144,8 +144,10 @@ Erreicht ein Lauf `run.max_minutes`, bleiben unfertige Verifikationen in
 seiner Sitzung. Der nächste Lauf übernimmt die Pull Requests, die der letzte
 Lauf unverifiziert hinterlassen hat, mit den Läufen, die sie unter ihren
 Nummern verfolgen, und ein `auto`-Lauf fragt sie ab, bis sie fertig sind oder
-ihre Beobachtungszeit (`actions.watch_hours`) vorbei ist; der Kommentar am
-Pull Request sagt dann, nach wie vielen Läufen und warum, wie im Chat. Ein
+ihre Beobachtungszeit (`actions.watch_hours`) vorbei ist, auch wenn GitHub
+einen Lauf gar nicht mehr liefert (gelöscht, kein Zugriff mehr); der
+Kommentar am Pull Request sagt dann, nach wie vielen Läufen und warum, wie im
+Chat. Ein
 `ask`-Lauf bewahrt sie nur für den nächsten `auto`-Lauf auf. Reruns, die für
 die Verifikation eines früheren Laufs gestartet werden, zählen gegen die
 Aktionslimits des Laufs, der sie startet.

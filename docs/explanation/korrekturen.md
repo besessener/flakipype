@@ -269,9 +269,10 @@ Standardbranch instabil ist:
    Verifikation, da ein Rerun dasselbe Ereignis wiederholt. Die Verifikation
    stoppt auch vorzeitig, wenn ein Lauf weder durchgelaufen noch
    fehlgeschlagen endet (zum Beispiel abgebrochen), nicht innerhalb von
-   `actions.watch_hours` fertig wird, GitHub einen Rerun oder Dispatch
-   ablehnt oder das Aktionsbudget aufgebraucht ist; der Kommentar sagt, nach
-   wie vielen Läufen und warum. Ein Rate-Limit pausiert sie nur bis zur nächsten Abfrage.
+   `actions.watch_hours` fertig wird oder sich so lange nicht lesen lässt,
+   GitHub einen Rerun oder Dispatch ablehnt oder das Aktionsbudget
+   aufgebraucht ist; der Kommentar sagt, nach wie vielen Läufen und warum.
+   Ein Rate-Limit pausiert sie nur bis zur nächsten Abfrage.
 4. Das Ergebnis wird als Kommentar am Pull Request veröffentlicht, vom Code
    geschrieben:
 

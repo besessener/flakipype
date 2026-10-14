@@ -313,6 +313,20 @@ def test_a_run_that_does_not_finish_while_watched(cache: ScanCache) -> None:
     assert done.outcome == f"{CANNOT}a run did not finish while it was watched."
 
 
+def test_a_run_github_keeps_refusing_ends_the_verification(cache: ScanCache) -> None:
+    setup = Setup(cache, runs=FakeRuns(states={91: [GitHubApiError("Not Found (HTTP 404)", 404)]}))
+    current = setup.watching(verification())
+
+    assert setup.step(current) == current
+    setup.clock.advance(hours=7)
+    done = setup.step(current)
+
+    assert done.outcome == (
+        f"{CANNOT}a run did not finish while it was watched; cannot read it: Not Found (HTTP 404)."
+    )
+    assert setup.github.comments == [done.outcome]
+
+
 @pytest.mark.parametrize(
     ("used", "error", "stopped"),
     [

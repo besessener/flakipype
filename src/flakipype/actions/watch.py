@@ -81,7 +81,8 @@ def finish_note(run: WatchedRun, watch_time: timedelta) -> str:
     prefix = f"R{run.number}: {run.workflow_name}"
     if run.conclusion is None:
         hours = int(watch_time.total_seconds()) // _SECONDS_PER_HOUR
-        return f"R{run.number}: stopped watching {run.title} after {hours} h; it had not finished."
+        why = run.detail or "it had not finished"
+        return f"R{run.number}: stopped watching {run.title} after {hours} h; {why}."
     if run.kind is RunKind.DISPATCH:
         return f"{prefix} {run.label} {run.state.lstrip('✓✗ ')}."
     earlier = f"attempt {run.attempt - 1}"
@@ -139,7 +140,8 @@ class RunWatch:
                 self._wait_for_rate_limit(runs)
                 return notes
             except GitHubApiError as error:
-                updated = replace(run, detail=f"cannot read it: {error}")
+                # A run GitHub never answers for again (deleted, no access) must not stay open.
+                updated = replace(run, detail=f"cannot read it: {error}", done=self._expired(run))
             if self.runs is not runs:
                 return []
             runs[index] = updated

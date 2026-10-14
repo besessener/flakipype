@@ -415,6 +415,24 @@ def test_verifications_left_at_the_time_limit_continue_in_the_next_auto_run(
     assert third.fixes[0].text.startswith("An open flakipype pull request for #1 exists")
 
 
+def test_a_carried_run_github_keeps_refusing_ends_its_verification(cache: ScanCache) -> None:
+    first_world = verifying_world(cache, minutes=10)
+    run_once(first_world)
+    later = verifying_world(cache)
+    opened_meanwhile(first_world, later)
+    later.clock.advance(hours=7)
+    later.runs.states[91] = [GitHubApiError("Not Found (HTTP 404)", 404)]
+
+    report = run_once(later)
+
+    assert report.pulls[0].verified
+    assert report.pulls[0].verification.outcome.endswith(
+        "a run did not finish while it was watched; cannot read it: Not Found (HTTP 404)."
+    )
+    assert later.github.comments == [report.pulls[0].verification.outcome]
+    assert later.sleeps == [10.0]
+
+
 def test_pull_requests_taken_over_survive_a_run_that_dies_in_its_scan(
     cache: ScanCache,
 ) -> None:

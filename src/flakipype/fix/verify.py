@@ -156,7 +156,8 @@ class Verifier:
         if run is None or not run.done:
             return verification
         if run.conclusion is None:
-            return self._finish(verification, "a run did not finish while it was watched")
+            unread = f"; {run.detail}" if run.detail else ""
+            return self._finish(verification, f"a run did not finish while it was watched{unread}")
         result = self._result(verification, run)
         updated = replace(verification, results=(*verification.results, result))
         if len(updated.results) >= updated.wanted:
