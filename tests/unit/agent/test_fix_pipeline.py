@@ -45,7 +45,7 @@ def propose(
 ) -> FixResult:
     answers = iter(check or [])
     config = FixConfig(
-        client=model.client(),
+        client=model.client("sk-hidden-value"),
         settings=ModelSettings(model="m-1"),
         limits=limits or Limits(rounds=20, tokens=300_000, seconds=600),
         masker=Masker.with_secrets(["sk-hidden-value"]),

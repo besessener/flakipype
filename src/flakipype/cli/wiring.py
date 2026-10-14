@@ -53,7 +53,13 @@ from flakipype.github.runs import RunControl
 from flakipype.investigate.chat import ChatService
 from flakipype.investigate.service import InvestigationService
 from flakipype.investigate.workspace import ChatWorkspace
-from flakipype.llm.client import ClientSetupError, LlmEndpoint, create_client
+from flakipype.llm.client import (
+    ClientSetupError,
+    LlmEndpoint,
+    ModelClient,
+    create_client,
+    request_timeout,
+)
 from flakipype.llm.connection import (
     ConnectionFailed,
     ConnectionProblem,
@@ -174,13 +180,16 @@ def open_scan() -> Generator[tuple[ScanService, Settings]]:
 def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
     agent = settings.agent
     endpoint = LlmEndpoint(settings.llm.base_url, api_key, settings.llm.model)
+    # The client serves investigations and fixes, so a request fits in the shorter time limit.
+    shortest = min(agent.max_seconds_per_investigation, settings.fix.max_seconds)
     try:
-        client = create_client(endpoint)
+        sdk = create_client(endpoint, timeout=request_timeout(shortest))
     except ClientSetupError as error:
         message = f"{error}."
         raise NotReadyError(message) from error
+    masker = Masker.with_secrets([api_key])
     return AgentConfig(
-        client=client,
+        client=ModelClient(sdk, masker.mask),
         settings=ModelSettings(
             model=settings.llm.model,
             max_tokens=agent.max_output_tokens,
@@ -192,7 +201,7 @@ def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
             tokens=agent.max_tokens_per_investigation,
             seconds=agent.max_seconds_per_investigation,
         ),
-        masker=Masker.with_secrets([api_key]),
+        masker=masker,
         logs=ActionsClient(gh),
         contents=ContentsClient(gh),
         clock=time.monotonic,
@@ -309,7 +318,6 @@ def open_chat() -> Generator[tuple[ChatService, Settings]]:
             ),
             tools=workspace_tools(workspace),
             gate=gate,
-            masker=agentic.config.masker,
             clock=time.monotonic,
         )
         chat = ChatService(

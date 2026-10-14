@@ -78,7 +78,7 @@ store = "auto"
 | `scan.min_flaky_runs` | `2` | 1–100; Läufe mit nachgewiesenen Flake-Ereignissen, bevor ein Job als instabil gilt (und bevor ein Fehler als wiederkehrend gilt). Mit `1` zählt jedes einzelne Ereignis |
 | `agent.max_rounds` | `12` | 1–50 Modellaufrufe pro Untersuchung |
 | `agent.max_tokens_per_investigation` | `200000` | 10k–2M Tokens (Eingabe, Ausgabe, Cache-Schreib- und -Lesezugriffe mit vollem Gewicht, Thinking) pro Untersuchung; auch pro Chat-Frage, wobei nur zählt, was die Frage hinzufügt |
-| `agent.max_seconds_per_investigation` | `300` | 30–3600 |
+| `agent.max_seconds_per_investigation` | `300` | 30–3600. Eine Anfrage an das Modell wartet höchstens ein Drittel davon (oder von `fix.max_seconds`, wenn das kürzer ist) auf Daten, sodass sie mit den zwei Wiederholungen des SDK hineinpasst |
 | `agent.max_tokens_per_run` | `1000000` | 10k–20M für alle Untersuchungen eines `investigate`-Laufs; ist es erreicht, starten keine neuen mehr |
 | `agent.parallel` | `3` | 1–8 Untersuchungen gleichzeitig (GitHub-Aufrufe gehen weiterhin einzeln nacheinander) |
 | `agent.max_output_tokens` | `16000` | 1k–64k pro Modellaufruf; Aufrufe werden gestreamt, daher funktioniert der ganze Bereich |

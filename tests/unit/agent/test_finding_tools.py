@@ -140,6 +140,24 @@ def test_read_file_and_workflow_file() -> None:
         run(given, "read_file", path="missing.py", ref="abc")
 
 
+@pytest.mark.parametrize("path", ["../../../user", "tests/../../other/repo", "/etc/passwd", ""])
+def test_read_file_refuses_paths_outside_the_repository(path: str) -> None:
+    class Recording(FakeContents):
+        def file_content(self, repository: str, path: str, ref: str) -> str | None:
+            requested.append(path)
+            return super().file_content(repository, path, ref)
+
+    requested: list[str] = []
+    given = tools(contents=Recording(files={("tests/x.py", "abc"): "line 1"}))
+
+    with pytest.raises(ToolError, match="not a file path inside the repository"):
+        run(given, "read_file", path=path, ref="abc")
+    window = run(given, "read_file", path="./tests//x.py", ref="abc")
+
+    assert requested == ["tests/x.py"]
+    assert 'path="tests/x.py"' in window
+
+
 def test_github_errors_become_tool_errors() -> None:
     class Refusing(FakeContents):
         def file_content(self, repository: str, path: str, ref: str) -> str | None:

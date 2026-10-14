@@ -3,8 +3,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
-from anthropic import Anthropic
-
 from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.finding_tools import ContentsSource, FindingTools, LogSource
 from flakipype.agent.fix_tools import FixTools
@@ -17,6 +15,7 @@ from flakipype.agent.reviewer import Reviewer, ReviewKind, ReviewUnavailableErro
 from flakipype.agent.verdict import ReviewState, Verdict
 from flakipype.agent.workcopy import FileChange, RepositoryFiles, WorkingCopy, unified_diff
 from flakipype.flaky.findings import Evidence, Finding
+from flakipype.llm.client import ModelClient
 
 FIX_REVIEW = ReviewKind(FIX_REVIEWER_SYSTEM, "Submit your review of the fix.", FixReview)
 # The fixer reads files of its working copy, not of arbitrary refs.
@@ -27,7 +26,7 @@ type ChangeCheck = Callable[[list[FileChange]], list[str]]
 
 @dataclass(frozen=True)
 class FixConfig:
-    client: Anthropic
+    client: ModelClient
     settings: ModelSettings
     limits: Limits
     masker: Masker
@@ -128,7 +127,7 @@ def propose_fix(config: FixConfig, request: FixRequest) -> FixResult:
         )  # fmt: skip
 
     def reviewed(proposal: FixProposal) -> FixReview:
-        content = config.masker.mask(review_task(task, proposal, copy.changes()))
+        content = review_task(task, proposal, copy.changes())
         return reviewer.ask(FIX_REVIEW, content)
 
     outcome = fixer.start(task)
