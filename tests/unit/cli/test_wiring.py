@@ -9,7 +9,6 @@ from pathlib import Path
 import httpx2
 import keyring
 import pytest
-from anthropic import Anthropic
 from keyring.backends import fail
 
 from flakipype.agent.investigator import Status
@@ -305,17 +304,12 @@ def test_investigation_needs_model_and_key(
 class ParallelModel(ScriptedModel):
     """Answers only once two requests are open at the same time."""
 
-    endpoints: list[LlmEndpoint] = field(default_factory=list)
     both_open: threading.Barrier = field(default_factory=lambda: threading.Barrier(2, timeout=10))
 
     def _handle(self, request: httpx2.Request) -> httpx2.Response:
         response = super()._handle(request)
         self.both_open.wait()
         return response
-
-    def create_client(self, endpoint: LlmEndpoint) -> Anthropic:
-        self.endpoints.append(endpoint)
-        return self.sdk()
 
 
 def test_investigation_is_wired_with_agent_settings(
@@ -340,7 +334,8 @@ def test_investigation_is_wired_with_agent_settings(
     with open_investigation() as (service, _):
         report = service.investigate(scan, request)
 
-    assert model.endpoints == [LlmEndpoint("https://api.anthropic.com", API_KEY, "m-1")]
+    # 300 seconds per investigation (shorter than a fix), shared with two SDK retries.
+    assert model.created == [(LlmEndpoint("https://api.anthropic.com", API_KEY, "m-1"), 100.0)]
     # Two investigations in parallel use up the run's tokens before the third starts.
     assert [(r.status, r.tokens) for r in report.results] == [
         (Status.BUDGET, 10_000), (Status.BUDGET, 10_000), (Status.BUDGET, 0),
@@ -375,7 +370,7 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
     binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
     monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
     model = ScriptedModel([message(text("Noted."))])
-    monkeypatch.setattr(wiring, "create_client", lambda _: model.sdk())
+    monkeypatch.setattr(wiring, "create_client", model.create_client)
 
     with open_chat() as (chat, _):
         assert chat.workspace.request.owner == "octo-org"

@@ -58,6 +58,13 @@ cli                               Typer entry point, composition root (cli/wirin
   jeden Text und jedes Werkzeugergebnis jeder Nachricht direkt vor dem
   Senden. Die Maskierungsfunktion reicht `cli/wiring.py` hinein; die Muster
   liegen in `agent/masking.py`, sodass `llm` nichts aus `agent` importiert.
+  Scheitert ein Aufruf, wirft er `ModelError` mit einem `ConnectionProblem`
+  samt nächstem Schritt; der Agent fängt nur diesen Typ. Das SDK wiederholt
+  fehlgeschlagene Anfragen zweimal, aber nicht eine Überlastung, die einen
+  schon laufenden Stream beendet: Die wiederholt `ModelClient` einmal. Jede
+  Anfrage wartet höchstens ein Drittel des kürzeren Zeitlimits von
+  Untersuchung und Korrektur auf Daten, sodass sie samt den Wiederholungen
+  hineinpasst.
 - **`setup`** ist der Anwendungsdienst hinter dem Assistenten, dem
   Headless-Setup und `doctor`: Er validiert Eingaben, speichert Einstellungen
   und den Schlüssel, findet oder installiert `gh` und prüft die Anmeldung.

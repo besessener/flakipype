@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-from anthropic import APIError
 from anthropic.types import Message, ToolUseBlock
 from pydantic import BaseModel, ValidationError
 
@@ -12,7 +11,7 @@ from flakipype.agent.masking import Masker
 from flakipype.agent.messages import DECLINED, ModelSettings, content_blocks, declined
 from flakipype.agent.prompts import REVIEWER_SYSTEM, data_block
 from flakipype.agent.verdict import Review, Verdict
-from flakipype.llm.client import ModelClient
+from flakipype.llm.client import ModelClient, ModelError
 
 SUBMIT_REVIEW = "submit_review"
 _NUDGE = "Answer by calling submit_review."
@@ -83,7 +82,7 @@ class Reviewer:
         try:
             self._budget.check()
             response: Message = self._client.message(request)
-        except (APIError, BudgetExceededError) as error:
+        except (ModelError, BudgetExceededError) as error:
             raise ReviewUnavailableError(str(error)) from error
         self._budget.record(response.usage)
         if declined(response):

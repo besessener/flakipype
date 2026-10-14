@@ -248,7 +248,9 @@ Zusammenfassung angezeigt.
 
 Im Chat zählt die Zeit innerhalb eines Werkzeugs (ein Scan, Untersuchungen)
 nicht gegen das Zeitlimit der Frage, weil diese eigene Limits haben. Beendet
-ein Limit oder ein Modellfehler eine Frage, sagt der Chat das, und die
+ein Limit oder ein Modellfehler eine Frage, sagt der Chat das (bei einem
+Modellfehler mit seiner Art und dem nächsten Schritt, dieselben wie beim
+Verbindungstest in [Modell verbinden](../how-to/modell-verbinden.md)), und die
 unfertige Frage wird aus der Unterhaltung des Modells entfernt; unterwegs
 gefundene Urteile bleiben erhalten. Dasselbe passiert, wenn das Modell
 ablehnt oder mit nichts antwortet (eine leere Antwort in der Unterhaltung

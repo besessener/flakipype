@@ -15,6 +15,7 @@ from flakipype.agent.tools import (
     Tool,
     deny_all,
 )
+from flakipype.llm.connection import ConnectionProblem
 
 from support.fake_anthropic import ScriptedModel, call, message, text, thinking, verdict_input
 from support.fake_sources import FakeContents, FakeLogs, evidence, finding
@@ -174,6 +175,7 @@ def test_model_errors_are_reported() -> None:
     outcome = investigator(ScriptedModel([529])).start("finding")
 
     assert outcome.status is Status.MODEL_ERROR
+    assert outcome.detail.endswith(ConnectionProblem.SERVER_ERROR.next_step)
 
 
 def test_unknown_tools_failing_tools_and_the_gate_answer_with_errors() -> None:

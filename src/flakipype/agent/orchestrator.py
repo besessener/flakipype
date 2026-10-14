@@ -6,7 +6,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from anthropic import APIError
 from anthropic.types.beta import BetaMessage, BetaTextBlock, BetaToolUseBlock
 from pydantic import BaseModel, Field
 
@@ -32,7 +31,7 @@ from flakipype.agent.tools import (
 )
 from flakipype.config.settings import MAX_WINDOW_DAYS
 from flakipype.github.actions import GitHubApiError
-from flakipype.llm.client import ModelClient
+from flakipype.llm.client import ModelClient, ModelError
 
 type StepListener = Callable[[str], None]
 
@@ -230,7 +229,7 @@ class ChatAgent:
                 response = self._call()
             except BudgetExceededError as error:
                 return self._abandon(start, f"Stopped at {error}. {_LIMIT_HINT}", budget.billed)
-            except APIError as error:
+            except ModelError as error:
                 return self._abandon(start, f"The model could not answer: {error}", budget.billed)
             budget.record(response.usage)
             if declined(response):

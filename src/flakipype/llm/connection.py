@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from http import HTTPStatus
 
-from anthropic import Anthropic, APIConnectionError, APIStatusError, APITimeoutError
+from anthropic import Anthropic, APIConnectionError, APIError, APIStatusError, APITimeoutError
 
 
 class ConnectionProblem(StrEnum):
@@ -68,6 +68,17 @@ def problem_for_status(status_code: int) -> ConnectionProblem:
     return _PROBLEM_BY_STATUS.get(status_code, ConnectionProblem.SERVER_ERROR)
 
 
+def problem_for_error(error: APIError) -> ConnectionProblem:
+    if isinstance(error, APITimeoutError):
+        return ConnectionProblem.TIMEOUT
+    if isinstance(error, APIConnectionError):
+        return ConnectionProblem.UNREACHABLE
+    if isinstance(error, APIStatusError):
+        # An error event in an open stream comes with the stream's status, 200.
+        return problem_for_status(error.status_code)
+    return ConnectionProblem.UNEXPECTED_ANSWER
+
+
 def check_connection(client: Anthropic, model: str) -> ConnectionResult:
     """Send the smallest possible request to prove URL, key and model work together."""
     try:
@@ -76,12 +87,8 @@ def check_connection(client: Anthropic, model: str) -> ConnectionResult:
             max_tokens=1,
             messages=[{"role": "user", "content": "ping"}],
         )
-    except APITimeoutError as error:
-        return ConnectionFailed(ConnectionProblem.TIMEOUT, str(error))
-    except APIConnectionError as error:
-        return ConnectionFailed(ConnectionProblem.UNREACHABLE, str(error))
-    except APIStatusError as error:
-        return ConnectionFailed(problem_for_status(error.status_code), error.message)
+    except (APIConnectionError, APIStatusError) as error:
+        return ConnectionFailed(problem_for_error(error), error.message)
     # Without strict validation, any 200 answer passes: a sign-in page or another JSON API.
     answered = getattr(response, "model", None)
     if not isinstance(answered, str) or not answered:

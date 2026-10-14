@@ -1,6 +1,7 @@
 """A scripted stand-in for the Anthropic Messages API: answers turn by turn, records requests."""
 
 import json
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -11,6 +12,7 @@ from flakipype.agent.masking import Masker
 from flakipype.llm.client import LlmEndpoint, ModelClient, create_client
 
 USAGE = {"input_tokens": 1_000, "output_tokens": 200}
+_OVERLOADED = 529
 
 
 def message(*content: dict[str, Any], usage: dict[str, int] | None = None) -> dict[str, Any]:
@@ -39,13 +41,36 @@ def thinking(content: str) -> dict[str, Any]:
     return {"type": "thinking", "thinking": content, "signature": "sig"}
 
 
+@dataclass(frozen=True)
+class Broken:
+    """A streamed answer that starts, then fails: with an error event, or a transport error."""
+
+    # An API error type such as "overloaded_error", or the exception the stream raises.
+    failure: str | httpx2.TransportError
+
+
+class _FailingStream(httpx2.SyncByteStream):
+    def __init__(self, start: bytes, error: httpx2.TransportError) -> None:
+        self._start = start
+        self._error = error
+
+    def __iter__(self) -> Iterator[bytes]:
+        yield self._start
+        raise self._error
+
+
 @dataclass
 class ScriptedModel:
-    """Each turn is a message dict, or an int HTTP status to fail that request with."""
+    """Each turn is a message dict, an int HTTP status to fail that request with, or Broken."""
 
-    turns: list[dict[str, Any] | int]
+    script: Sequence[dict[str, Any] | int | Broken]
     requests: list[dict[str, Any]] = field(default_factory=list)
     headers: list[dict[str, str]] = field(default_factory=list)
+    # What wiring asked create_client for: the endpoint and the request timeout.
+    created: list[tuple[LlmEndpoint, float]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.turns = list(self.script)
 
     def _handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(json.loads(request.content))
@@ -61,8 +86,11 @@ class ScriptedModel:
             )
         turn = self.turns.pop(0)
         if isinstance(turn, int):
-            body = {"type": "error", "error": {"type": "api_error", "message": f"status {turn}"}}
+            kind = "overloaded_error" if turn == _OVERLOADED else "api_error"
+            body = {"type": "error", "error": {"type": kind, "message": f"status {turn}"}}
             return httpx2.Response(turn, json=body)
+        if isinstance(turn, Broken):
+            return _broken(turn)
         if self.requests[-1].get("stream"):
             return httpx2.Response(
                 200, headers={"content-type": "text/event-stream"}, content=_events(turn)
@@ -79,6 +107,11 @@ class ScriptedModel:
     def client(self, *secrets: str) -> ModelClient:
         """A client that masks like the real one, plus the given known secrets."""
         return ModelClient(self.sdk(), Masker.with_secrets(secrets).mask)
+
+    def create_client(self, endpoint: LlmEndpoint, *, timeout: float) -> Anthropic:
+        """Stands in for llm.client.create_client in the wiring."""
+        self.created.append((endpoint, timeout))
+        return self.sdk()
 
     def tool_results(self, request_index: int) -> dict[str, dict[str, Any]]:
         """tool_result blocks of the last user message of one request, by tool_use_id."""
@@ -112,6 +145,19 @@ class ScriptedModel:
             blocks = [] if isinstance(content, str) else content
             found += [f"message {index}" for block in blocks if "cache_control" in block]
         return found
+
+
+def _broken(turn: Broken) -> httpx2.Response:
+    headers = {"content-type": "text/event-stream"}
+    start = _sse({"type": "message_start", "message": {**message(), "stop_reason": None}})
+    if isinstance(turn.failure, str):
+        error = {"type": "error", "error": {"type": turn.failure, "message": turn.failure}}
+        return httpx2.Response(200, headers=headers, content=start + _sse(error))
+    return httpx2.Response(200, headers=headers, stream=_FailingStream(start, turn.failure))
+
+
+def _sse(event: dict[str, Any]) -> bytes:
+    return f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode()
 
 
 def invalid_history(messages: list[dict[str, Any]]) -> str:
@@ -151,8 +197,7 @@ def _events(turn: dict[str, Any]) -> bytes:
     delta = {"stop_reason": turn["stop_reason"], "stop_sequence": None}
     events.append({"type": "message_delta", "delta": delta, "usage": turn["usage"]})
     events.append({"type": "message_stop"})
-    lines = [f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events]
-    return "".join(lines).encode()
+    return b"".join(_sse(event) for event in events)
 
 
 def _streamed(block: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:

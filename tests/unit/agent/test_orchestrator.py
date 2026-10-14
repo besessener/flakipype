@@ -18,6 +18,7 @@ from flakipype.agent.tools import (
     deny_all,
 )
 from flakipype.github.actions import GitHubApiError
+from flakipype.llm.connection import ConnectionProblem
 
 from support.fake_anthropic import ScriptedModel, call, message, text
 
@@ -204,7 +205,8 @@ def test_model_errors_end_the_turn() -> None:
     reply = agent.ask("Hi", ignore_steps)
 
     assert not reply.completed
-    assert reply.text.startswith("The model could not answer:")
+    assert reply.text.startswith("The model could not answer: Error code: 500")
+    assert reply.text.endswith(ConnectionProblem.SERVER_ERROR.next_step)
     assert agent.history == []
 
 

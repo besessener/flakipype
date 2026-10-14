@@ -1,7 +1,8 @@
 from typing import Any
 
 import pytest
-from anthropic import BadRequestError
+
+from flakipype.llm.client import ModelError
 
 from support.fake_anthropic import ScriptedModel, call, message, text
 
@@ -31,7 +32,7 @@ def test_the_fake_rejects_what_the_api_rejects_and_keeps_its_turn(
 ) -> None:
     model = ScriptedModel([message(text("Hello."))])
 
-    with pytest.raises(BadRequestError, match=problem):
+    with pytest.raises(ModelError, match=problem):
         send(model, messages)
 
     assert send(model, [ASK]) == "Hello."

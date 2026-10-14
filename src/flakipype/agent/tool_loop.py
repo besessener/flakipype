@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from anthropic import APIError
 from anthropic.types import Message, ToolUseBlock
 from pydantic import BaseModel, ValidationError
 
@@ -23,7 +22,7 @@ from flakipype.agent.messages import (
     tool_result,
 )
 from flakipype.agent.tools import PolicyGate, Tool, ToolError
-from flakipype.llm.client import ModelClient
+from flakipype.llm.client import ModelClient, ModelError
 
 _CORRECTIONS = 2
 _NUDGES = 1
@@ -129,7 +128,7 @@ class ToolLoop[Submitted: BaseModel]:
                 response = self._call()
             except BudgetExceededError as error:
                 return LoopOutcome(LoopStatus.BUDGET, detail=f"Stopped at {error}.")
-            except APIError as error:
+            except ModelError as error:
                 return LoopOutcome(LoopStatus.MODEL_ERROR, detail=str(error))
             budget.record(response.usage)
             if declined(response):
