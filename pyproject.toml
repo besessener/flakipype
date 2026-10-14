@@ -94,9 +94,20 @@ ignore = [
 "tests/unit/investigate/*.py" = ["RUF001"]
 "tests/unit/unattended/*.py" = ["RUF001"]
 "tests/tui/test_chat*.py" = ["RUF001"]
+# The composition root builds the real clock for everything else.
+"src/flakipype/cli/wiring.py" = ["TID251"]
 
 [tool.ruff.lint.isort]
 known-local-folder = ["support"]
+
+# Only the composition root reads the wall clock; everything else gets `now` as a parameter.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "Take `now` as a parameter; only cli/wiring.py reads the clock."
+"datetime.datetime.utcnow".msg = "Take `now` as a parameter; only cli/wiring.py reads the clock."
+"datetime.datetime.today".msg = "Take `now` as a parameter; only cli/wiring.py reads the clock."
+"datetime.date.today".msg = "Take `now` as a parameter; only cli/wiring.py reads the clock."
+"time.time".msg = "Take `now` as a parameter; only cli/wiring.py reads the clock."
+"time.time_ns".msg = "Take `now` as a parameter; only cli/wiring.py reads the clock."
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -158,19 +169,53 @@ exclude_also = ["if TYPE_CHECKING:"]
 [tool.importlinter]
 root_package = "flakipype"
 
+include_external_packages = true
+
 [[tool.importlinter.contracts]]
 name = "Layered architecture"
 type = "layers"
+containers = ["flakipype"]
 layers = [
-  "flakipype.cli",
-  "flakipype.tui | flakipype.unattended",
-  "flakipype.investigate",
-  "flakipype.fix",
-  "flakipype.actions",
-  "flakipype.agent | flakipype.setup | flakipype.scan",
-  "flakipype.llm | flakipype.github | flakipype.store",
-  "flakipype.flaky | flakipype.config",
+  "cli",
+  "tui | unattended",
+  "investigate",
+  "fix",
+  "actions",
+  "agent | setup | scan",
+  "llm | github | store",
+  "flaky | config",
 ]
+# Every subpackage must sit in a layer; __main__ only calls the CLI.
+exhaustive = true
+exhaustive_ignores = ["__main__"]
+
+[[tool.importlinter.contracts]]
+name = "flaky is pure: no network, files, processes, database, clock or settings"
+type = "forbidden"
+source_modules = ["flakipype.flaky"]
+forbidden_modules = [
+  "anthropic",
+  "flakipype.config",
+  "httpx2",
+  "os",
+  "pathlib",
+  "socket",
+  "sqlite3",
+  "subprocess",
+  "time",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only github and setup.daemon start processes"
+type = "forbidden"
+source_modules = ["flakipype"]
+forbidden_modules = ["subprocess"]
+ignore_imports = [
+  "flakipype.github.* -> subprocess",
+  "flakipype.setup.daemon -> subprocess",
+]
+# Others reach gh and systemctl through these modules, never subprocess themselves.
+allow_indirect_imports = true
 
 # --- Dead code and dependency hygiene ---------------------------------------
 

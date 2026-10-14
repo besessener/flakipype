@@ -3,7 +3,14 @@
 flakipype ist ein einzelnes Python-Paket (`src/flakipype/`), aufgeteilt in
 Unterpakete nach Zuständigkeit. import-linter (`uv run poe arch`) erzwingt
 die Schichten: Eine höhere Schicht darf eine niedrigere importieren, nie
-umgekehrt, und Pakete auf derselben Schicht importieren einander nicht.
+umgekehrt, und Pakete auf derselben Schicht importieren einander nicht. Der
+Vertrag ist erschöpfend, ein neues Unterpaket muss also eine Schicht
+bekommen. Zwei weitere Verträge halten `flaky` rein (kein `os`, `pathlib`,
+`subprocess`, `sqlite3`, `socket`, `time`, `httpx2`, `anthropic` oder
+`config`) und erlauben `subprocess` nur in `github` und `setup/daemon.py`.
+Die Uhr liest nur `cli/wiring.py`: ruff verbietet `datetime.now`,
+`date.today`, `time.time` und ihre Verwandten überall sonst (`TID251`), alle
+anderen bekommen `now` als Parameter.
 
 ```text
 cli                               Typer entry point, composition root (cli/wiring.py)

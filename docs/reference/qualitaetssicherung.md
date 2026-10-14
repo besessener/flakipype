@@ -7,7 +7,7 @@
 | Formatierung | ruff format | Ein Stil, keine Diskussion |
 | Lint | ruff (`select = ["ALL"]`) | Fehler, Sicherheit (bandit-Regeln), Komplexität ≤ 10 pro Funktion, höchstens 4 Parameter (3 positionale) |
 | Typen | ty, dazu ruff `ANN` für Annotationen | Vollständig typisierte `src` und `tests`; Warnungen schlagen fehl; Ausnahmen sind `# ty: ignore[<rule>]` (`type: ignore` wird nicht beachtet) |
-| Architektur | import-linter | Schichtenvertrag, siehe [Architektur](../explanation/architektur.md) |
+| Architektur | import-linter, ruff `TID251` | Erschöpfender Schichtenvertrag, reines `flaky`, `subprocess` nur in `github` und `setup/daemon.py`, die Uhr nur in `cli/wiring.py`; siehe [Architektur](../explanation/architektur.md) |
 | Abhängigkeiten | deptry | Keine ungenutzten, fehlenden oder falsch eingeordneten Abhängigkeiten |
 | Toter Code | vulture | Kein ungenutzter Code |
 | Shell-Skripte | ShellCheck (`shellcheck-py`) | `install.sh` und der Smoke-Test |
