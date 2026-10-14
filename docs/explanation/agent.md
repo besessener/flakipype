@@ -96,7 +96,7 @@ parallel laufen; nur Modellaufrufe laufen gleichzeitig.
 | `run_history(limit)` | Zeitleiste dieses Workflows: Lauf, Commit, Branch, Ereignis, Ergebnis, Signatur pro fehlgeschlagenem Job | Scan-Cache + Laufliste |
 | `compare_commits(base, head)` | Commits (SHA, Autor, Datum, Betreff) und geänderte Dateien mit Zeilenzahlen; kein vollständiger Diff | `gh api …/compare/base...head` |
 | `file_diff(base, head, path)` | Unified Diff einer Datei, höchstens 300 Zeilen | `gh api …/compare` (Patch pro Datei) |
-| `read_file(path, ref)` | Dateiinhalt zu einem Commit, höchstens 400 Zeilen mit Zeilennummern; Bereiche für längere Dateien | `gh api …/contents` |
+| `read_file(path, ref)` | Dateiinhalt zu einem Commit, höchstens 400 Zeilen mit Zeilennummern; Bereiche für längere Dateien; nur Pfade im Repository (kein `..`, kein absoluter Pfad) | `gh api …/contents` |
 | `workflow_file(ref)` | Die Workflow-YAML des Befunds zu einem Commit | `gh api …/contents` |
 | `submit_verdict(...)` | Beendet die Untersuchung | — |
 
