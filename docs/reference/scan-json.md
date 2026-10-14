@@ -99,7 +99,7 @@ Wie die Status entschieden werden: [wie Instabilität erkannt wird](../explanati
 | `signals.rerun_passed` | Fehlschläge in einem Versuch, den ein späterer Versuch desselben Laufs behoben hat |
 | `signals.same_commit` | Fehlschläge von Läufen, deren Commit in einem anderen Lauf des Workflows bestanden hat |
 | `first_seen`, `last_seen` | Wann der älteste und der neueste solche Fehlschlag abgeschlossen wurde |
-| `passing_since` | Erster bestandener Lauf des Workflows ab dem letzten betroffenen Lauf; `null`, wenn es keinen gibt |
+| `passing_since` | Erster bestandener Lauf des Workflows nach dem letzten betroffenen Lauf, ohne die Reruns der betroffenen Läufe selbst; `null`, wenn es keinen gibt |
 | `examples` | Bis zu 3 Job-URLs, neueste zuerst |
 | `signatures[]` | Fehlersignaturen aus den bisher gelesenen Logs, häufigste zuerst |
 

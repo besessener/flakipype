@@ -50,6 +50,10 @@ Ereignis reicht trotzdem nicht:
 Ein Job mit genug Läufen, der seit seinem letzten Fehlschlag nicht wieder
 durchgelaufen ist, ist nicht behoben: Er zählt als **flaky** und wird
 untersucht, wobei der Agent ihn immer noch als echten Fehler einstufen kann.
+Dasselbe gilt für einen Job, dessen Lauf beim Rerun durchgelaufen ist: Ein
+Rerun testet denselben Code, also beweist er Instabilität und keine Korrektur,
+egal ob er das erste oder das letzte Ereignis ist. Der eigene Rerun eines
+betroffenen Laufs zählt deshalb auch nicht als „durchgelaufen seit“.
 
 „Durchgelaufen“ heißt, dass der ganze Workflow-Lauf durchgelaufen ist. Ein
 Lauf, in dem der Job durchlief, aber ein anderer Job fehlschlug, zählt nicht

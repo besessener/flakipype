@@ -71,7 +71,7 @@ def test_json_report_has_a_stable_documented_shape(cache: ScanCache) -> None:
                 "signals": {"rerun_passed": 1, "same_commit": 0},
                 "first_seen": "2026-10-01T09:01:00Z",
                 "last_seen": "2026-10-01T09:01:00Z",
-                "passing_since": "2026-10-01T09:00:00Z",
+                "passing_since": "2026-10-01T10:00:00Z",
                 "examples": ["https://github.com/octo-org/app/actions/runs/1/job/11"],
                 "signatures": [
                     {
