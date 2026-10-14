@@ -49,8 +49,9 @@ Aufgabe des Agenten.
 aus dem Scan (zitierbar als `finding`), die Werkzeuge und nichts über andere
 Befunde, damit ein Fall den nächsten nicht beeinflussen kann. Er entscheidet
 selbst, welche Werkzeuge er in welcher Reihenfolge aufruft, und schließt mit
-einem Aufruf von `submit_verdict` ab. Mehrere Investigators laufen parallel
-(Standard 3).
+einem Aufruf von `submit_verdict` ab; ruft er ihn in einer Antwort mehrmals
+auf, zählt der erste gültige, und die übrigen bekommen ein Fehlerergebnis.
+Mehrere Investigators laufen parallel (Standard 3).
 
 **Zitatprüfung.** Deterministischer Code, kein Modell: Jeder Beleg muss auf
 ein Werkzeugergebnis dieser Untersuchung verweisen, und sein Zitat muss in
@@ -67,7 +68,11 @@ konkreten Fragen; der Investigator macht damit einmal weiter) oder
 `downgrade` (niedrigere Sicherheit oder `unclear`, mit Begründung). Der
 Reviewer stuft ein Urteil nie hoch; das erzwingt der Code. Ein zweites
 `revise` nach der einen Runde zählt als niedrige Sicherheit. Kommt kein
-Review zurück, wird das Urteil als nicht geprüft angezeigt.
+Review zurück, wird das Urteil als nicht geprüft angezeigt. Endet die
+Überarbeitung nach einem `revise` ohne neues Urteil (etwa an einem Limit oder
+einem HTTP-Fehler), bleibt das erste Urteil mit niedriger Sicherheit stehen,
+gilt aber ebenfalls als nicht geprüft: Es wird nicht gespeichert und nicht
+korrigiert.
 
 **Orchestrator.** Im Chat: ein Modell mit eigener Unterhaltung und vier
 lesenden Werkzeugen – `scan`, `list_findings`, `investigate` (Befunde nach

@@ -18,11 +18,14 @@ from flakipype.flaky.findings import Evidence, Finding
 
 _NOT_REVIEWED = "not reviewed"
 _SECOND_REVIEW_UNAVAILABLE = "revised, second review unavailable"
+_REVISION_ENDED = "sent back, revision ended"
 
 
 def reviewed(review: str) -> bool:
-    """Whether a reviewer answered; False when the review could not run, e.g. an HTTP error."""
-    return bool(review) and not review.startswith((_NOT_REVIEWED, _SECOND_REVIEW_UNAVAILABLE))
+    """Whether a reviewer answered on the final verdict, not just on one sent back for revision."""
+    return bool(review) and not review.startswith(
+        (_NOT_REVIEWED, _SECOND_REVIEW_UNAVAILABLE, _REVISION_ENDED)
+    )
 
 
 @dataclass(frozen=True)
@@ -103,7 +106,7 @@ def investigate_finding(
         )
     revised = investigator.revise(review.questions)
     if revised.verdict is None:
-        note = f"sent back, revision ended: {revised.detail}"
+        note = f"{_REVISION_ENDED}: {revised.detail}"
         return result(outcome, apply_review(outcome.verdict, review), note)
     try:
         second = reviewer.review(text, revised.verdict, config.masker)

@@ -101,10 +101,14 @@ def test_verdicts_whose_review_failed_are_investigated_again(cache: ScanCache) -
     revised = FakeAgent(review="revised, second review unavailable: HTTP 500")
     service(cache, revised).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
     service(cache, revised).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    ended = FakeAgent(review="sent back, revision ended: Error code: 529 - overloaded")
+    service(cache, ended).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    service(cache, ended).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
 
     assert unreviewed.calls == [1, 1]
     assert not second.results[0].from_cache
     assert revised.calls == [1, 1]
+    assert ended.calls == [1, 1]
 
 
 def test_a_lower_token_limit_for_one_call(cache: ScanCache) -> None:

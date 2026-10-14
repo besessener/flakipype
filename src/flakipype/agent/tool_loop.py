@@ -196,6 +196,11 @@ class ToolLoop[Submitted: BaseModel]:
 
     def _submit(self, use: ToolUseBlock, turn: _Turn[Submitted]) -> LoopOutcome[Submitted] | None:
         noun = self._submission.noun
+        if turn.submitted is not None:
+            # The API rejects a tool_use without a result, so an extra submission gets one too.
+            text = f"Ignored: the first valid {noun} of this response counts; submit only one."
+            turn.results.append(tool_result(use.id, text, failed=True))
+            return None
         try:
             submitted = self._submission.model.model_validate(use.input)
         except ValidationError as error:

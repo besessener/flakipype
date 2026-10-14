@@ -48,6 +48,8 @@ def target(
         (target(classification="real_bug"), "#2 is real bug: flakipype fixes only flaky tests"),
         (target(review="not reviewed: HTTP 500"), r"not reviewed \(not reviewed: HTTP 500\)"),
         (target(review=""), r"not reviewed \(no review\); investigate it again with /investigate"),
+        (target(review="sent back, revision ended: Stopped at 200,000 tokens."),
+         r"not reviewed \(sent back, revision ended: Stopped at"),
         (target(e2e_finding(repository="other/app")), "does not belong to the configured owner"),
     ],
 )  # fmt: skip

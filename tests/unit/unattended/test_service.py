@@ -240,14 +240,20 @@ def test_an_investigation_without_verdict_is_not_repeated_until_a_newer_failure(
     assert second.tokens == 0
 
 
-def test_every_investigated_finding_says_why_it_was_not_fixed(cache: ScanCache) -> None:
-    reviews = {1: "not reviewed: Error code: 400 - tool_choice is not supported"}
-
-    report = run_once(RunWorld(cache, agent=ClassifyingAgent(reviews=reviews)))
+@pytest.mark.parametrize(
+    "review",
+    [
+        "not reviewed: Error code: 400 - tool_choice is not supported",
+        "sent back, revision ended: Error code: 529 - overloaded",
+    ],
+)
+def test_every_investigated_finding_says_why_it_was_not_fixed(
+    cache: ScanCache, review: str
+) -> None:
+    report = run_once(RunWorld(cache, agent=ClassifyingAgent(reviews={1: review})))
 
     unreviewed = (
-        "not fixed: the verdict was not reviewed (not reviewed: Error code: 400 - tool_choice "
-        "is not supported); the next run investigates it again"
+        f"not fixed: the verdict was not reviewed ({review}); the next run investigates it again"
     )
     assert [fix.text for fix in report.fixes] == [
         unreviewed,

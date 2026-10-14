@@ -6,7 +6,13 @@ from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.investigator import Status
 from flakipype.agent.masking import Masker
 from flakipype.agent.messages import ModelSettings
-from flakipype.agent.pipeline import AgentConfig, FindingResult, finding_text, investigate_finding
+from flakipype.agent.pipeline import (
+    AgentConfig,
+    FindingResult,
+    finding_text,
+    investigate_finding,
+    reviewed,
+)
 from flakipype.agent.reviewer import Reviewer, ReviewUnavailableError
 from flakipype.agent.verdict import Decision, Verdict
 
@@ -125,6 +131,27 @@ def test_revision_that_ends_without_verdict_keeps_the_first_at_low_confidence() 
     assert result.verdict is not None
     assert result.verdict.confidence.value == "low"
     assert result.review.startswith("sent back, revision ended")
+    # The reviewer never accepted a verdict, so it may not be fixed.
+    assert not reviewed(result.review)
+
+
+def test_two_submissions_in_one_response_can_still_be_sent_back() -> None:
+    model = ScriptedModel(
+        [
+            message(EXCERPT, submit("toolu_2"), submit("toolu_3")),
+            review("revise", questions=["Which commit?"]),
+            message(submit("toolu_4")),
+            review("accept"),
+        ]
+    )
+
+    result = investigate(model)
+
+    assert result.review == "revised, then accepted: checked"
+    assert reviewed(result.review)
+    revision = model.tool_results(2)
+    assert "Which commit?" in revision["toolu_2"]["content"]
+    assert revision["toolu_3"]["is_error"] is True
 
 
 def test_unavailable_reviews_leave_the_verdict_unreviewed() -> None:
