@@ -65,6 +65,8 @@ class ScanReport:
     evidence: Evidence = field(default_factory=Evidence)
     # Attempts whose jobs were not read yet (limit or early stop); later scans continue.
     attempts_not_read: int = 0
+    # Repositories whose runs GitHub would not list; their problems say why.
+    repositories_not_read: int = 0
 
     @property
     def findings(self) -> list[Finding]:
@@ -86,6 +88,7 @@ class _Scan:
     problems: list[str] = field(default_factory=list)
     logs_not_read: int = 0
     attempts_not_read: int = 0
+    repositories_not_read: int = 0
 
     @property
     def host(self) -> str:
@@ -164,6 +167,7 @@ class ScanService:
             complete=complete,
             evidence=Evidence(scan.runs, scan.jobs, scan.signatures),
             attempts_not_read=scan.attempts_not_read,
+            repositories_not_read=scan.repositories_not_read,
         )
 
     @staticmethod
@@ -184,6 +188,7 @@ class ScanService:
             read = partial(self._actions.runs, name, scan.window)
             listing = _guarded(scan, read, repository=name, action="list runs")
             if listing is None:
+                scan.repositories_not_read += 1
                 continue
             if listing.truncated:
                 scan.problems.append(f"{name}: too many runs per minute; GitHub listed only some.")

@@ -48,10 +48,12 @@ Außerhalb von poe:
 | `--json` | Die Zusammenfassung als JSON ausgeben (`schema_version` 1) |
 
 Exit-Codes: 0 beendet (ein erreichtes Limit ist ein normales Ende), 1 etwas
-war unvollständig (Scan früh beendet, GitHub oder das Modell sind
-fehlgeschlagen, eine Auslieferung ist fehlgeschlagen), 2 nicht eingerichtet
-oder ein anderer `--owner`, 3 ein anderer `flakipype run` läuft. So
-funktioniert es: [unbeaufsichtigte Läufe](../explanation/unbeaufsichtigte-laeufe.md).
+war unvollständig (Scan früh beendet, die Läufe eines Repositorys nicht
+auflistbar, GitHub oder das Modell sind fehlgeschlagen, eine Auslieferung
+ist fehlgeschlagen; bei HTTP 401 mit dem Hinweis, dich neu anzumelden), 2
+nicht eingerichtet oder ein anderer `--owner`, 3 ein anderer `flakipype
+run` läuft. So funktioniert es:
+[unbeaufsichtigte Läufe](../explanation/unbeaufsichtigte-laeufe.md).
 
 ### `flakipype daemon`
 

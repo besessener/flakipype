@@ -174,7 +174,9 @@ R3 app · E2E dispatch 2/3
 - Ein Rate Limit pausiert die Runde: Die Läufe zeigen
   „waiting for GitHub's rate limit“, und die nächste Abfrage versucht es
   erneut. Andere Fehler erscheinen neben dem Lauf und halten die anderen
-  nicht auf.
+  nicht auf. Lässt sich ein Lauf bis zum Ende seiner Beobachtungszeit nicht
+  lesen (zum Beispiel weil er gelöscht wurde), wird er nicht mehr beobachtet,
+  und der Hinweis nennt den letzten Fehler.
 
 Gestartete Läufe, ihr Zustand und der Budgetzähler werden in der Sitzung
 gespeichert. Eine fortgesetzte Sitzung fragt die Läufe ab, die noch nicht

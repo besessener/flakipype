@@ -12,7 +12,7 @@ from flakipype.github.actions import GitHubApiError
 
 EXIT_INCOMPLETE = 1
 EXIT_NOT_READY = 2
-_LOGIN_EXPIRED = "The GitHub login is no longer valid. Log in again with `flakipype setup`."
+LOGIN_EXPIRED = "The GitHub login is no longer valid. Log in again with `flakipype setup`."
 
 
 def error_console() -> Console:
@@ -35,5 +35,5 @@ def command_errors(console: Console) -> Generator[None]:
     except GitHubApiError as error:
         print_error(console, "GitHub", error)
         if error.is_authentication_problem:
-            console.print(_LOGIN_EXPIRED)
+            console.print(LOGIN_EXPIRED)
         raise typer.Exit(EXIT_INCOMPLETE) from error

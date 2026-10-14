@@ -97,13 +97,14 @@ def test_a_lookup_that_keeps_failing_ends_the_wait_after_ten_minutes(cache: Scan
     waiting = setup.verifier.begin(verification(), "on: push\njobs: {}\n")
     setup.github.errors["commit_runs"] = GitHubApiError("Not Found (HTTP 404)", 404)
 
-    with pytest.raises(GitHubApiError):
-        setup.verifier.poll(waiting)
+    still = setup.verifier.poll(waiting)
     setup.clock.advance(minutes=10, seconds=1)
-    done = setup.verifier.poll(waiting)
+    done = setup.verifier.poll(still)
 
+    assert still == replace(waiting, detail="GitHub did not answer: Not Found (HTTP 404)")
     assert done.stage is Stage.DONE
     assert done.outcome.startswith(f"{CANNOT}GitHub did not answer: Not Found (HTTP 404).")
+    assert done.detail == ""
     setup.github.errors["commit_runs"] = ApiRateLimitError("API rate limit exceeded", 403)
     with pytest.raises(ApiRateLimitError):
         setup.verifier.poll(waiting)
@@ -140,6 +141,36 @@ def test_a_workflow_that_nothing_starts_cannot_be_verified(
     assert begun.outcome == (
         f"{CANNOT}the workflow runs on neither push nor pull_request, and {reason}."
     )
+
+
+def test_a_refused_dispatch_ends_the_verification_once(cache: ScanCache) -> None:
+    forbidden = GitHubApiError("Resource not accessible by integration (HTTP 403)", 403)
+    setup = Setup(cache, runs=FakeRuns(dispatch_ids=[forbidden, 81]))
+    workflow = "on:\n  push:\n    branches: [main]\n  workflow_dispatch:\njobs: {}\n"
+    current = setup.verifier.begin(verification(), workflow)
+
+    setup.clock.advance(minutes=10, seconds=1)
+    for _ in range(3):
+        current = setup.verifier.poll(current)
+
+    assert current.stage is Stage.DONE
+    assert current.outcome == (
+        f"{CANNOT}GitHub refused the dispatch: Resource not accessible by integration (HTTP 403)."
+    )
+    assert len([call for call in setup.runs.calls if call.startswith("dispatch")]) == 1
+    assert setup.github.comments == [current.outcome]
+
+
+def test_a_rate_limited_dispatch_keeps_the_verification_waiting(cache: ScanCache) -> None:
+    limited = ApiRateLimitError("API rate limit exceeded", 403)
+    setup = Setup(cache, runs=FakeRuns(dispatch_ids=[limited]))
+    waiting = setup.verifier.begin(verification(), DISPATCHABLE)
+
+    setup.clock.advance(minutes=10, seconds=1)
+    with pytest.raises(ApiRateLimitError):
+        setup.verifier.poll(waiting)
+
+    assert setup.github.comments == []
 
 
 def test_no_dispatch_when_the_budget_is_used_up(cache: ScanCache) -> None:
@@ -281,6 +312,20 @@ def test_a_run_that_does_not_finish_while_watched(cache: ScanCache) -> None:
     done = setup.step(current)
 
     assert done.outcome == f"{CANNOT}a run did not finish while it was watched."
+
+
+def test_a_run_github_keeps_refusing_ends_the_verification(cache: ScanCache) -> None:
+    setup = Setup(cache, runs=FakeRuns(states={91: [GitHubApiError("Not Found (HTTP 404)", 404)]}))
+    current = setup.watching(verification())
+
+    assert setup.step(current) == current
+    setup.clock.advance(hours=7)
+    done = setup.step(current)
+
+    assert done.outcome == (
+        f"{CANNOT}a run did not finish while it was watched; cannot read it: Not Found (HTTP 404)."
+    )
+    assert setup.github.comments == [done.outcome]
 
 
 @pytest.mark.parametrize(

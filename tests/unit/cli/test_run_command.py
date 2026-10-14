@@ -14,7 +14,7 @@ from flakipype.agent.tools import Mode
 from flakipype.cli import app, errors, wiring
 from flakipype.cli.run_report import render_run
 from flakipype.config.settings import GitHubSettings, Settings
-from flakipype.github.actions import ApiRateLimitError, GitHubApiError
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError, Repository
 from flakipype.scan.service import ScanRequest
 from flakipype.store.database import ScanCache
 from flakipype.store.lock import RunLockedError
@@ -177,6 +177,23 @@ def test_an_incomplete_run_exits_with_one(
 
     assert result.exit_code == 1
     assert "Problems: GitHub: Bad credentials (HTTP 401)" in result.stdout
+    assert errors.LOGIN_EXPIRED in click.unstyle(result.stderr)
+
+
+def test_scan_problems_and_unread_verifications_are_in_the_summary(cache: ScanCache) -> None:
+    world = RunWorld(cache, limits=limits(minutes=10))
+    world.source.repositories_found.append(Repository("octo-org/docs", "main"))
+    world.source.runs_by_repository["octo-org/docs"] = GitHubApiError("Not Found (HTTP 404)", 404)
+    world.github.files[".github/workflows/ci.yml"] = b"on: pull_request\njobs: {}\n"
+    world.github.errors["commit_runs"] = GitHubApiError("Server Error (HTTP 500)", 500)
+
+    text = render_run(world.service().run())
+
+    assert "Problems: octo-org/docs: could not list runs: Not Found (HTTP 404)" in text
+    assert (
+        "octo-org/app#12: 0 of 3 runs, continues in the next run "
+        "(GitHub did not answer: Server Error (HTTP 500))"
+    ) in text
 
 
 def test_progress_goes_to_a_terminal_on_stderr(

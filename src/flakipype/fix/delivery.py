@@ -7,7 +7,7 @@ from typing import Protocol
 
 from flakipype.fix.state import OpenedPull, Proposal
 from flakipype.fix.texts import commit_body
-from flakipype.fix.verify import Stage, Verification, Verifier
+from flakipype.fix.verify import Verification, Verifier
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import CommitRequest, PullRequest, PullRequestText
 
@@ -105,6 +105,4 @@ class Delivery:
             return self._verifier.begin(verification, text)
         # The pull request is open: it must still be counted and audited, whatever went wrong.
         except Exception as error:  # noqa: BLE001 - becomes the verification's outcome
-            return replace(
-                verification, stage=Stage.DONE, outcome=f"Verification could not start: {error}"
-            )
+            return self._verifier.stop(verification, f"it could not start: {error}")
