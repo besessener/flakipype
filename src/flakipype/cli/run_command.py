@@ -7,7 +7,7 @@ from rich.text import Text
 
 from flakipype.agent.tools import Mode
 from flakipype.cli import wiring
-from flakipype.cli.errors import EXIT_INCOMPLETE, command_errors, error_console
+from flakipype.cli.errors import EXIT_INCOMPLETE, LOGIN_EXPIRED, command_errors, error_console
 from flakipype.cli.run_report import render_run, run_as_json
 from flakipype.cli.scan_command import ScanOptions
 from flakipype.store.lock import RunLockedError
@@ -52,6 +52,8 @@ def run(  # noqa: PLR0913 - Typer maps every command line option to one paramete
         typer.echo(json.dumps(run_as_json(report), indent=2))
     else:
         typer.echo(render_run(report))
+    if report.login_expired:
+        errors.print(LOGIN_EXPIRED)
     if not report.complete:
         raise typer.Exit(EXIT_INCOMPLETE)
 

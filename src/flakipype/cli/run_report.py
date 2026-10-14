@@ -25,7 +25,7 @@ def render_run(report: RunReport) -> str:
         *_block("Verification", [_pull_line(pull) for pull in report.pulls]),
         _budget_line(report),
         *_block("Stopped by", list(report.stops)),
-        *_block("Problems", list(report.problems)),
+        *_block("Problems", [*(report.scan.problems if report.scan else []), *report.problems]),
     ]
     return "\n".join(lines)
 
@@ -61,7 +61,8 @@ def _pull_line(pull: OpenedPull) -> str:
     if pull.verified:
         return f"{name}: {verification.outcome.splitlines()[0]}"
     done = len(verification.results)
-    return f"{name}: {done} of {verification.wanted} runs, continues in the next run"
+    unread = f" ({verification.detail})" if verification.detail else ""
+    return f"{name}: {done} of {verification.wanted} runs, continues in the next run{unread}"
 
 
 def _budget_line(report: RunReport) -> str:

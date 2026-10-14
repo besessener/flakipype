@@ -58,6 +58,14 @@ class FixPushedError(FixDeliveryError):
     """The commit was pushed but no pull request opened; it counts against the limits."""
 
 
+class FixGitHubError(ToolError):
+    """GitHub failed before the push, not the fix: the fix may work on the next try."""
+
+    def __init__(self, error: GitHubApiError) -> None:
+        super().__init__(fix_refusal(error))
+        self.login_expired = error.is_authentication_problem
+
+
 class FixPulls(Protocol):
     def access(self, repository: str) -> RepositoryAccess: ...
 
@@ -80,7 +88,7 @@ def _from_github() -> Generator[None]:
     try:
         yield
     except GitHubApiError as error:
-        raise ToolError(fix_refusal(error)) from error
+        raise FixGitHubError(error) from error
 
 
 class FixService:
@@ -171,8 +179,6 @@ class FixService:
                 verification = self._verifier.poll(pull.verification)
             except ApiRateLimitError:
                 return notes
-            except GitHubApiError:
-                continue
             if self.pulls is not pulls:
                 return []
             pulls[index] = replace(pull, verification=verification)

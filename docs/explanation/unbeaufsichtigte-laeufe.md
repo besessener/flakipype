@@ -45,6 +45,11 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    Scan, den das Rate-Limit von GitHub gestoppt hat, beendet den Schritt
    hier: Untersuchungen würden nur sehen, wie GitHub ihre Werkzeuge
    ablehnt, also warten sie und die Korrekturen auf den nächsten Lauf.
+   Lässt GitHub die Läufe eines Repositorys nicht auflisten (zum Beispiel
+   ein Fine-grained-Token ohne „Actions: read“), ist dieses Repository gar
+   nicht gescannt: Der Lauf geht weiter, ist aber unvollständig (Exit-Code
+   1). Einzelne Jobs oder Logs, die sich nicht lesen ließen, stehen nur unter
+   `Problems:`; der nächste Scan liest sie erneut.
 4. **Untersuchen** der instabilen und wiederkehrenden Befunde, wie
    `flakipype investigate` es macht: Gecachte Urteile werden
    wiederverwendet, bis ein Befund einen neueren Fehlschlag hat. Ein Befund,
@@ -63,8 +68,9 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    Commit, zu dem sich kein Pull Request öffnen ließ), bis sie einen neueren
    Fehlschlag haben, damit ein Lauf nicht jeden Tag für dieselbe abgelehnte
    Korrektur bezahlt. Ein Modellfehler während der Korrektur oder ihrer
-   Prüfung ist ein Problem des Laufs (Exit-Code 1) und wird beim nächsten
-   Mal erneut versucht. Eine Korrektur bekommt höchstens die Zeit, die dem
+   Prüfung und ein GitHub-Fehler vor dem Push (zum Beispiel beim Prüfen des
+   Push-Zugriffs) sind Probleme des Laufs (Exit-Code 1) und werden beim
+   nächsten Mal erneut versucht. Eine Korrektur bekommt höchstens die Zeit, die dem
    Lauf noch bleibt, auch wenn `fix.max_seconds` länger ist. Ein gepushter
    Commit, zu dem sich kein Pull Request öffnen ließ, zählt gegen die
    Pull-Request-Limits wie ein geöffneter.
@@ -123,14 +129,17 @@ Fehler: den Pull Request oder warum es keinen gibt (kein Urteil, eine
 Einstufung, die flakipype nicht korrigiert, ein Urteil, dessen Prüfung nicht
 laufen konnte, ein Limit, eine nicht gepushte Korrektur). Weitere Zeilen
 nennen die Limits, die einen Schritt gestoppt haben (`Stopped by:`), und die
-Fehler (`Problems:`). `--json` gibt dasselbe als ein Objekt mit
-`schema_version` 1 aus, einschließlich des Diffs jeder nicht gepushten
-Korrektur.
+Fehler (`Problems:`), die des Scans zuerst. Eine Verifikation, deren letzte
+Abfrage GitHub nicht beantwortet hat, nennt den Fehler hinter ihrer Zeile.
+Antwortet GitHub mit HTTP 401, sagt die Standardfehlerausgabe zusätzlich,
+dass du dich mit `flakipype setup` neu anmelden musst. `--json` gibt
+dasselbe als ein Objekt mit `schema_version` 1 aus, einschließlich des Diffs
+jeder nicht gepushten Korrektur.
 
 | Code | Bedeutung |
 | --- | --- |
 | 0 | Der Lauf ist fertig geworden; ein erreichtes Budget oder Zeitlimit ist ein normales Ende und wird in der Zusammenfassung genannt |
-| 1 | Etwas war unvollständig: Der Scan hat vorzeitig aufgehört, GitHub oder das Modell sind fehlgeschlagen, eine Untersuchung oder eine Auslieferung ist fehlgeschlagen |
+| 1 | Etwas war unvollständig: Der Scan hat vorzeitig aufgehört oder die Läufe eines Repositorys nicht auflisten können, GitHub oder das Modell sind fehlgeschlagen, eine Untersuchung oder eine Auslieferung ist fehlgeschlagen |
 | 2 | Nicht bereit: keine Konfiguration, kein Key, ein nicht erreichbarer Schlüsselbund, `gh` nicht angemeldet oder sein Token abgelaufen (geprüft vor dem Scan), ein anderer `--owner` als der konfigurierte |
 | 3 | Ein anderes `flakipype run` hält die Sperre |
 

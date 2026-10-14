@@ -253,6 +253,7 @@ def test_repository_errors_are_reported_and_skipped(cache: ScanCache) -> None:
     report = service(actions, cache).scan(request())
 
     assert report.complete
+    assert report.repositories_not_read == 1
     assert len(report.ranking.flaky) == 1
     assert report.problems == [
         f"{APP}: too many runs per minute; GitHub listed only some.",

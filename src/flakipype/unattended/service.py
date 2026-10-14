@@ -15,6 +15,7 @@ from flakipype.agent.workcopy import unified_diff
 from flakipype.fix.service import (
     FIXABLE,
     FixDeliveryError,
+    FixGitHubError,
     FixNotMadeError,
     FixPushedError,
     FixUnavailableError,
@@ -66,6 +67,7 @@ class _Progress:
     notes: list[str] = field(default_factory=list)
     stops: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    login_expired: bool = False
 
 
 @dataclass(frozen=True)
@@ -84,12 +86,17 @@ class RunReport:
     # Limits that ended a step early, and errors that left the run incomplete.
     stops: tuple[str, ...]
     problems: tuple[str, ...]
+    # GitHub answered 401: the login needs renewing before the next run can work.
+    login_expired: bool = False
 
     @property
     def complete(self) -> bool:
         """A reached limit is a normal end; a stopped scan, an error or a failed step is not."""
         investigated = all(result.status in _NORMAL_ENDS for result in self.results)
-        scanned = self.scan is not None and self.scan.complete
+        # A repository whose runs could not be listed was not scanned at all.
+        scanned = (
+            self.scan is not None and self.scan.complete and not self.scan.repositories_not_read
+        )
         return scanned and investigated and not self.problems
 
 
@@ -132,6 +139,7 @@ class RunService:
                 self._scan_and_fix(deadline)
             except GitHubApiError as error:
                 self._progress.problems.append(f"GitHub: {error}")
+                self._progress.login_expired |= error.is_authentication_problem
             if self._gate.mode is Mode.AUTO:
                 self._poll_until(deadline)
         finally:
@@ -247,8 +255,10 @@ class RunService:
             reason = _first_line(str(error))
             if isinstance(error, FixPushedError):
                 self._remember(finding, host, f"pushed, no pull request: {reason}")
-            self._progress.problems.append(reason)
-            return _outcome(finding, FixOutcomeKind.FAILED, reason)
+            return self._failed(finding, reason)
+        except FixGitHubError as error:
+            self._progress.login_expired |= error.login_expired
+            return self._failed(finding, str(error))
         except FixNotMadeError as error:
             reason = _first_line(str(error))
             self._remember(finding, host, reason)
@@ -256,6 +266,10 @@ class RunService:
         except ToolError as error:
             return _outcome(finding, FixOutcomeKind.SKIPPED, str(error))
         return _outcome(finding, FixOutcomeKind.OPENED, text.splitlines()[0])
+
+    def _failed(self, finding: Finding, reason: str) -> FixOutcome:
+        self._progress.problems.append(reason)
+        return _outcome(finding, FixOutcomeKind.FAILED, reason)
 
     def _kept(self, finding: Finding, host: str) -> FixOutcome:
         # A declined push always leaves its proposal behind.
@@ -328,6 +342,7 @@ class RunService:
             tokens=workspace.tokens, pull_requests=workspace.fixes.opened,
             actions=workspace.actions.used, limits=self._limits,
             stops=tuple(progress.stops), problems=tuple(progress.problems),
+            login_expired=progress.login_expired,
         )  # fmt: skip
 
 

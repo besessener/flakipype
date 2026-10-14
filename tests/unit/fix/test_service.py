@@ -311,7 +311,7 @@ def test_poll_moves_verifications_and_notes_finished_ones(cache: ScanCache) -> N
     assert world.fixes.poll() == []
 
 
-def test_poll_waits_for_the_rate_limit_and_skips_errors(cache: ScanCache) -> None:
+def test_poll_waits_for_the_rate_limit_and_records_errors(cache: ScanCache) -> None:
     world = FixWorld(cache)
     opened_fix(world)
     opened_fix(world)
@@ -319,13 +319,20 @@ def test_poll_waits_for_the_rate_limit_and_skips_errors(cache: ScanCache) -> Non
 
     world.github.errors["commit_runs"] = ApiRateLimitError("rate limit", 403)
     assert world.fixes.poll() == []
+    assert world.fixes.pulls == before
     world.github.errors["commit_runs"] = SERVER_ERROR
     assert world.fixes.poll() == []
 
-    assert world.fixes.pulls == before
+    assert [pull.verification.detail for pull in world.fixes.pulls] == [
+        "GitHub did not answer: Server Error (HTTP 500)"
+    ] * 2
+    assert [pull.verification.stage for pull in world.fixes.pulls] == [Stage.WAITING] * 2
     assert (
         world.github.calls.count("commit_runs octo-org/app .github/workflows/e2e.yml c0ffee1") == 3
     )
+    del world.github.errors["commit_runs"]
+    world.fixes.poll()
+    assert world.fixes.pulls == before
 
 
 def test_a_poll_never_writes_into_pull_requests_replaced_meanwhile(

@@ -47,6 +47,8 @@ class Verification:
     outcome: str = ""
     # Whether flakipype may dispatch the workflow when no push or pull_request run starts.
     dispatchable: bool = False
+    # Why the last poll could not read GitHub; the next poll tries again.
+    detail: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "started": self.started.isoformat()}
@@ -135,8 +137,9 @@ class Verifier:
         except GitHubApiError as error:
             # A lookup that keeps failing must not keep the verification waiting forever.
             if not waited_long_enough:
-                raise
+                return replace(verification, detail=f"GitHub did not answer: {error}")
             return self._finish(verification, f"GitHub did not answer: {error}")
+        verification = replace(verification, detail="")
         runs = [run for run in found if run.event in _EVENTS]
         if runs:
             watched = self._actions.watch(self._run(verification, run_id=runs[0].run_id))
@@ -236,7 +239,7 @@ class Verifier:
             self._github.comments.comment(verification.repository, verification.pull_number, text)
         except GitHubApiError as error:
             text += f"\n(The comment could not be posted on the pull request: {error})"
-        return replace(verification, stage=Stage.DONE, outcome=text)
+        return replace(verification, stage=Stage.DONE, outcome=text, detail="")
 
 
 def _did_not_run(job: str) -> str:

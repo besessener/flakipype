@@ -211,6 +211,41 @@ def test_a_github_error_ends_the_run_with_a_problem(cache: ScanCache) -> None:
     assert report.problems == ("GitHub: Bad credentials (HTTP 401)",)
     assert report.scan is None
     assert not report.complete
+    assert report.login_expired
+
+
+@pytest.mark.parametrize(
+    ("error", "login_expired"),
+    [(GitHubApiError("Bad credentials (HTTP 401)", 401), True), (SERVER_ERROR, False)],
+)
+def test_github_failing_before_the_push_fails_the_fix_and_the_run(
+    cache: ScanCache, error: GitHubApiError, *, login_expired: bool
+) -> None:
+    world = RunWorld(cache)
+    world.github.errors["access"] = error
+
+    report = run_once(world)
+
+    assert kinds(report) == [(1, FixOutcomeKind.FAILED), REAL_BUG]
+    assert report.problems == (f"GitHub: {error}",)
+    assert report.login_expired is login_expired
+    assert not report.complete
+
+
+def test_a_repository_whose_runs_cannot_be_listed_makes_the_run_incomplete(
+    cache: ScanCache,
+) -> None:
+    world = RunWorld(cache)
+    world.source.runs_by_repository["octo-org/app"] = GitHubApiError(
+        "Resource not accessible by integration (HTTP 403)", 403
+    )
+
+    report = run_once(world)
+
+    assert report.scan is not None
+    assert report.scan.repositories_not_read == 1
+    assert report.problems == ()
+    assert not report.complete
 
 
 def test_failed_investigations_make_the_run_incomplete(cache: ScanCache) -> None:
