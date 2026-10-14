@@ -42,7 +42,7 @@ Außerhalb von poe:
 
 | Option | Bedeutung |
 | --- | --- |
-| `--mode auto\|ask` | `auto` (Standard) pusht Draft-PRs innerhalb der Limits; `ask` meldet nur, was es tun würde |
+| `--mode auto\|ask` | `auto` (Standard) pusht Draft-PRs innerhalb der Limits, aber nur Korrekturen an reiner Dokumentation; die übrigen bereitet es vor und meldet sie; `ask` meldet nur, was es tun würde |
 | `--days N`, `--repo NAME` | Wie bei `scan` |
 | `--owner NAME` | Muss der konfigurierte `github.owner` sein (Groß- und Kleinschreibung egal): Ein Lauf korrigiert nur diesen Owner; jeder andere endet mit Code 2 |
 | `--json` | Die Zusammenfassung als JSON ausgeben (`schema_version` 1) |

@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from flakipype.agent.workcopy import FileChange
+from flakipype.fix.checks import executable_paths
 from flakipype.fix.verify import Stage, Verification
 
 
@@ -28,6 +29,16 @@ class Proposal:
     @property
     def repository(self) -> str:
         return self.verification.repository
+
+    @property
+    def needs_person(self) -> str:
+        """Why only a person may push it, even in auto mode; empty when auto may."""
+        if self.warnings:
+            return f"the diff has warnings: {'; '.join(self.warnings)}"
+        code = executable_paths(list(self.changes))
+        if code:
+            return f"it changes files that can run as code: {', '.join(code)}"
+        return ""
 
     def to_dict(self) -> dict[str, Any]:
         return {

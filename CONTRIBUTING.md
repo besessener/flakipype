@@ -29,8 +29,8 @@ Ausführlich, auch für Windows mit Docker und act:
 | CLI ausprobieren | `uv run flakipype --version` |
 
 Tests rufen nie das echte GitHub oder ein echtes Modell auf: GitHub ist ein
-`gh`-Stub, der aufgezeichnetes JSON abspielt, das Modell ein lokaler
-Fake-Anthropic-Server
+`gh`-Stub, der aufgezeichnetes JSON abspielt, das Modell eine gefälschte
+Messages API auf einem `httpx2.MockTransport`
 ([Test-Doubles](docs/reference/qualitaetssicherung.md#test-doubles)). Eine
 TUI-Änderung bekommt einen Textual-Pilot-Test, eine neue Ansicht einen
 Snapshot.

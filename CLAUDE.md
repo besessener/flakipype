@@ -11,8 +11,10 @@ fixes them through pull requests. It has a rich terminal chat (Textual) with
 slash commands and headless commands for cron and a systemd timer. Full docs:
 [docs/README.md](docs/README.md) (German, Diátaxis).
 
-- **Entry point**: Typer CLI, `src/flakipype/cli.py`.
-- **Packages** under `src/flakipype/`: `tui`, `agent`, `llm`, `github`,
+- **Entry point**: Typer CLI, the package `src/flakipype/cli/`
+  (`cli/__init__.py`); `cli/wiring.py` is the composition root.
+- **Packages** under `src/flakipype/`: `cli`, `tui`, `unattended`,
+  `investigate`, `fix`, `actions`, `agent`, `setup`, `scan`, `llm`, `github`,
   `store`, `flaky`, `config`. Responsibilities and allowed imports:
   [architektur.md](docs/explanation/architektur.md).
 - **LLM**: Anthropic Messages API only (api.anthropic.com or Azure AI
@@ -97,7 +99,9 @@ and say so; never work around it quietly. Reasoning lives in
 - **Split by responsibility** along the boundaries import-linter enforces
   (`uv run poe arch`). `flaky` is pure: it takes values as parameters and
   never reaches for the network, the filesystem, `gh`, the database or the
-  clock. Hard-to-reach coverage means extract the logic, not force the test.
+  clock. Only `cli/wiring.py` reads the clock (ruff `TID251`); only `github`
+  and `setup.daemon` start processes. Hard-to-reach coverage means extract
+  the logic, not force the test.
 - **Clean code, as applied here:** intent-revealing names, no abbreviations;
   small functions with guard clauses; zero to two parameters, else a
   keyword-only parameter set or a dataclass, never a boolean flag; command-query
@@ -115,8 +119,9 @@ and say so; never work around it quietly. Reasoning lives in
   German and address the reader as „du“; everything else is English — UI,
   prompts, identifiers, comments, logs and this file.
 - **Tests:** assert behaviour, not implementation. GitHub is faked with a
-  `gh` stub replaying recorded JSON, the model with a local fake Anthropic
-  server; TUI changes get a Textual Pilot test (and a snapshot for new views).
+  `gh` stub replaying recorded JSON, the model with a fake Messages API on an
+  `httpx2.MockTransport`; TUI changes get a Textual Pilot test (and a
+  snapshot for new views).
 - **Docs sync:** a change to behaviour, setup, configuration, architecture or
   a design decision updates the matching `docs/` file in the same change. The
   root `README.md` stays short.

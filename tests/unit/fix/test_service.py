@@ -20,6 +20,7 @@ from support.fake_fix import (
     CHANGE,
     COMMIT,
     FIX_COMMIT,
+    PROSE,
     TITLE,
     FakeFixer,
     FixWorld,
@@ -147,7 +148,7 @@ def test_the_confirmation_shows_facts_the_model_text_and_the_diff(cache: ScanCac
     )
     assert request.model_text == f"{TITLE}\n\nThe test counts rows before the import finished."
     assert "+await rows.waitFor()" in request.diff
-    assert request.needs_person == ""
+    assert request.needs_person == f"it changes files that can run as code: {CHANGE.path}"
     assert (request.confirm_label, request.decline_label) == ("Push", "Don't push")
     (fix_request,) = world.fixer.requests
     assert (fix_request.commit, fix_request.default_branch) == (COMMIT, "main")
@@ -179,7 +180,15 @@ def test_warnings_need_a_person(cache: ScanCache) -> None:
         "4 files · +5 −2 · tests/e2e/scan.spec.ts, .github/workflows/e2e.yml, a.txt …"
     )
     assert request.details[-2:] == ("Warnings:", f"⚠ changes .github/: {E2E}")
-    assert request.needs_person == "the diff has warnings"
+    assert request.needs_person == f"the diff has warnings: changes .github/: {E2E}"
+
+
+def test_only_a_fix_of_documentation_may_be_pushed_without_a_person(cache: ScanCache) -> None:
+    world = FixWorld(cache, fixer=FakeFixer([fixed((PROSE,))]))
+
+    request = world.fixes.prepare(target()).request
+
+    assert request.needs_person == ""
 
 
 def test_a_proposal_is_shown_again_until_it_is_discarded(cache: ScanCache) -> None:

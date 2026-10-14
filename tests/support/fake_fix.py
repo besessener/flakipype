@@ -30,6 +30,8 @@ EXPLANATION = "The test counts rows before the import finished."
 CHANGE = FileChange(
     "tests/e2e/scan.spec.ts", "await page.waitForTimeout(500)\n", "await rows.waitFor()\n"
 )
+# Auto mode pushes only documentation; every other change waits for a person.
+PROSE = FileChange("docs/testing.md", "Wait 500 ms for the rows.\n", "Wait for the rows.\n")
 
 
 @dataclass

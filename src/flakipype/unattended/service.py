@@ -281,9 +281,8 @@ class RunService:
                 "(report only, kept for the chat)"
             )
             return _outcome(finding, FixOutcomeKind.KEPT, text, diff=diff)
-        warnings = "; ".join(proposal.warnings)
-        self._remember(finding, host, f"the diff has warnings: {warnings}")
-        text = f"not pushed: the diff has warnings: {warnings} (kept for the chat)"
+        self._remember(finding, host, proposal.needs_person)
+        text = f"not pushed: {proposal.needs_person} (kept for the chat)"
         return _outcome(finding, FixOutcomeKind.KEPT, text, diff=diff)
 
     def _remember(self, finding: Finding, host: str, reason: str) -> None:

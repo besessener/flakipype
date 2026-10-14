@@ -64,7 +64,8 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    wie im Chat ([Korrekturen](korrekturen.md)). Übersprungen werden: Befunde
    mit einem offenen Pull Request von flakipype oder ohne Push-Zugriff sowie
    Befunde, deren Korrektur ein früherer `auto`-Lauf nicht gepusht hat
-   (Warnungen, keine Korrektur, vom Reviewer abgelehnt oder ein gepushter
+   (ausführbarer Code, Warnungen, keine Korrektur, vom Reviewer abgelehnt
+   oder ein gepushter
    Commit, zu dem sich kein Pull Request öffnen ließ), bis sie einen neueren
    Fehlschlag haben, damit ein Lauf nicht jeden Tag für dieselbe abgelehnte
    Korrektur bezahlt. Ein Modellfehler während der Korrektur oder ihrer
@@ -91,11 +92,17 @@ Fortschritt geht auf die Standardfehlerausgabe, und nur auf einem Terminal.
 | | `auto` (Standard) | `ask` |
 | --- | --- | --- |
 | Scan, Untersuchung, Fixer und Reviewer | laufen | laufen |
-| Push und Draft-Pull-Request (`critical`) | laufen im Rahmen der Budgets, wenn der Diff keine Warnung hat | laufen nicht: werden mit ihrem Diff berichtet |
+| Push und Draft-Pull-Request (`critical`) | laufen im Rahmen der Budgets, wenn die Korrektur nur Dokumentation ändert und keine Warnung hat | laufen nicht: werden mit ihrem Diff berichtet |
 | Verifikations-Reruns der eigenen Korrektur-Branches des Laufs (`write`) | laufen im Rahmen der Budgets | keine: Pull Requests früherer Läufe warten auf den nächsten `auto`-Lauf |
-| Korrektur mit Warnung (verbirgt Fehlschläge, greift nach außen, `.github/`) | nicht gepusht, aufbewahrt | aufbewahrt |
+| Korrektur an [ausführbarem Code](korrekturen.md#modi) oder mit Warnung (verbirgt Fehlschläge, greift nach außen, `.github/`) | nicht gepusht, aufbewahrt | aufbewahrt |
 | Eine nicht gepushte Korrektur | gemerkt, bis der Befund wieder fehlschlägt | nicht gemerkt |
 | Draft-Pull-Request | immer | – |
+
+Fast jede Korrektur eines flaky Tests ändert Code. Ein `auto`-Lauf öffnet
+für sie keinen Pull Request, sondern bereitet sie vor, lässt sie prüfen und
+meldet sie mit ihrem Diff; pushen kannst du sie aus dem Chat (unten). Die
+Musterliste der Warnungen und der Reviewer sind dabei Hilfen, keine Sperre:
+Die Sperre ist die Regel für ausführbaren Code.
 
 `ask` ohne Fenster ist ein Probelauf, der trotzdem durch das Gate geht: Das
 `HeadlessGate` beantwortet jede `write`- und `critical`-Anfrage mit `report
@@ -110,12 +117,11 @@ eigenen Korrektur-Branches; die Läufe des Scans werden nur gelesen.
 flakipype run · octo-org · auto · 2026-10-12 06:02–06:41 CEST
 Scan: 42 repositories, 1,204 runs, 5 flaky, 2 recurring error
 Investigated: 2 (1 flaky_test, 1 real_bug), 3 verdicts from the cache
-Fixes: #1 octo-org/app › E2E › e2e: Opened draft pull request #57: https://github.com/octo-org/app/pull/57 (branch flakipype/fix-e2e-7c41d0).
+Fixes: #1 octo-org/app › E2E › e2e: not pushed: it changes files that can run as code: tests/e2e/scan.spec.ts (kept for the chat)
        #2 octo-org/app › CI › lint: not fixed: real bug, which flakipype does not fix
        #4 octo-org/api › CI › test: not pushed: the diff has warnings: changes .github/: .github/workflows/ci.yml (kept for the chat)
        #6 octo-org/api › CodeQL › analyze: not investigated again: an earlier run ended without a verdict (no_verdict: …), and it has not failed since
 Verification: octo-org/app#51: flakipype verification: E2E passed 3 of 3 runs on this branch.
-              octo-org/app#57: 1 of 3 runs, continues in the next run
 Budget: pull requests today 1 of 3 · actions today 4 of 20 · tokens 412,000 of 1,000,000 (today 412,000 of 3,000,000)
 ```
 
@@ -166,9 +172,9 @@ Aktionslimits des Laufs, der sie startet.
 Kopie des Scans, der Urteile und der aufbewahrten Korrekturen des Laufs, im
 Modus `ask`. Die gestarteten Läufe und Pull Requests des Laufs bleiben bei
 der Laufsitzung, sodass nur der Timer sie abfragt und nichts zweimal erneut
-ausgeführt wird. Eine aufbewahrte Korrektur mit Warnungen funktioniert dann
-wie im Chat: `/fix N` zeigt die Bestätigung mit den Warnungen und dem
-vollständigen Diff.
+ausgeführt wird. Eine aufbewahrte Korrektur an ausführbarem Code oder mit
+Warnungen funktioniert dann wie im Chat: `/fix N` zeigt die Bestätigung mit
+den Warnungen und dem vollständigen Diff.
 
 ## Budgets
 
@@ -406,10 +412,15 @@ Fake-Modell getestet.
 
 - Der Lauf-Service über GitHub-Fakes im Speicher und einem Fake-Agenten und
   -Fixer, mit einer einstellbaren Uhr: beide Modi, eine Korrektur mit
-  Warnungen, eine abgelehnte Korrektur, die nicht erneut versucht wird (auch
-  in einem Probelauf), jedes Limit, das Zeitlimit mit übrig gebliebenen
-  Verifikationen, die der nächste `auto`-Lauf zu Ende führt, eine
-  fehlgeschlagene Auslieferung, die Sitzung, die er für den Chat hinterlässt.
+  Warnungen, eine an ausführbarem Code, eine abgelehnte Korrektur, die nicht
+  erneut versucht wird (auch in einem Probelauf), jedes Limit, das Zeitlimit
+  mit übrig gebliebenen Verifikationen, die der nächste `auto`-Lauf zu Ende
+  führt, eine fehlgeschlagene Auslieferung, die Sitzung, die er für den Chat
+  hinterlässt.
+- Die echte Verdrahtung in `open_run` gegen den `gh`-Stub: Ein Lauf in `ask`
+  meldet nur (`report only`) und schickt keinen schreibenden Aufruf an
+  GitHub; nach den Pull Requests, die Läufe heute schon geöffnet haben, lehnt
+  er jede weitere Korrektur mit der Budget-Meldung ab.
 - Eine Zeile für jeden Befund, der nicht korrigiert wurde, und
   Untersuchungen ohne Urteil, die der nächste Lauf bis zu einem neueren
   Fehlschlag überspringt.

@@ -33,8 +33,9 @@ _BY_FINDING = frozenset({"/investigate", "/why", "/rerun", "/dispatch", "/fix"})
 _MODES = {
     Mode.ASK: "Mode: ask. Every action asks you first.",
     Mode.AUTO: (
-        "Mode: auto. Actions run without asking, within this session's budgets; a fix with "
-        "warnings is not pushed, and fixes are always draft pull requests."
+        "Mode: auto. Actions run without asking, within this session's budgets; a fix is "
+        "pushed only when it changes nothing but documentation and has no warnings, and "
+        "fixes are always draft pull requests."
     ),
 }
 

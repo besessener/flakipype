@@ -1,7 +1,7 @@
 import pytest
 
 from flakipype.agent.workcopy import FileChange
-from flakipype.fix.checks import DiffLimits, change_errors, change_warnings
+from flakipype.fix.checks import DiffLimits, change_errors, change_warnings, executable_paths
 
 LIMITS = DiffLimits(max_files=2, max_changed_lines=4)
 WORKFLOW = ".github/workflows/e2e.yml"
@@ -264,3 +264,38 @@ def test_several_warnings_for_one_file_are_sorted_and_deduplicated() -> None:
         f"reaches out: {WORKFLOW} (adds `curl`, adds `secrets.`)",
         f"changes .github/: {WORKFLOW}",
     ]
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["README.md", "docs/guide/flaky.MD", "CHANGES.rst", "docs/setup.adoc", "notes.markdown"],
+)
+def test_plain_documentation_does_not_run_as_code(path: str) -> None:
+    assert executable_paths([edit(path, "Wait for the rows, not for a fixed time.\n")]) == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/test_scan.py", "conftest.py", "Makefile", "action.yml", "package.json",
+        "pyproject.toml", "requirements.txt", "notes.txt", "pytest.ini", "scripts/build",
+        "README", "docs/index.html", "CLAUDE.md", "docs/AGENTS.md", ".github/README.md",
+        ".claude/notes.md", "tests/fixtures/expected.md", "spec/data/README.md",
+    ],
+)  # fmt: skip
+def test_everything_else_counts_as_code(path: str) -> None:
+    assert executable_paths([edit(path, "Wait for the rows.\n")]) == [path]
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        ">>> wait_for_rows()\n",
+        "```python\nimport os\n```\n",
+        "~~~\nmake test\n~~~\n",
+        ".. doctest::\n\n   x\n",
+        "Intro\n  .. testcode::\n",
+    ],
+)
+def test_documentation_that_tools_can_run_counts_as_code(after: str) -> None:
+    assert executable_paths([edit("docs/guide.md", after, "Old text.\n")]) == ["docs/guide.md"]
