@@ -75,10 +75,15 @@ oder dem eingestellten Modus.
 
 Alles, was an das Modell geht, durchläuft zuerst die Maskierung von Secrets
 (`agent/masking.py`): der konfigurierte API-Key selbst, Tokens von GitHub,
-Anthropic, AWS und Slack, JWTs, Blöcke privater Schlüssel (PEM und PGP),
-Zugangsdaten in URLs, Bearer-Tokens und Zuweisungen im Stil von
-`password=`/`token:` (auch mit ausgerichteten Leerzeichen) werden zu
-`[masked: …]`. Ein Header eines privaten Schlüssels ohne seine END-Zeile
+Anthropic, AWS, Slack, GitLab, npm, PyPI, Google und Stripe, JWTs, Blöcke
+privater Schlüssel (PEM und PGP), Zugangsdaten in URLs, Bearer- und
+Basic-Authentifizierung, Passwörter von `docker login` und Zuweisungen im
+Stil von `password=`/`token:` werden zu `[masked: …]`. Zuweisungen erkennt
+die Maskierung auch mit ausgerichteten Leerzeichen, mit Zusätzen am Namen
+(`DB_PASSWORD_PROD=`, `DJANGO_SECRET_KEY=`), für `key`, `auth`, `sig` und
+`credentials` (etwa `AccountKey=` in Azure-Verbindungszeichenfolgen, `sig=`
+in SAS-URLs, `"auth":` in der Docker-Konfiguration) und mit dem Wert in der
+nächsten YAML-Zeile. Ein Header eines privaten Schlüssels ohne seine END-Zeile
 maskiert nur den Schlüsselinhalt danach, nie den Rest des Prompts. Jedes
 Muster läuft in linearer Zeit, sodass eine präparierte Log-Zeile die
 Maskierung nicht aufhalten kann. GitHubs eigenes `***` bleibt, wie es ist.

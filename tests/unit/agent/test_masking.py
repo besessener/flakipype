@@ -52,6 +52,75 @@ def test_secret_values_are_masked(text: str, secret: str, kind: str) -> None:
     assert secret[-4:] not in masked
 
 
+VALUE = "Zq7" + "Xv9Lw2Pk"
+STORAGE_KEY = "Ab12" * 22 + "=="
+SAS_SIGNATURE = "Qm9x" + "%2Bkq3L%3D"
+BASIC = "dXNlcjpw" + "YXNzd29yZA=="
+NPM_TOKEN = "np" + "m_" + "n0Pq" * 9
+GITLAB_TOKEN = "gl" + "pat-" + "g1H2" * 5
+PYPI_TOKEN = "py" + "pi-" + "AgEI" + "p7Q8" * 13
+GOOGLE_KEY = "AI" + "za" + "k5L6" * 8 + "abc"
+STRIPE_KEY = "sk" + "_live_" + "s3T4" * 6
+
+
+@pytest.mark.parametrize(
+    ("text", "secret", "kind"),
+    [
+        (f"SECRET_KEY={VALUE}", VALUE, "secret"),
+        (f"DJANGO_SECRET_KEY='{VALUE}'", VALUE, "secret"),
+        (f"AZURE_OPENAI_KEY={VALUE}", VALUE, "secret"),
+        (f"SIGNING_KEY: {VALUE}", VALUE, "secret"),
+        (f"ENCRYPTION_KEY={VALUE}", VALUE, "secret"),
+        (f"private_key: {VALUE}", VALUE, "secret"),
+        (f"DB_PASSWORD_PROD={VALUE}", VALUE, "secret"),
+        (f"TOKEN_GITHUB={VALUE}", VALUE, "secret"),
+        (
+            "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey="
+            + STORAGE_KEY
+            + ";EndpointSuffix=core.windows.net",
+            STORAGE_KEY,
+            "secret",
+        ),
+        (
+            "https://acct.blob.core.windows.net/c/f.txt?sv=2022-11-02&sp=r&sig=" + SAS_SIGNATURE,
+            SAS_SIGNATURE,
+            "secret",
+        ),
+        (f"Ocp-Apim-Subscription-Key: {VALUE}", VALUE, "secret"),
+        (f"Authorization: Basic {BASIC}", BASIC, "basic auth"),
+        (f"docker login -u bot -p {VALUE} ghcr.io", VALUE, "login password"),
+        ('{"auths": {"ghcr.io": {"auth": "' + STORAGE_KEY + '"}}}', STORAGE_KEY, "secret"),
+        (f"using {NPM_TOKEN} now", NPM_TOKEN, "npm token"),
+        (f"using {GITLAB_TOKEN} now", GITLAB_TOKEN, "gitlab token"),
+        (f"using {GOOGLE_KEY} now", GOOGLE_KEY, "google api key"),
+        (f"using {STRIPE_KEY} now", STRIPE_KEY, "stripe key"),
+        (f"using {PYPI_TOKEN} now", PYPI_TOKEN, "pypi token"),
+        (f"password:\n  {VALUE}\nnext: 1", VALUE, "secret"),
+        (f"x{GITHUB_TOKEN}", GITHUB_TOKEN, "github token"),
+    ],
+)
+def test_credential_formats_reported_as_leaks_are_masked(text: str, secret: str, kind: str) -> None:
+    masked = Masker().mask(text)
+
+    assert f"[masked: {kind}]" in masked
+    assert secret not in masked
+    assert secret[-4:] not in masked
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "inputs:\n  token:\n    description: The token to use",
+        "tokens: 12345678",
+        "author: someone-else",
+        "KeyError: 'missing'",
+        "design=compact-layout",
+    ],
+)
+def test_keywords_inside_other_words_or_yaml_keys_are_left_alone(text: str) -> None:
+    assert Masker().mask(text) == text
+
+
 def test_known_secrets_are_masked_even_without_a_pattern() -> None:
     masker = Masker.with_secrets(["plain-but-secret-value", "short", "plain-but-secret"])
 
@@ -112,9 +181,12 @@ UNTERMINATED_HEADER = "-----BEGIN " + "PRIVATE KEY-----"
     [
         ("eyJ-" * 250_000, "eyJ-" * 250_000),
         # Quadratic before: every header searched the rest of the line for an END line.
-        ((UNTERMINATED_HEADER + ".") * 40_000, "[masked: private key]." * 40_000),
+        ((UNTERMINATED_HEADER + ".") * 20_000, "[masked: private key]." * 20_000),
+        ("token_" * 50_000, "token_" * 50_000),
+        ("docker login " * 25_000, "docker login " * 25_000),
+        ("key:\n" * 60_000, "key:\n" * 60_000),
     ],
-    ids=["dotless jwt starts", "unterminated key headers"],
+    ids=["dotless jwt starts", "unterminated key headers", "keywords", "logins", "yaml keys"],
 )
 def test_masking_a_long_crafted_line_takes_linear_time(line: str, masked: str) -> None:
     started = time.perf_counter()

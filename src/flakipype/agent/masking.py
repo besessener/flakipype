@@ -21,18 +21,36 @@ _UNTERMINATED_KEY = re.compile(f"-----BEGIN {_KEY_LABEL}" + r"(?:[A-Za-z0-9+/=:,
 
 # Ordered: specific token formats first, generic assignments last. Group "keep" is preserved.
 # JWTs and private keys are masked before these, by _mask_jwts and _mask_private_keys.
+# Every quantifier either consumes a run it cannot backtrack into or is bounded: linear time.
 _PATTERNS = (
+    # Prefixes this distinctive need no word boundary; tokens are often glued to other text.
     ("github token", re.compile(
-        r"(?P<keep>)\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})"
+        r"(?P<keep>)(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})"
     )),
     ("anthropic key", re.compile(r"(?P<keep>)\bsk-ant-[A-Za-z0-9_\-]{20,}")),
     ("aws key", re.compile(r"(?P<keep>)\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")),
     ("slack token", re.compile(r"(?P<keep>)\bxox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("gitlab token", re.compile(r"(?P<keep>)glpat-[A-Za-z0-9_-]{20,}")),
+    ("npm token", re.compile(r"(?P<keep>)npm_[A-Za-z0-9]{36,}")),
+    ("pypi token", re.compile(r"(?P<keep>)pypi-[A-Za-z0-9_-]{50,}")),
+    ("google api key", re.compile(r"(?P<keep>)AIza[A-Za-z0-9_-]{35}")),
+    ("stripe key", re.compile(r"(?P<keep>)[rs]k_(?:live|test)_[A-Za-z0-9]{16,}")),
     ("url credentials", re.compile(r"(?P<keep>://)[^/\s:@]+:[^/\s@]+(?=@)")),
     ("bearer token", re.compile(r"(?i)(?P<keep>bearer )[A-Za-z0-9._~+/=-]{16,}")),
+    ("basic auth", re.compile(
+        r"(?i)(?P<keep>authorization:[ \t]*basic[ \t]+)[A-Za-z0-9+/=]{8,}"
+    )),
+    ("login password", re.compile(
+        r"(?P<keep>\bdocker[ \t]+login(?:[ \t]+\S+){0,8}?[ \t]+(?:-p|--password)[ \t]+)"
+        r"(?!\[masked)[^\s\"',;]{6,}"
+    )),
+    # A keyword, optionally with suffixes like _KEY or _PROD (SECRET_KEY, DB_PASSWORD_PROD),
+    # then = or :, where a YAML value may sit on the next line unless that line is a key.
     ("secret", re.compile(
-        r"(?i)(?P<keep>(?:password|passwd|secret|token|api[_-]?key|access[_-]?key)"
-        r"[\"']?[ \t]*[:=][ \t]*[\"']?)(?!\[masked)[^\s\"',;]{6,}"
+        r"(?i)(?P<keep>(?:password|passwd|secret|token|credentials?|api[_-]?key|access[_-]?key"
+        r"|account[_-]?key|(?<![a-z0-9])(?:key|auth|sig))(?:[_.-][a-z0-9]{1,30}){0,3}"
+        r"[\"']?[ \t]*(?:=|:(?:[ \t]*\r?\n[ \t]*(?![ \t]*\S*:))?)[ \t]*[\"']?)"
+        r"(?!\[masked)[^\s\"',;]{6,}"
     )),
 )  # fmt: skip
 
