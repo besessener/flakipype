@@ -203,7 +203,7 @@ Meldung sagt, was existiert: zum Beispiel „Branch flakipype/fix-e2e-7c41d0
 created; the commit failed: … The branch was left as it is; flakipype never
 deletes branches.“ Kann die Verifikation nicht starten (zum Beispiel weil
 die Workflow-Datei nicht lesbar ist), bleibt der Pull Request offen, und das
-Ergebnis sagt, warum.
+Ergebnis und ein Kommentar am Pull Request sagen, warum.
 
 Die Beschreibung des Pull Requests: Die vom Code geschriebenen Warnungen
 stehen vor jedem Text des Modells, und der Text des Modells ist ein Zitat, in
@@ -269,9 +269,9 @@ Standardbranch instabil ist:
    Verifikation, da ein Rerun dasselbe Ereignis wiederholt. Die Verifikation
    stoppt auch vorzeitig, wenn ein Lauf weder durchgelaufen noch
    fehlgeschlagen endet (zum Beispiel abgebrochen), nicht innerhalb von
-   `actions.watch_hours` fertig wird, GitHub einen Rerun ablehnt oder das
-   Aktionsbudget aufgebraucht ist; der Kommentar sagt, nach wie vielen Läufen
-   und warum. Ein Rate-Limit pausiert sie nur bis zur nächsten Abfrage.
+   `actions.watch_hours` fertig wird, GitHub einen Rerun oder Dispatch
+   ablehnt oder das Aktionsbudget aufgebraucht ist; der Kommentar sagt, nach
+   wie vielen Läufen und warum. Ein Rate-Limit pausiert sie nur bis zur nächsten Abfrage.
 4. Das Ergebnis wird als Kommentar am Pull Request veröffentlicht, vom Code
    geschrieben:
 

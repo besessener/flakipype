@@ -105,9 +105,17 @@ class Verifier:
     def _dispatch(self, verification: Verification) -> Verification:
         try:
             dispatched = self._actions.dispatch_authorised(self._run(verification, run_id=None))
+        except ApiRateLimitError:
+            raise
+        except GitHubApiError as error:
+            return self._finish(verification, f"GitHub refused the dispatch: {error}")
         except ActionRefusedError as error:
             return self._finish(verification, str(error))
         return replace(verification, stage=Stage.WATCHING, watched=(dispatched.number,))
+
+    def stop(self, verification: Verification, reason: str) -> Verification:
+        """Ends the verification and says why on the pull request."""
+        return self._finish(verification, reason)
 
     def poll(self, verification: Verification) -> Verification:
         if verification.stage is Stage.WAITING:
