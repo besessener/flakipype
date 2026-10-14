@@ -3,8 +3,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from anthropic import Anthropic
-
 from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.finding_tools import ContentsSource, FindingTools, LogSource
 from flakipype.agent.investigator import Investigator, Outcome, Status
@@ -13,21 +11,14 @@ from flakipype.agent.messages import ModelSettings
 from flakipype.agent.prompts import data_block
 from flakipype.agent.reviewer import Reviewer, ReviewUnavailableError
 from flakipype.agent.tools import Mode, PolicyGate, deny_all
-from flakipype.agent.verdict import Decision, Review, Verdict, apply_review
+from flakipype.agent.verdict import Decision, Review, ReviewState, Verdict, apply_review
 from flakipype.flaky.findings import Evidence, Finding
-
-_NOT_REVIEWED = "not reviewed"
-_SECOND_REVIEW_UNAVAILABLE = "revised, second review unavailable"
-
-
-def reviewed(review: str) -> bool:
-    """Whether a reviewer answered; False when the review could not run, e.g. an HTTP error."""
-    return bool(review) and not review.startswith((_NOT_REVIEWED, _SECOND_REVIEW_UNAVAILABLE))
+from flakipype.llm.client import ModelClient
 
 
 @dataclass(frozen=True)
 class AgentConfig:
-    client: Anthropic
+    client: ModelClient
     settings: ModelSettings
     limits: Limits
     masker: Masker
@@ -42,6 +33,8 @@ class AgentConfig:
 class FindingResult:
     status: Status
     verdict: Verdict | None
+    review_state: ReviewState
+    # For display only; decisions use review_state.
     review: str
     detail: str
     tokens: int
@@ -85,30 +78,41 @@ def investigate_finding(
     text = finding_text(finding)
     reviewer = Reviewer(client=config.client, settings=config.settings, budget=budget)
 
-    def result(outcome: Outcome, verdict: Verdict | None, review: str) -> FindingResult:
+    def result(
+        outcome: Outcome, verdict: Verdict | None, *, state: ReviewState, review: str = ""
+    ) -> FindingResult:
         return FindingResult(
-            outcome.status, verdict, review, outcome.detail, budget.tokens, budget.rounds
+            outcome.status, verdict, state, review, outcome.detail, budget.tokens, budget.rounds
         )
 
     outcome = investigator.start(text)
     if outcome.verdict is None:
-        return result(outcome, None, "")
+        return result(outcome, None, state=ReviewState.NOTHING_SUBMITTED)
     try:
         review = reviewer.review(text, outcome.verdict, config.masker)
     except ReviewUnavailableError as error:
-        return result(outcome, outcome.verdict, f"{_NOT_REVIEWED}: {error}")
+        return result(
+            outcome, outcome.verdict, state=ReviewState.UNAVAILABLE, review=f"not reviewed: {error}"
+        )
     if review.decision is not Decision.REVISE:
         return result(
-            outcome, apply_review(outcome.verdict, review), describe_review(review, revised=False)
-        )
+            outcome, apply_review(outcome.verdict, review), state=ReviewState.ANSWERED,
+            review=describe_review(review, revised=False),
+        )  # fmt: skip
     revised = investigator.revise(review.questions)
     if revised.verdict is None:
-        note = f"sent back, revision ended: {revised.detail}"
-        return result(outcome, apply_review(outcome.verdict, review), note)
+        return result(
+            outcome, apply_review(outcome.verdict, review), state=ReviewState.REVISION_ENDED,
+            review=f"sent back, revision ended: {revised.detail}",
+        )  # fmt: skip
     try:
         second = reviewer.review(text, revised.verdict, config.masker)
     except ReviewUnavailableError as error:
-        return result(revised, revised.verdict, f"{_SECOND_REVIEW_UNAVAILABLE}: {error}")
+        return result(
+            revised, revised.verdict, state=ReviewState.UNAVAILABLE,
+            review=f"revised, second review unavailable: {error}",
+        )  # fmt: skip
     return result(
-        revised, apply_review(revised.verdict, second), describe_review(second, revised=True)
-    )
+        revised, apply_review(revised.verdict, second), state=ReviewState.ANSWERED,
+        review=describe_review(second, revised=True),
+    )  # fmt: skip

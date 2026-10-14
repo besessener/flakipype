@@ -49,8 +49,9 @@ Aufgabe des Agenten.
 aus dem Scan (zitierbar als `finding`), die Werkzeuge und nichts über andere
 Befunde, damit ein Fall den nächsten nicht beeinflussen kann. Er entscheidet
 selbst, welche Werkzeuge er in welcher Reihenfolge aufruft, und schließt mit
-einem Aufruf von `submit_verdict` ab. Mehrere Investigators laufen parallel
-(Standard 3).
+einem Aufruf von `submit_verdict` ab; ruft er ihn in einer Antwort mehrmals
+auf, zählt der erste gültige, und die übrigen bekommen ein Fehlerergebnis.
+Mehrere Investigators laufen parallel (Standard 3).
 
 **Zitatprüfung.** Deterministischer Code, kein Modell: Jeder Beleg muss auf
 ein Werkzeugergebnis dieser Untersuchung verweisen, und sein Zitat muss in
@@ -67,7 +68,11 @@ konkreten Fragen; der Investigator macht damit einmal weiter) oder
 `downgrade` (niedrigere Sicherheit oder `unclear`, mit Begründung). Der
 Reviewer stuft ein Urteil nie hoch; das erzwingt der Code. Ein zweites
 `revise` nach der einen Runde zählt als niedrige Sicherheit. Kommt kein
-Review zurück, wird das Urteil als nicht geprüft angezeigt.
+Review zurück, wird das Urteil als nicht geprüft angezeigt. Endet die
+Überarbeitung nach einem `revise` ohne neues Urteil (etwa an einem Limit oder
+einem HTTP-Fehler), bleibt das erste Urteil mit niedriger Sicherheit stehen,
+gilt aber ebenfalls als nicht geprüft: Es wird nicht gespeichert und nicht
+korrigiert.
 
 **Orchestrator.** Im Chat: ein Modell mit eigener Unterhaltung und vier
 lesenden Werkzeugen – `scan`, `list_findings`, `investigate` (Befunde nach
@@ -96,7 +101,7 @@ parallel laufen; nur Modellaufrufe laufen gleichzeitig.
 | `run_history(limit)` | Zeitleiste dieses Workflows: Lauf, Commit, Branch, Ereignis, Ergebnis, Signatur pro fehlgeschlagenem Job | Scan-Cache + Laufliste |
 | `compare_commits(base, head)` | Commits (SHA, Autor, Datum, Betreff) und geänderte Dateien mit Zeilenzahlen; kein vollständiger Diff | `gh api …/compare/base...head` |
 | `file_diff(base, head, path)` | Unified Diff einer Datei, höchstens 300 Zeilen | `gh api …/compare` (Patch pro Datei) |
-| `read_file(path, ref)` | Dateiinhalt zu einem Commit, höchstens 400 Zeilen mit Zeilennummern; Bereiche für längere Dateien | `gh api …/contents` |
+| `read_file(path, ref)` | Dateiinhalt zu einem Commit, höchstens 400 Zeilen mit Zeilennummern; Bereiche für längere Dateien; nur Pfade im Repository (kein `..`, kein absoluter Pfad) | `gh api …/contents` |
 | `workflow_file(ref)` | Die Workflow-YAML des Befunds zu einem Commit | `gh api …/contents` |
 | `submit_verdict(...)` | Beendet die Untersuchung | — |
 
@@ -203,7 +208,8 @@ immer neben – nie statt – den Fakten des Scans.
   Chat-Modell innerhalb eines `tool-data`-Elements. Investigators haben kein
   Werkzeug, das etwas ändert.
 - **Maskierung vor dem Senden.** Alles, was an das Modell geht, durchläuft
-  zuerst die Maskierung.
+  zuerst die Maskierung, an einer Stelle: im `ModelClient`, durch den jede
+  Anfrage geht.
 - **Policy-Gate im Code.** Die Werkzeugregistrierung legt die Risikostufe
   jedes Werkzeugs fest; das Gate läuft vor jedem Aufruf. Ein Werkzeug mit
   `write` oder `critical` muss dem Gate eine vom Code gebaute
@@ -247,7 +253,9 @@ Zusammenfassung angezeigt.
 
 Im Chat zählt die Zeit innerhalb eines Werkzeugs (ein Scan, Untersuchungen)
 nicht gegen das Zeitlimit der Frage, weil diese eigene Limits haben. Beendet
-ein Limit oder ein Modellfehler eine Frage, sagt der Chat das, und die
+ein Limit oder ein Modellfehler eine Frage, sagt der Chat das (bei einem
+Modellfehler mit seiner Art und dem nächsten Schritt, dieselben wie beim
+Verbindungstest in [Modell verbinden](../how-to/modell-verbinden.md)), und die
 unfertige Frage wird aus der Unterhaltung des Modells entfernt; unterwegs
 gefundene Urteile bleiben erhalten. Dasselbe passiert, wenn das Modell
 ablehnt oder mit nichts antwortet (eine leere Antwort in der Unterhaltung
@@ -300,8 +308,12 @@ Befunds auftaucht oder sich seine Art ändert (etwa von instabil zu behoben);
 `/investigate --fresh` erzwingt ein neues. Das hält wiederholte Läufe
 günstig und stabil. Nur Urteile, auf die der Reviewer geantwortet hat,
 werden behalten: Konnte das Review nicht laufen (etwa wegen eines
-HTTP-Fehlers), beginnt die nächste Untersuchung von vorn, und Urteile, die
-ältere Versionen so behalten haben, werden nicht wiederverwendet.
+HTTP-Fehlers) oder endete die Überarbeitung ohne Urteil, beginnt die nächste
+Untersuchung von vorn. Ob ein Urteil geprüft ist, steht als eigener Zustand
+neben dem Urteil (`answered`, `unavailable`, `revision_ended`,
+`nothing_submitted`); der Text des Reviews dient nur der Anzeige. Urteile,
+die ältere Versionen ohne diesen Zustand gespeichert haben, gelten als nicht
+geprüft und werden nicht wiederverwendet.
 Untersuchungen ohne Urteil werden ebenfalls nicht behalten; nur
 [unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md) merken sie sich, damit
 sie nicht jeden Tag für dieselbe Sackgasse bezahlen.

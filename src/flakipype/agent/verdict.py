@@ -71,6 +71,23 @@ class Decision(StrEnum):
     DOWNGRADE = "downgrade"
 
 
+class ReviewState(StrEnum):
+    """How the review of a verdict or fix went; code decides on this, the review text is shown."""
+
+    # The reviewer answered on the final submission, whatever it decided.
+    ANSWERED = "answered"
+    # A review could not run, e.g. on an HTTP error; the submission itself may be fine.
+    UNAVAILABLE = "unavailable"
+    # Sent back for revision, and the revision ended without a new submission.
+    REVISION_ENDED = "revision_ended"
+    # Nothing was submitted, so there was nothing to review.
+    NOTHING_SUBMITTED = "nothing_submitted"
+
+    @property
+    def reviewed(self) -> bool:
+        return self is ReviewState.ANSWERED
+
+
 class Review(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

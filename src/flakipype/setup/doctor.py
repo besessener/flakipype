@@ -19,6 +19,14 @@ KEY_IN_A_FILE = (
 )
 
 
+def gh_token_in_a_file(host: str) -> str:
+    return (
+        "Where no desktop session unlocks the system keyring, gh cannot read a token it keeps "
+        f"there; keep it in gh's own config file: `gh auth login --hostname {host} "
+        "--insecure-storage`."
+    )
+
+
 class CheckStatus(StrEnum):
     OK = "ok"
     WARNING = "warning"
@@ -48,7 +56,8 @@ def run_checks(service: SetupService) -> list[Check]:
         service.settings_from(draft)
     except InvalidSetupError as error:
         detail = f"Incomplete ({error}) in {service.paths.config_file}"
-        configuration = Check("Configuration", CheckStatus.FAILED, detail, RUN_SETUP)
+        next_step = _complete_step(service, error)
+        configuration = Check("Configuration", CheckStatus.FAILED, detail, next_step)
         return [configuration, gh_check(service), github_check(service, settings.github.host)]
     configuration = Check("Configuration", CheckStatus.OK, str(service.paths.config_file))
     return [
@@ -58,6 +67,13 @@ def run_checks(service: SetupService) -> list[Check]:
         github_check(service, settings.github.host),
         Check("Scan target", CheckStatus.OK, f"{settings.github.owner} on {settings.github.host}"),
     ]
+
+
+def _complete_step(service: SetupService, error: InvalidSetupError) -> str:
+    """Setup may have kept the key in a keyring this environment cannot reach; setup again loops."""
+    if error.errors.keys() == {"llm.api_key"} and service.keeps_key_in_file:
+        return KEY_IN_A_FILE
+    return RUN_SETUP
 
 
 def llm_check(service: SetupService, draft: SetupDraft) -> Check:
@@ -85,7 +101,8 @@ def github_check(service: SetupService, host: str) -> Check:
         return Check(name, CheckStatus.FAILED, GH_NOT_INSTALLED, RUN_SETUP)
     status = service.github_auth(host)
     if isinstance(status, NotAuthenticated):
-        return Check(name, CheckStatus.FAILED, "Not logged in.", RUN_SETUP)
+        next_step = f"{RUN_SETUP} {gh_token_in_a_file(host)}"
+        return Check(name, CheckStatus.FAILED, "Not logged in.", next_step)
     if not isinstance(status, Authenticated):
         return Check(name, CheckStatus.FAILED, status.detail, RUN_SETUP)
     if status.scopes is None:

@@ -2,6 +2,7 @@ from dataclasses import replace
 
 import pytest
 
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
 from flakipype.fix.delivery import DeliveryError
 from flakipype.fix.state import Proposal
@@ -36,7 +37,7 @@ def proposal(*changes: FileChange) -> Proposal:
     return Proposal(
         finding=2, identity="flaky|octo-org/app|e2e", base="main", commit=COMMIT, title=TITLE,
         explanation=EXPLANATION, body="body", changes=changes or (CHANGE,), warnings=(),
-        accepted=True, review="accepted: ok",
+        accepted=True, review_state=ReviewState.ANSWERED, review="accepted: ok",
         verification=replace(verification(), pull_number=0, commit=COMMIT),
     )  # fmt: skip
 
@@ -168,7 +169,11 @@ def test_verification_that_cannot_start_leaves_the_pull_request(cache: ScanCache
 
     assert opened.url.endswith("/pull/12")
     assert opened.verification.stage is Stage.DONE
-    assert opened.verification.outcome == ("Verification could not start: Server Error (HTTP 500)")
+    assert opened.verification.outcome == (
+        "flakipype verification: cannot verify automatically: it could not start: "
+        "Server Error (HTTP 500)."
+    )
+    assert world.github.comments == [opened.verification.outcome]
 
 
 def test_an_unexpected_error_after_the_draft_still_returns_the_pull_request(
@@ -182,5 +187,6 @@ def test_an_unexpected_error_after_the_draft_still_returns_the_pull_request(
     assert opened.url.endswith("/pull/12")
     assert opened.verification.stage is Stage.DONE
     assert opened.verification.outcome == (
-        "Verification could not start: day is out of range for month"
+        "flakipype verification: cannot verify automatically: it could not start: "
+        "day is out of range for month."
     )

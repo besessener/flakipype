@@ -2,7 +2,7 @@
 
 from flakipype.github.auth import NotAuthenticated, auth_status
 from flakipype.github.gh import GhCli
-from flakipype.setup.doctor import RUN_SETUP
+from flakipype.setup.doctor import RUN_SETUP, gh_token_in_a_file
 
 
 class NotReadyError(Exception):
@@ -13,7 +13,10 @@ def check_logged_in(gh: GhCli, host: str) -> None:
     """A missing or expired login is a setup problem, not a failed run; other answers go on."""
     status = auth_status(gh)
     if isinstance(status, NotAuthenticated):
-        message = f"gh is not logged in to {host}, or its token expired. {RUN_SETUP}"
+        message = (
+            f"gh is not logged in to {host}, or its token expired. {RUN_SETUP} "
+            f"{gh_token_in_a_file(host)}"
+        )
         raise NotReadyError(message)
 
 

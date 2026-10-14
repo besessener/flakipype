@@ -1,8 +1,10 @@
 import io
 import json
+import os
+import signal
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
 import click
@@ -14,13 +16,14 @@ from flakipype.agent.tools import Mode
 from flakipype.cli import app, errors, wiring
 from flakipype.cli.run_report import render_run
 from flakipype.config.settings import GitHubSettings, Settings
-from flakipype.github.actions import ApiRateLimitError, GitHubApiError
+from flakipype.github.actions import ApiRateLimitError, GitHubApiError, Repository
 from flakipype.scan.service import ScanRequest
 from flakipype.store.database import ScanCache
 from flakipype.store.lock import RunLockedError
 from flakipype.unattended.limits import Usage
 from flakipype.unattended.service import RunService
 
+from support.fake_actions import FakeActions
 from support.fake_investigation import world
 from support.fake_run import ClassifyingAgent, RunWorld, limits
 
@@ -82,7 +85,7 @@ def test_run_in_ask_mode_as_json(opened: list[tuple[Mode, ScanRequest]]) -> None
     fix, real_bug = exported["fixes"]
     assert (fix["finding"], fix["kind"]) == (1, "kept")
     assert (real_bug["finding"], real_bug["kind"]) == (3, "skipped")
-    assert "+await rows.waitFor()" in fix["diff"]
+    assert "+Wait for the rows." in fix["diff"]
     assert exported["investigations"][0] == {
         "finding": 1, "status": "completed", "classification": "flaky_test",
         "review": "accepted: ok", "from_cache": False,
@@ -177,6 +180,51 @@ def test_an_incomplete_run_exits_with_one(
 
     assert result.exit_code == 1
     assert "Problems: GitHub: Bad credentials (HTTP 401)" in result.stdout
+    assert errors.LOGIN_EXPIRED in click.unstyle(result.stderr)
+
+
+def test_scan_problems_and_unread_verifications_are_in_the_summary(cache: ScanCache) -> None:
+    world = RunWorld(cache, limits=limits(minutes=10))
+    world.source.repositories_found.append(Repository("octo-org/docs", "main"))
+    world.source.runs_by_repository["octo-org/docs"] = GitHubApiError("Not Found (HTTP 404)", 404)
+    world.github.files[".github/workflows/ci.yml"] = b"on: pull_request\njobs: {}\n"
+    world.github.errors["commit_runs"] = GitHubApiError("Server Error (HTTP 500)", 500)
+
+    text = render_run(world.service().run())
+
+    assert "Problems: octo-org/docs: could not list runs: Not Found (HTTP 404)" in text
+    assert (
+        "octo-org/app#12: 0 of 3 runs, continues in the next run "
+        "(GitHub did not answer: Server Error (HTTP 500))"
+    ) in text
+
+
+@dataclass
+class TerminatedGitHub(FakeActions):
+    """systemd stops the run while it reads the first log."""
+
+    def job_log(self, repository: str, job_id: int) -> str | None:
+        os.kill(os.getpid(), signal.SIGTERM)
+        return super().job_log(repository, job_id)
+
+
+def test_sigterm_ends_the_run_with_its_summary(
+    monkeypatch: pytest.MonkeyPatch, cache: ScanCache
+) -> None:
+    world_run = RunWorld(cache, source=TerminatedGitHub(**vars(world())))
+
+    @contextmanager
+    def open_run(*_: object) -> Generator[RunService]:
+        yield world_run.service()
+
+    monkeypatch.setattr(wiring, "open_run", open_run)
+    before = signal.getsignal(signal.SIGTERM)
+
+    result = runner.invoke(app, ["run"])
+
+    assert result.exit_code == 1
+    assert "Problems: stopped by SIGTERM before it finished" in result.stdout
+    assert signal.getsignal(signal.SIGTERM) == before
 
 
 def test_progress_goes_to_a_terminal_on_stderr(

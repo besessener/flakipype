@@ -37,15 +37,20 @@ printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive \
   Prozessliste oder im Shell-Verlauf auftaucht. Ohne `--api-key-stdin` bleibt
   der gespeicherte Key erhalten.
 - Auf Rechnern ohne System-Schlüsselbund landet der Key in
-  `~/.config/flakipype/secrets.json` mit Modus `0600`. Mit
-  `--secret-store file` bleibt er dort, auch wenn es einen Schlüsselbund gibt,
-  z. B. für einen [Timer](zeitgesteuert-ausfuehren.md), der ohne
-  Desktop-Sitzung läuft.
+  `~/.config/flakipype/secrets.json` mit Modus `0600`, ebenso, wenn du
+  keyring mit `PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`
+  abschaltest. Mit `--secret-store file` bleibt er dort, auch wenn es einen
+  Schlüsselbund gibt, z. B. für einen [Timer](zeitgesteuert-ausfuehren.md),
+  der ohne Desktop-Sitzung läuft.
+- Setup liest den Key nach dem Speichern zurück. Behält der Schlüsselbund ihn
+  nicht, meldet setup das mit Code 2 und dem Befehl mit
+  `--secret-store file`, statt „Saved“ zu melden.
 - Findet setup kein passendes `gh`, lädt es eines herunter und prüft es.
 
 Setup endet mit denselben Prüfungen wie `flakipype doctor` und beendet sich
 mit Code 1, wenn eine fehlschlägt, oder 2, wenn die Eingabe ungültig war oder
-der Schlüsselbund nicht gelesen werden kann.
+der Schlüsselbund nicht gelesen werden kann (auch, wenn er nicht innerhalb
+von 15 Sekunden antwortet).
 
 ## 3. Unbeaufsichtigt ausführen
 

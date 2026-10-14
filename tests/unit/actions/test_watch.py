@@ -159,6 +159,22 @@ def test_a_run_never_found_is_watched_for_a_limited_time() -> None:
     assert watcher.runs[0].state == "no longer watched"
 
 
+def test_a_run_github_keeps_refusing_ends_after_its_watch_time() -> None:
+    clock = Clock()
+    watcher = watch(FakeRuns(states={4: [GitHubApiError("Not Found (HTTP 404)", 404)]}), clock)
+    watcher.add(rerun())
+
+    assert watcher.poll() == []
+    clock.now = START + SIX_HOURS + timedelta(seconds=1)
+    notes = watcher.poll()
+
+    assert notes == [
+        "R1: stopped watching app · E2E #4/2 after 6 h; cannot read it: Not Found (HTTP 404)."
+    ]
+    assert watcher.runs[0].state == "no longer watched"
+    assert watcher.active == 0
+
+
 def test_a_rate_limit_stops_the_round_and_errors_are_shown() -> None:
     runs = FakeRuns(states={4: [GitHubApiError("gone (HTTP 404)", 404)],
                             5: [ApiRateLimitError("rate limit")]})  # fmt: skip

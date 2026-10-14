@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from flakipype.agent.budget import RunBudget
 from flakipype.agent.investigator import Status
 from flakipype.agent.pipeline import FindingResult
-from flakipype.agent.verdict import Verdict
+from flakipype.agent.verdict import ReviewState, Verdict
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.github.actions import Repository
 from flakipype.scan.service import ScanRequest
@@ -53,6 +53,7 @@ class FakeAgent:
     status: Status = Status.COMPLETED
     tokens: int = 1_000
     review: str = "accepted: ok"
+    review_state: ReviewState = ReviewState.ANSWERED
     crash_on: int | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -67,6 +68,10 @@ class FakeAgent:
             raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
         verdict = Verdict.model_validate(verdict_input("quote", "finding"))
         good = self.status is Status.COMPLETED
+        if not good:
+            return FindingResult(
+                self.status, None, ReviewState.NOTHING_SUBMITTED, "", "", self.tokens, 2
+            )
         return FindingResult(
-            self.status, verdict if good else None, self.review, "", self.tokens, 2
+            self.status, verdict, self.review_state, self.review, "", self.tokens, 2
         )

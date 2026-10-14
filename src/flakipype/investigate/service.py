@@ -7,11 +7,11 @@ from typing import Any, Protocol
 
 from flakipype.agent.budget import RunBudget
 from flakipype.agent.investigator import Status
-from flakipype.agent.pipeline import FindingResult, reviewed
-from flakipype.agent.verdict import Verdict
+from flakipype.agent.pipeline import FindingResult
+from flakipype.agent.verdict import ReviewState, Verdict
 from flakipype.flaky.findings import Evidence, Finding, FindingKind
 from flakipype.scan.progress import ProgressListener, ignore_progress
-from flakipype.scan.service import ScanReport, ScanRequest, ScanService
+from flakipype.scan.service import ScanReport, ScanRequest, ScanService, no_time_limit
 from flakipype.store.database import ScanCache
 
 DEFAULT_KINDS = (FindingKind.FLAKY, FindingKind.RECURRING)
@@ -68,24 +68,28 @@ class InvestigationResult:
     finding: Finding
     status: Status
     verdict: Verdict | None
+    # For display only; decisions use review_state.
     review: str
     detail: str
     tokens: int
     rounds: int
+    review_state: ReviewState = ReviewState.NOTHING_SUBMITTED
     from_cache: bool = False
 
     def stored(self) -> str:
         return json.dumps({
             "status": self.status.value,
             "verdict": self.verdict.model_dump(mode="json") if self.verdict else None,
-            "review": self.review, "detail": self.detail,
-            "tokens": self.tokens, "rounds": self.rounds,
+            "review_state": self.review_state.value, "review": self.review,
+            "detail": self.detail, "tokens": self.tokens, "rounds": self.rounds,
         })  # fmt: skip
 
     @classmethod
     def restored(cls, finding: Finding, stored: str) -> "InvestigationResult":
         data: dict[str, Any] = json.loads(stored)
         verdict = Verdict.model_validate(data["verdict"]) if data["verdict"] else None
+        # Verdicts stored before the state was kept count as not reviewed.
+        state = ReviewState(data.get("review_state", ReviewState.UNAVAILABLE))
         return cls(
             finding,
             Status(data["status"]),
@@ -94,6 +98,7 @@ class InvestigationResult:
             data["detail"],
             0,
             0,
+            review_state=state,
             from_cache=True,
         )
 
@@ -149,9 +154,13 @@ class InvestigationService:
         return self.investigate(report, request, on_event)
 
     def scan(
-        self, request: ScanRequest, on_progress: ProgressListener = ignore_progress
+        self,
+        request: ScanRequest,
+        on_progress: ProgressListener = ignore_progress,
+        *,
+        out_of_time: Callable[[], bool] = no_time_limit,
     ) -> ScanReport:
-        return self._scan.scan(request, on_progress)
+        return self._scan.scan(request, on_progress, out_of_time=out_of_time)
 
     def budget_for(self, request: InvestigationRequest) -> RunBudget:
         """The token budget investigate uses for the request; it counts even if a step crashes."""
@@ -191,7 +200,7 @@ class InvestigationService:
             if (
                 not result.from_cache
                 and result.status is Status.COMPLETED
-                and reviewed(result.review)
+                and result.review_state.reviewed
             ):
                 finding = result.finding
                 self._cache.save_verdict(
@@ -213,7 +222,7 @@ class InvestigationService:
                 continue
             restored = InvestigationResult.restored(finding, stored)
             # Older versions kept verdicts whose review failed; they are investigated again.
-            if reviewed(restored.review):
+            if restored.review_state.reviewed:
                 cached[finding.number] = restored
         return cached
 
@@ -271,5 +280,5 @@ class InvestigationService:
             return InvestigationResult(finding, Status.FAILED, None, "", detail, 0, 0)
         return InvestigationResult(
             finding, outcome.status, outcome.verdict, outcome.review, outcome.detail,
-            outcome.tokens, outcome.rounds,
+            outcome.tokens, outcome.rounds, review_state=outcome.review_state,
         )  # fmt: skip

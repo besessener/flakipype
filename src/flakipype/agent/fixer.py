@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from anthropic import Anthropic
 from anthropic.types import Message, TextBlock
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +14,7 @@ from flakipype.agent.messages import ModelSettings
 from flakipype.agent.prompts import FIXER_SYSTEM
 from flakipype.agent.tool_loop import LoopModel, LoopOutcome, LoopStatus, Submission, ToolLoop
 from flakipype.agent.tools import Mode, PolicyGate, Tool, deny_all
+from flakipype.llm.client import ModelClient
 
 SUBMIT_FIX = "submit_fix"
 _NUDGE = "Continue and finish by calling submit_fix, or say why the cause cannot be fixed."
@@ -76,14 +76,13 @@ class Fixer:
     def __init__(  # noqa: PLR0913 - collaborators of one fix, all keyword-only
         self,
         *,
-        client: Anthropic,
+        client: ModelClient,
         settings: ModelSettings,
         tools: list[Tool],
         budget: InvestigationBudget,
         masker: Masker,
         check: DiffCheck,
     ) -> None:
-        self._masker = masker
         self._check = check
         submission = Submission(
             name=SUBMIT_FIX,
@@ -100,7 +99,7 @@ class Fixer:
         self._loop = ToolLoop(model=model, tools=tools, gate=gate, submission=submission)
 
     def start(self, task: str) -> FixOutcome:
-        return _outcome(self._loop.start(self._masker.mask(task)))
+        return _outcome(self._loop.start(task))
 
     def revise(self, points: list[str]) -> FixOutcome:
         asked = "\n".join(f"- {point}" for point in points)

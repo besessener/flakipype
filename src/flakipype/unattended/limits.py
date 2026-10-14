@@ -5,16 +5,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from flakipype.actions.api import RunApi, WorkflowFiles
-from flakipype.actions.service import COVERED_BY_PUSH, ActionService, Origin
-from flakipype.agent.tools import Answer
+from flakipype.actions.service import ActionService, Origin
 from flakipype.config.settings import FixSettings, Settings
-from flakipype.store.audit import AuditEntry, AuditLog
+from flakipype.store.audit import AuditEntry, AuditLog, AuditStatus
 from flakipype.store.database import ScanCache
 
 DAY = timedelta(hours=24)
 _ACTIONS = frozenset({"rerun_failed", "rerun_run", "dispatch", "verify_rerun", "verify_dispatch"})
-_RAN = frozenset({Answer.AUTO.value, Answer.CONFIRMED.value, COVERED_BY_PUSH})
-_NOT_DONE = ("failed", "not pushed", "not run")
 
 
 @dataclass(frozen=True)
@@ -39,16 +36,14 @@ class RunLimits:
 
 def day_usage(entries: list[AuditEntry], tokens: int) -> Usage:
     """Pull requests and actions that runs started, from the audit entries of the last day."""
-    started = [
+    done = [
         entry
         for entry in entries
-        if entry.origin == Origin.RUN
-        and entry.answer in _RAN
-        and not entry.outcome.startswith(_NOT_DONE)
+        if entry.origin == Origin.RUN and entry.status is AuditStatus.DONE
     ]
     return Usage(
-        pull_requests=sum(entry.action == "fix" for entry in started),
-        actions=sum(entry.action in _ACTIONS for entry in started),
+        pull_requests=sum(entry.spent for entry in done if entry.action == "fix"),
+        actions=sum(entry.spent for entry in done if entry.action in _ACTIONS),
         tokens=tokens,
     )
 

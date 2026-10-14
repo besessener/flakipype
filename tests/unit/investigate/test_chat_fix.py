@@ -19,6 +19,7 @@ from support.fake_fix import (
     BRANCH,
     CHANGE,
     FIX_COMMIT,
+    PROSE,
     TITLE,
     FakeFixer,
     fixed,
@@ -110,7 +111,7 @@ def test_tokens_of_a_fix_count_even_without_a_fix(cache: ScanCache) -> None:
 
 
 def test_the_mode_switches_and_auto_runs_without_a_dialog(cache: ScanCache) -> None:
-    fakes = FixFakes()
+    fakes = FixFakes(fixer=FakeFixer([fixed((PROSE,))]))
     chat, asked = chat_with(cache, fakes)
 
     assert chat.handle("/mode")[1].text == "Mode: ask. Every action asks you first."
@@ -134,7 +135,7 @@ def test_auto_mode_does_not_push_a_fix_with_warnings(cache: ScanCache) -> None:
     chat.handle("/fix 1")
 
     assert note.text == (
-        "fix: not run in auto mode because the diff has warnings. "
+        f"fix: not run in auto mode because the diff has warnings: changes .github/: {CI}. "
         "The user can review it after switching to /mode ask."
     )
     assert "`fix` asked by command, not run in auto mode: not pushed" in (
@@ -143,6 +144,21 @@ def test_auto_mode_does_not_push_a_fix_with_warnings(cache: ScanCache) -> None:
     (request,) = asked
     assert request.details[-1] == f"⚠ changes .github/: {CI}"
     assert len(fakes.fixer.requests) == 1
+
+
+def test_auto_mode_does_not_push_a_fix_that_changes_code(cache: ScanCache) -> None:
+    fakes = FixFakes()
+    chat, asked = chat_with(cache, fakes)
+    chat.handle("/mode auto")
+
+    (_, note) = chat.handle("/fix 1")
+
+    assert note.text == (
+        f"fix: not run in auto mode because it changes files that can run as code: {CHANGE.path}. "
+        "The user can review it after switching to /mode ask."
+    )
+    assert asked == []
+    assert fakes.github.drafts == []
 
 
 def test_the_model_asks_for_changes_through_the_fix_tool(cache: ScanCache) -> None:
@@ -209,7 +225,7 @@ def test_sessions_from_before_fixes_resume_without_them(cache: ScanCache) -> Non
     chat.handle("/fix 1")
     document = json.loads(cache.sessions.load(1) or "{}")
     del document["fix"]
-    cache.sessions.update(1, now=NOW.isoformat(), data=json.dumps(document))
+    cache.sessions.update(1, now=NOW.isoformat(), data=json.dumps(document), tokens=0)
 
     chat.handle("/resume 1")
 

@@ -10,18 +10,23 @@ from flakipype.agent.fixer import FixStatus
 from flakipype.agent.investigator import Status
 from flakipype.agent.pipeline import FindingResult
 from flakipype.agent.tools import Mode
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings, Settings
 from flakipype.flaky.findings import Evidence, Finding
+from flakipype.flaky.model import JobResult
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import PullRequest
 from flakipype.github.runs import CommitRun
+from flakipype.scan.service import ScanStop
 from flakipype.store.database import ScanCache
 from flakipype.store.sessions import SessionKind
 from flakipype.unattended.limits import day_usage, run_limits_for
-from flakipype.unattended.service import FixOutcomeKind, RunReport
+from flakipype.unattended.service import FixOutcomeKind, RunReport, RunTerminatedError
 
-from support.fake_fix import CHANGE, FIX_COMMIT, Clock, FakeFixer, fixed
+from support.fake_actions import FakeActions
+from support.fake_fix import CHANGE, FIX_COMMIT, PROSE, Clock, FakeFixer, fixed
+from support.fake_investigation import world as github_world
 from support.fake_run import NOW, ClassifyingAgent, RunWorld, limits
 from support.fake_runs import passed_job, state
 
@@ -79,7 +84,7 @@ def test_the_run_session_is_named_in_local_time(cache: ScanCache) -> None:
 
 
 def test_ask_mode_only_reports_and_keeps_the_fix(cache: ScanCache) -> None:
-    world = RunWorld(cache, mode=Mode.ASK)
+    world = RunWorld(cache, mode=Mode.ASK, fixer=FakeFixer([fixed((CHANGE,))]))
 
     report = run_once(world)
 
@@ -113,6 +118,22 @@ def test_a_fix_with_warnings_is_kept_and_not_tried_again(cache: ScanCache) -> No
     assert first.complete
 
 
+def test_auto_mode_keeps_a_fix_that_changes_code_for_a_person(cache: ScanCache) -> None:
+    fixer = FakeFixer([fixed((PROSE, CHANGE))])
+    world = RunWorld(cache, fixer=fixer)
+
+    first = run_once(world)
+    second = run_once(RunWorld(cache, fixer=fixer))
+
+    assert first.fixes[0].kind is FixOutcomeKind.KEPT
+    assert first.fixes[0].text == (
+        f"not pushed: it changes files that can run as code: {CHANGE.path} (kept for the chat)"
+    )
+    assert world.github.drafts == []
+    assert cache.audit.since("2026")[0].answer == "not run in auto mode"
+    assert second.fixes[0].text.startswith("not tried again: an earlier run did not push its fix")
+
+
 def test_a_rejected_fix_is_remembered(cache: ScanCache) -> None:
     fixer = FakeFixer([fixed(accepted=False, review="rejected: it only waits longer")])
 
@@ -130,9 +151,11 @@ def test_a_rejected_fix_is_remembered(cache: ScanCache) -> None:
 @pytest.mark.parametrize(
     "result",
     [
-        FixResult(FixStatus.MODEL_ERROR, None, (), accepted=False, review="",
+        FixResult(FixStatus.MODEL_ERROR, None, (), accepted=False,
+                  review_state=ReviewState.NOTHING_SUBMITTED, review="",
                   detail="Error code: 529 - overloaded", tokens=5),
-        fixed(accepted=False, review="not reviewed: Error code: 529 - overloaded"),
+        fixed(accepted=False, review="not reviewed: Error code: 529 - overloaded",
+              review_state=ReviewState.UNAVAILABLE),
     ],
 )  # fmt: skip
 def test_a_model_error_during_the_fix_fails_the_run_and_is_tried_again(
@@ -211,6 +234,41 @@ def test_a_github_error_ends_the_run_with_a_problem(cache: ScanCache) -> None:
     assert report.problems == ("GitHub: Bad credentials (HTTP 401)",)
     assert report.scan is None
     assert not report.complete
+    assert report.login_expired
+
+
+@pytest.mark.parametrize(
+    ("error", "login_expired"),
+    [(GitHubApiError("Bad credentials (HTTP 401)", 401), True), (SERVER_ERROR, False)],
+)
+def test_github_failing_before_the_push_fails_the_fix_and_the_run(
+    cache: ScanCache, error: GitHubApiError, *, login_expired: bool
+) -> None:
+    world = RunWorld(cache)
+    world.github.errors["access"] = error
+
+    report = run_once(world)
+
+    assert kinds(report) == [(1, FixOutcomeKind.FAILED), REAL_BUG]
+    assert report.problems == (f"GitHub: {error}",)
+    assert report.login_expired is login_expired
+    assert not report.complete
+
+
+def test_a_repository_whose_runs_cannot_be_listed_makes_the_run_incomplete(
+    cache: ScanCache,
+) -> None:
+    world = RunWorld(cache)
+    world.source.runs_by_repository["octo-org/app"] = GitHubApiError(
+        "Resource not accessible by integration (HTTP 403)", 403
+    )
+
+    report = run_once(world)
+
+    assert report.scan is not None
+    assert report.scan.repositories_not_read == 1
+    assert report.problems == ()
+    assert not report.complete
 
 
 def test_failed_investigations_make_the_run_incomplete(cache: ScanCache) -> None:
@@ -240,14 +298,22 @@ def test_an_investigation_without_verdict_is_not_repeated_until_a_newer_failure(
     assert second.tokens == 0
 
 
-def test_every_investigated_finding_says_why_it_was_not_fixed(cache: ScanCache) -> None:
-    reviews = {1: "not reviewed: Error code: 400 - tool_choice is not supported"}
+@pytest.mark.parametrize(
+    ("state", "review"),
+    [
+        (ReviewState.UNAVAILABLE, "not reviewed: Error code: 400 - tool_choice is not supported"),
+        (ReviewState.REVISION_ENDED, "sent back, revision ended: Error code: 529 - overloaded"),
+    ],
+)
+def test_every_investigated_finding_says_why_it_was_not_fixed(
+    cache: ScanCache, state: ReviewState, review: str
+) -> None:
+    agent = ClassifyingAgent(reviews={1: (state, review)})
 
-    report = run_once(RunWorld(cache, agent=ClassifyingAgent(reviews=reviews)))
+    report = run_once(RunWorld(cache, agent=agent))
 
     unreviewed = (
-        "not fixed: the verdict was not reviewed (not reviewed: Error code: 400 - tool_choice "
-        "is not supported); the next run investigates it again"
+        f"not fixed: the verdict was not reviewed ({review}); the next run investigates it again"
     )
     assert [fix.text for fix in report.fixes] == [
         unreviewed,
@@ -327,7 +393,8 @@ class SlowFixer(FakeFixer):
 def test_the_time_limit_stops_before_the_scan_ends_and_between_fixes(cache: ScanCache) -> None:
     clock = Clock(NOW)
     both = ClassifyingAgent(flaky=frozenset({1, 3}))
-    report = run_once(RunWorld(cache, clock=clock, agent=both, fixer=SlowFixer(clock=clock)))
+    slow = SlowFixer([fixed((PROSE,))], clock=clock)
+    report = run_once(RunWorld(cache, clock=clock, agent=both, fixer=slow))
     none_left = run_once(RunWorld(cache, limits=limits(minutes=0)))
 
     assert kinds(report) == [(1, FixOutcomeKind.OPENED), REAL_BUG]
@@ -359,6 +426,33 @@ def test_no_investigation_starts_after_the_time_limit(cache: ScanCache) -> None:
     assert report.results[1].detail == "Not started: the run's time limit is reached."
     assert report.fixes[0].text == "not tried: the time limit of 120 minutes"
     assert report.stops == ("the time limit of 120 minutes",)
+
+
+@dataclass
+class SlowGitHub(FakeActions):
+    """Each job read takes an hour on the run's clock."""
+
+    clock: Clock = field(default_factory=Clock)
+
+    def attempt_jobs(self, repository: str, run_id: int, attempt: int) -> list[JobResult]:
+        self.clock.advance(hours=1)
+        return super().attempt_jobs(repository, run_id, attempt)
+
+
+def test_the_scan_stops_at_the_time_limit(cache: ScanCache) -> None:
+    clock = Clock(NOW)
+    source = SlowGitHub(**vars(github_world()), clock=clock)
+
+    report = run_once(RunWorld(cache, clock=clock, source=source))
+
+    assert [call for call in source.calls if call.startswith("jobs")] == [
+        "jobs octo-org/app 4/1",
+        "jobs octo-org/app 3/1",
+    ]
+    assert report.scan is not None
+    assert report.scan.stopped_by is ScanStop.TIME_LIMIT
+    assert (report.results, report.stops) == ((), ("the time limit of 120 minutes",))
+    assert not report.complete
 
 
 def test_a_fix_gets_at_most_the_time_the_run_has_left(cache: ScanCache) -> None:
@@ -415,6 +509,24 @@ def test_verifications_left_at_the_time_limit_continue_in_the_next_auto_run(
     assert third.fixes[0].text.startswith("An open flakipype pull request for #1 exists")
 
 
+def test_a_carried_run_github_keeps_refusing_ends_its_verification(cache: ScanCache) -> None:
+    first_world = verifying_world(cache, minutes=10)
+    run_once(first_world)
+    later = verifying_world(cache)
+    opened_meanwhile(first_world, later)
+    later.clock.advance(hours=7)
+    later.runs.states[91] = [GitHubApiError("Not Found (HTTP 404)", 404)]
+
+    report = run_once(later)
+
+    assert report.pulls[0].verified
+    assert report.pulls[0].verification.outcome.endswith(
+        "a run did not finish while it was watched; cannot read it: Not Found (HTTP 404)."
+    )
+    assert later.github.comments == [report.pulls[0].verification.outcome]
+    assert later.sleeps == [10.0]
+
+
 def test_pull_requests_taken_over_survive_a_run_that_dies_in_its_scan(
     cache: ScanCache,
 ) -> None:
@@ -460,6 +572,22 @@ def test_a_scan_stopped_by_the_rate_limit_investigates_nothing(cache: ScanCache)
         "GitHub's rate limit; investigations and fixes continue in the next run",
     )
     assert not report.complete
+
+
+def test_a_terminated_run_ends_with_its_summary(cache: ScanCache) -> None:
+    world = RunWorld(cache)
+    service = world.service()
+
+    def terminate_after_an_investigation(text: str) -> None:
+        if text.startswith("Investigated"):
+            raise RunTerminatedError("stopped by SIGTERM")
+
+    service.show_activity(terminate_after_an_investigation)
+    report = service.run()
+
+    assert report.problems == ("stopped by SIGTERM",)
+    assert not report.complete
+    assert cache.sessions.run_tokens_since("") == report.tokens > 0
 
 
 def test_activity_is_shown_while_it_runs(cache: ScanCache) -> None:

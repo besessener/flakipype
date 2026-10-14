@@ -1,7 +1,11 @@
 from pathlib import Path
 
+from keyring.backends import null
+
+from flakipype.config.secrets import KeyringSecretStore
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
-from flakipype.setup.doctor import Check, CheckStatus, run_checks
+from flakipype.setup.doctor import KEY_IN_A_FILE, RUN_SETUP, Check, CheckStatus, run_checks
+from flakipype.setup.service import SetupService
 
 from support.fake_gh import FakeGh
 from support.fake_setup import (
@@ -54,6 +58,37 @@ def test_unconfigured_machine_points_to_setup(tmp_path: Path, fake_gh: FakeGh) -
     ]
 
 
+def test_a_key_missing_from_the_file_points_to_the_file_store(
+    tmp_path: Path, fake_gh: FakeGh
+) -> None:
+    logged_in(fake_gh)
+    world = configured_world(tmp_path, fake_gh)
+    # As where setup kept the key in a keyring this environment cannot reach.
+    world.paths.secrets_file.unlink()
+
+    configuration = run_checks(world.service)[0]
+
+    assert configuration.status is CheckStatus.FAILED
+    assert "llm.api_key: is required" in configuration.detail
+    assert configuration.next_step == KEY_IN_A_FILE
+
+
+def test_a_key_missing_from_the_keyring_points_to_setup(tmp_path: Path, fake_gh: FakeGh) -> None:
+    logged_in(fake_gh)
+    world = configured_world(tmp_path, fake_gh)
+    service = SetupService(
+        paths=world.paths,
+        secrets=KeyringSecretStore(null.Keyring()),
+        gh=world.gh,
+        check_llm=world.llm,
+    )
+
+    configuration = run_checks(service)[0]
+
+    assert configuration.status is CheckStatus.FAILED
+    assert configuration.next_step == RUN_SETUP
+
+
 def test_unreadable_config_stops_early(tmp_path: Path, fake_gh: FakeGh) -> None:
     world = setup_world(tmp_path, fake_gh)
     world.paths.config_dir.mkdir(parents=True)
@@ -94,6 +129,7 @@ def test_not_logged_in(tmp_path: Path, fake_gh: FakeGh) -> None:
 
     assert login.status is CheckStatus.FAILED
     assert login.detail == "Not logged in."
+    assert "`gh auth login --hostname github.com --insecure-storage`" in login.next_step
 
 
 def test_missing_scopes_suggest_a_refresh(tmp_path: Path, fake_gh: FakeGh) -> None:

@@ -3,7 +3,14 @@
 flakipype ist ein einzelnes Python-Paket (`src/flakipype/`), aufgeteilt in
 Unterpakete nach Zuständigkeit. import-linter (`uv run poe arch`) erzwingt
 die Schichten: Eine höhere Schicht darf eine niedrigere importieren, nie
-umgekehrt, und Pakete auf derselben Schicht importieren einander nicht.
+umgekehrt, und Pakete auf derselben Schicht importieren einander nicht. Der
+Vertrag ist erschöpfend, ein neues Unterpaket muss also eine Schicht
+bekommen. Zwei weitere Verträge halten `flaky` rein (kein `os`, `pathlib`,
+`subprocess`, `sqlite3`, `socket`, `time`, `httpx2`, `anthropic` oder
+`config`) und erlauben `subprocess` nur in `github` und `setup/daemon.py`.
+Die Uhr liest nur `cli/wiring.py`: ruff verbietet `datetime.now`,
+`date.today`, `time.time` und ihre Verwandten überall sonst (`TID251`), alle
+anderen bekommen `now` als Parameter.
 
 ```text
 cli                               Typer entry point, composition root (cli/wiring.py)
@@ -15,7 +22,7 @@ cli                               Typer entry point, composition root (cli/wirin
                  ├─ agent         investigator, fixer, reviewer, chat orchestrator, working copy, tools, gate, budgets, masking
                  ├─ setup         setup and health checks (wizard, headless, doctor); systemd units
                  └─ scan          scan an owner: fetch, cache, detect, rank
-                     ├─ llm       Anthropic Messages API client
+                     ├─ llm       Anthropic Messages API client; masks every message it sends
                      ├─ github    gh CLI wrapper; Actions, runs, commits, files, branches, pull requests; downloads gh
                      └─ store     SQLite cache, chat sessions and the action audit log
                          ├─ flaky   pure detection, scoring, findings, log excerpts
@@ -54,6 +61,17 @@ cli                               Typer entry point, composition root (cli/wirin
   Basis-URL, sodass derselbe Code mit api.anthropic.com und Azure AI Foundry
   spricht (gewählt am Hostnamen). Verbindungsprobleme werden kategorisiert
   (`ConnectionProblem`), jedes mit einem nächsten Schritt für den Benutzer.
+  `ModelClient` ist der einzige Weg des Agenten zum Modell: Er maskiert
+  jeden Text und jedes Werkzeugergebnis jeder Nachricht direkt vor dem
+  Senden. Die Maskierungsfunktion reicht `cli/wiring.py` hinein; die Muster
+  liegen in `agent/masking.py`, sodass `llm` nichts aus `agent` importiert.
+  Scheitert ein Aufruf, wirft er `ModelError` mit einem `ConnectionProblem`
+  samt nächstem Schritt; der Agent fängt nur diesen Typ. Das SDK wiederholt
+  fehlgeschlagene Anfragen zweimal, aber nicht eine Überlastung, die einen
+  schon laufenden Stream beendet: Die wiederholt `ModelClient` einmal. Jede
+  Anfrage wartet höchstens ein Drittel des kürzeren Zeitlimits von
+  Untersuchung und Korrektur auf Daten, sodass sie samt den Wiederholungen
+  hineinpasst.
 - **`setup`** ist der Anwendungsdienst hinter dem Assistenten, dem
   Headless-Setup und `doctor`: Er validiert Eingaben, speichert Einstellungen
   und den Schlüssel, findet oder installiert `gh` und prüft die Anmeldung.
@@ -64,8 +82,10 @@ cli                               Typer entry point, composition root (cli/wirin
   instabil sein können, und für den letzten Versuch fehlgeschlagener Läufe,
   liest eine begrenzte Zahl von Logs und liefert die Einordnungen (instabil,
   einmal gesehen, behoben) plus wiederkehrende Fehler ohne Nachweis. Ein
-  Rate Limit stoppt ihn vorzeitig mit einem Bericht dessen, was gefunden
-  wurde; andere Fehler überspringen den Eintrag und werden aufgelistet. Der
+  Rate Limit, das Zeitlimit eines unbeaufsichtigten Laufs oder ein GitHub,
+  das mehrmals hintereinander nicht antwortet, stoppt ihn vorzeitig mit
+  einem Bericht dessen, was gefunden wurde; andere Fehler überspringen den
+  Eintrag und werden aufgelistet. Der
   Fortschritt wird als Ereignisse gemeldet, sodass CLI und TUI ihn auf ihre
   eigene Weise zeigen können.
 - **`store`** verwaltet den SQLite-Cache unter `$XDG_DATA_HOME/flakipype`:
@@ -77,7 +97,8 @@ cli                               Typer entry point, composition root (cli/wirin
   Signaturalgorithmus und werden neu berechnet, wenn er sich ändert. Lauflisten werden nicht zwischengespeichert:
   Sie abzurufen ist günstig, und sie ändern sich ständig. Chat- und
   Laufsitzungen werden ebenfalls dort gespeichert, als ein JSON-Dokument pro
-  Sitzung, ebenso das nur ergänzte Audit-Log der Aktionsanfragen
+  Sitzung mit den verbrauchten Tokens in einer eigenen Spalte, ebenso das nur
+  ergänzte Audit-Log der Aktionsanfragen mit einem Status pro Eintrag
   (`audit.py`). Die Datenbank nutzt das WAL-Journal von SQLite, sodass Chat
   und Lauf sie gemeinsam nutzen können; `lock.py` hält einen zweiten
   `flakipype run` über die eigene Dateisperre von SQLite fern, die das
@@ -87,7 +108,9 @@ cli                               Typer entry point, composition root (cli/wirin
   einen Durchgang des Reviewers und höchstens eine Überarbeitung
   ([Der Agent](agent.md)). Jedes Werkzeug deklariert eine Risikostufe und
   läuft nur durch das Policy-Gate ([Sicherheitsmodell](sicherheitsmodell.md));
-  alles, was an das Modell geht, wird zuerst maskiert. Er weiß nichts vom
+  alles, was an das Modell geht, maskiert der `ModelClient` von `llm`. Selbst
+  maskiert der Agent nur, was er für die Zitatprüfung in derselben
+  maskierten Form braucht, die das Modell sieht. Er weiß nichts vom
   Scan-Dienst: Er bekommt ein `Finding` und die `Evidence` des Scans als
   Werte. Der Chat-Orchestrator (`orchestrator.py`) ist ebenfalls eine
   Werkzeugschleife; seine Werkzeuge rufen ein `Workspace`-Protokoll auf, das

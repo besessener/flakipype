@@ -6,7 +6,7 @@ from flakipype.agent.budget import RunBudget
 from flakipype.agent.investigator import Status
 from flakipype.agent.pipeline import FindingResult
 from flakipype.agent.tools import HeadlessGate, Mode
-from flakipype.agent.verdict import Verdict
+from flakipype.agent.verdict import ReviewState, Verdict
 from flakipype.config.settings import FixSettings, GitHubSettings, Settings
 from flakipype.fix.delivery import Delivery
 from flakipype.fix.service import FixService
@@ -22,7 +22,7 @@ from flakipype.unattended.service import RunClock, RunService
 from support.builders import START
 from support.fake_actions import FakeActions
 from support.fake_anthropic import verdict_input
-from support.fake_fix import Clock, FakeFixer, FakePullRequests
+from support.fake_fix import PROSE, Clock, FakeFixer, FakePullRequests, fixed
 from support.fake_investigation import SCAN, world
 from support.fake_runs import FakeRuns
 
@@ -47,8 +47,8 @@ class ClassifyingAgent:
     status: Status = Status.COMPLETED
     tokens: int = 1_000
     detail: str = ""
-    # The review per finding number; "accepted: ok" for the others.
-    reviews: dict[int, str] = field(default_factory=dict)
+    # The review per finding number; answered with "accepted: ok" for the others.
+    reviews: dict[int, tuple[ReviewState, str]] = field(default_factory=dict)
     calls: list[int] = field(default_factory=list)
 
     def __call__(
@@ -61,11 +61,12 @@ class ClassifyingAgent:
         verdict = Verdict.model_validate(
             verdict_input("quote", "finding", classification=classification)
         )
-        good = self.status is Status.COMPLETED
-        review = self.reviews.get(finding.number, "accepted: ok") if good else ""
-        return FindingResult(
-            self.status, verdict if good else None, review, self.detail, self.tokens, 2
-        )
+        if self.status is not Status.COMPLETED:
+            return FindingResult(
+                self.status, None, ReviewState.NOTHING_SUBMITTED, "", self.detail, self.tokens, 2
+            )
+        state, review = self.reviews.get(finding.number, (ReviewState.ANSWERED, "accepted: ok"))
+        return FindingResult(self.status, verdict, state, review, self.detail, self.tokens, 2)
 
 
 @dataclass
@@ -78,7 +79,7 @@ class RunWorld:
     agent: ClassifyingAgent = field(default_factory=ClassifyingAgent)
     runs: FakeRuns = field(default_factory=FakeRuns)
     github: FakePullRequests = field(default_factory=FakePullRequests)
-    fixer: FakeFixer = field(default_factory=FakeFixer)
+    fixer: FakeFixer = field(default_factory=lambda: FakeFixer([fixed((PROSE,))]))
     fix_settings: FixSettings = field(default_factory=FixSettings)
     sleeps: list[float] = field(default_factory=list)
 

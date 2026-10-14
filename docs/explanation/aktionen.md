@@ -174,7 +174,9 @@ R3 app · E2E dispatch 2/3
 - Ein Rate Limit pausiert die Runde: Die Läufe zeigen
   „waiting for GitHub's rate limit“, und die nächste Abfrage versucht es
   erneut. Andere Fehler erscheinen neben dem Lauf und halten die anderen
-  nicht auf.
+  nicht auf. Lässt sich ein Lauf bis zum Ende seiner Beobachtungszeit nicht
+  lesen (zum Beispiel weil er gelöscht wurde), wird er nicht mehr beobachtet,
+  und der Hinweis nennt den letzten Fehler.
 
 Gestartete Läufe, ihr Zustand und der Budgetzähler werden in der Sitzung
 gespeichert. Eine fortgesetzte Sitzung fragt die Läufe ab, die noch nicht
@@ -188,7 +190,13 @@ Zeit, Sitzung, Werkzeug, wer gefragt hat (`model`, `command` oder `run` für
 [unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)), den Anfragetext, die
 Antwort (`confirmed`, `declined`, `auto`, `not run in auto
 mode` oder `report only`), das Ergebnis (die Antwort von GitHub oder den
-Fehler) und die Lauf-ID. Die Reruns und Dispatches, die eine Korrektur
+Fehler) und die Lauf-ID. Dazu kommen ein Status (`done`: auf GitHub
+geschehen, `declined`: nicht erlaubt, `refused`: von einer Prüfung vor GitHub
+abgelehnt, `failed`: von GitHub abgelehnt oder fehlgeschlagen) und die Zahl
+der Reruns, Dispatches oder Pull Requests, die der Eintrag gestartet hat (ein
+Dispatch mit drei Läufen zählt drei). Code liest nur Status und Zahl, nie den
+Ergebnistext; Einträge älterer Versionen bekommen beides beim Öffnen der
+Datenbank einmal aus ihrem Ergebnistext. Die Reruns und Dispatches, die eine Korrektur
 prüfen, werden ebenfalls aufgezeichnet, als `verify_rerun` und
 `verify_dispatch` mit der Antwort `covered by the push`, auch wenn GitHub sie
 ablehnt (`failed: …`).

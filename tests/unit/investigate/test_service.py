@@ -1,4 +1,7 @@
+import json
+
 from flakipype.agent.investigator import Status
+from flakipype.agent.verdict import ReviewState
 from flakipype.flaky.findings import FindingKind
 from flakipype.investigate.service import (
     EventKind,
@@ -57,7 +60,28 @@ def test_verdicts_are_reused_until_fresh_is_asked(cache: ScanCache) -> None:
     assert result.from_cache
     assert result.verdict is not None
     assert result.review == "accepted: ok"
+    assert result.review_state is ReviewState.ANSWERED
     assert not fresh.results[0].from_cache
+
+
+def test_a_stored_verdict_without_a_review_state_is_investigated_again(cache: ScanCache) -> None:
+    agent = FakeAgent()
+    scanner = service(cache, agent)
+    first = scanner.run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    finding = first.results[0].finding
+    # As versions before the review state stored it; the text alone no longer counts.
+    stored = json.loads(first.results[0].stored())
+    del stored["review_state"]
+    cache.save_verdict(
+        SCAN.host, finding.identity, last_seen=finding.last_seen.isoformat(),
+        result=json.dumps(stored),
+    )  # fmt: skip
+
+    again = scanner.run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+
+    assert stored["review"] == "accepted: ok"
+    assert agent.calls == [1, 1]
+    assert not again.results[0].from_cache
 
 
 def test_failed_investigations_are_not_cached(cache: ScanCache) -> None:
@@ -87,7 +111,10 @@ def test_one_crashing_investigation_keeps_the_others_and_their_tokens(cache: Sca
 
 
 def test_verdicts_whose_review_failed_are_investigated_again(cache: ScanCache) -> None:
-    unreviewed = FakeAgent(review="not reviewed: Error code: 400 - tool_choice not supported")
+    unreviewed = FakeAgent(
+        review="not reviewed: Error code: 400 - tool_choice not supported",
+        review_state=ReviewState.UNAVAILABLE,
+    )
     scanner = service(cache, unreviewed)
     first = scanner.run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
     finding = first.results[0].finding
@@ -98,13 +125,22 @@ def test_verdicts_whose_review_failed_are_investigated_again(cache: ScanCache) -
     )  # fmt: skip
 
     second = scanner.run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
-    revised = FakeAgent(review="revised, second review unavailable: HTTP 500")
+    revised = FakeAgent(
+        review="revised, second review unavailable: HTTP 500", review_state=ReviewState.UNAVAILABLE
+    )
     service(cache, revised).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
     service(cache, revised).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    ended = FakeAgent(
+        review="sent back, revision ended: Error code: 529 - overloaded",
+        review_state=ReviewState.REVISION_ENDED,
+    )
+    service(cache, ended).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
+    service(cache, ended).run(InvestigationRequest(SCAN, Selection(numbers=(1,))))
 
     assert unreviewed.calls == [1, 1]
     assert not second.results[0].from_cache
     assert revised.calls == [1, 1]
+    assert ended.calls == [1, 1]
 
 
 def test_a_lower_token_limit_for_one_call(cache: ScanCache) -> None:

@@ -32,12 +32,17 @@ class Rate:
 
 
 def finding_marker(finding: Finding) -> str:
-    return identity_marker(finding.identity)
-
-
-def identity_marker(identity: str) -> str:
     """Hidden in the pull request body, so a second /fix finds the open pull request."""
-    digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
+    return _marker(finding.place)
+
+
+def pull_markers(finding: Finding) -> frozenset[str]:
+    """Markers of an open pull request for the finding, also as older versions wrote them."""
+    return frozenset({finding_marker(finding), _marker(finding.identity)})
+
+
+def _marker(text: str) -> str:
+    digest = hashlib.sha256(text.encode()).hexdigest()[:12]
     return f"<!-- flakipype:finding={digest} -->"
 
 

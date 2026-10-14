@@ -42,16 +42,18 @@ Außerhalb von poe:
 
 | Option | Bedeutung |
 | --- | --- |
-| `--mode auto\|ask` | `auto` (Standard) pusht Draft-PRs innerhalb der Limits; `ask` meldet nur, was es tun würde |
+| `--mode auto\|ask` | `auto` (Standard) pusht Draft-PRs innerhalb der Limits, aber nur Korrekturen an reiner Dokumentation; die übrigen bereitet es vor und meldet sie; `ask` meldet nur, was es tun würde |
 | `--days N`, `--repo NAME` | Wie bei `scan` |
 | `--owner NAME` | Muss der konfigurierte `github.owner` sein (Groß- und Kleinschreibung egal): Ein Lauf korrigiert nur diesen Owner; jeder andere endet mit Code 2 |
 | `--json` | Die Zusammenfassung als JSON ausgeben (`schema_version` 1) |
 
 Exit-Codes: 0 beendet (ein erreichtes Limit ist ein normales Ende), 1 etwas
-war unvollständig (Scan früh beendet, GitHub oder das Modell sind
-fehlgeschlagen, eine Auslieferung ist fehlgeschlagen), 2 nicht eingerichtet
-oder ein anderer `--owner`, 3 ein anderer `flakipype run` läuft. So
-funktioniert es: [unbeaufsichtigte Läufe](../explanation/unbeaufsichtigte-laeufe.md).
+war unvollständig (Scan früh beendet, die Läufe eines Repositorys nicht
+auflistbar, GitHub oder das Modell sind fehlgeschlagen, eine Auslieferung
+ist fehlgeschlagen; bei HTTP 401 mit dem Hinweis, dich neu anzumelden), 2
+nicht eingerichtet oder ein anderer `--owner`, 3 ein anderer `flakipype
+run` läuft. So funktioniert es:
+[unbeaufsichtigte Läufe](../explanation/unbeaufsichtigte-laeufe.md).
 
 ### `flakipype daemon`
 

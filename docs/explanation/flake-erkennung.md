@@ -50,6 +50,10 @@ Ereignis reicht trotzdem nicht:
 Ein Job mit genug Läufen, der seit seinem letzten Fehlschlag nicht wieder
 durchgelaufen ist, ist nicht behoben: Er zählt als **flaky** und wird
 untersucht, wobei der Agent ihn immer noch als echten Fehler einstufen kann.
+Dasselbe gilt für einen Job, dessen Lauf beim Rerun durchgelaufen ist: Ein
+Rerun testet denselben Code, also beweist er Instabilität und keine Korrektur,
+egal ob er das erste oder das letzte Ereignis ist. Der eigene Rerun eines
+betroffenen Laufs zählt deshalb auch nicht als „durchgelaufen seit“.
 
 „Durchgelaufen“ heißt, dass der ganze Workflow-Lauf durchgelaufen ist. Ein
 Lauf, in dem der Job durchlief, aber ein anderer Job fehlschlug, zählt nicht
@@ -99,8 +103,15 @@ die ersten Scans den Cache deshalb über mehrere Läufe auf.
 
 Es werden höchstens 1.000 Repositories eines Owners gescannt; eine längere
 Liste wird abgeschnitten und in den Problemen des Scans genannt, und `--repo`
-wählt andere aus. Ein Scan, den das Rate-Limit von GitHub gestoppt hat,
-nutzt trotzdem jeden gecachten Job und jedes gecachte Log-Ergebnis.
+wählt andere aus. Ein Scan stoppt vorzeitig, wenn das Rate-Limit von GitHub
+erreicht ist, wenn die Zeit eines unbeaufsichtigten Laufs abgelaufen ist
+oder wenn GitHub fünf Anfragen hintereinander nicht beantwortet hat (eine
+Zeitüberschreitung, kein Netz oder ein Serverfehler); jede dieser Anfragen
+kann bis zu 60 Sekunden warten. Ein gestoppter Scan
+nutzt trotzdem jeden gecachten Job und jedes gecachte Log-Ergebnis: Auch
+wenn er schon beim Auflisten der Läufe stoppt, laufen die späteren Schritte
+weiter, lesen aber nichts mehr von GitHub, sondern nur noch aus dem Cache.
+Der Scan gilt dann als unvollständig.
 
 Anfragen laufen nacheinander, wie GitHub es empfiehlt, um seine sekundären
 Rate-Limits zu vermeiden. Auf einem echten Konto (18 Repositories, etwa

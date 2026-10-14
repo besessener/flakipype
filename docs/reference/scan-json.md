@@ -74,7 +74,7 @@ Wie die Status entschieden werden: [wie Instabilität erkannt wird](../explanati
 | `schema_version` | int | Formatversion, derzeit `1` |
 | `owner`, `host` | string | Was gescannt wurde |
 | `window.start`, `window.end` | UTC-Zeitstempel | Läufe, die in diesem Zeitraum erstellt wurden |
-| `complete` | bool | `false`, wenn der Scan früh beendet wurde (Rate-Limit) |
+| `complete` | bool | `false`, wenn der Scan früh beendet wurde (Rate-Limit, Zeitlimit eines Laufs oder GitHub antwortet nicht) |
 | `repositories` | int | Gescannte Repositories (keine archivierten, keine Forks) |
 | `runs` | int | Im Zeitfenster aufgelistete Workflow-Läufe |
 | `logs_not_read` | int | Fehlgeschlagene Jobs, deren Log noch nicht gelesen wurde (Limit oder früher Abbruch) |
@@ -99,7 +99,7 @@ Wie die Status entschieden werden: [wie Instabilität erkannt wird](../explanati
 | `signals.rerun_passed` | Fehlschläge in einem Versuch, den ein späterer Versuch desselben Laufs behoben hat |
 | `signals.same_commit` | Fehlschläge von Läufen, deren Commit in einem anderen Lauf des Workflows bestanden hat |
 | `first_seen`, `last_seen` | Wann der älteste und der neueste solche Fehlschlag abgeschlossen wurde |
-| `passing_since` | Erster bestandener Lauf des Workflows ab dem letzten betroffenen Lauf; `null`, wenn es keinen gibt |
+| `passing_since` | Erster bestandener Lauf des Workflows nach dem letzten betroffenen Lauf, ohne die Reruns der betroffenen Läufe selbst; `null`, wenn es keinen gibt |
 | `examples` | Bis zu 3 Job-URLs, neueste zuerst |
 | `signatures[]` | Fehlersignaturen aus den bisher gelesenen Logs, häufigste zuerst |
 

@@ -3,7 +3,9 @@
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
+from flakipype.fix.checks import executable_paths
 from flakipype.fix.verify import Stage, Verification
 
 
@@ -21,6 +23,8 @@ class Proposal:
     changes: tuple[FileChange, ...]
     warnings: tuple[str, ...]
     accepted: bool
+    review_state: ReviewState
+    # For display only; decisions use accepted and review_state.
     review: str
     # Filled in when the pull request exists.
     verification: Verification
@@ -28,6 +32,16 @@ class Proposal:
     @property
     def repository(self) -> str:
         return self.verification.repository
+
+    @property
+    def needs_person(self) -> str:
+        """Why only a person may push it, even in auto mode; empty when auto may."""
+        if self.warnings:
+            return f"the diff has warnings: {'; '.join(self.warnings)}"
+        code = executable_paths(list(self.changes))
+        if code:
+            return f"it changes files that can run as code: {', '.join(code)}"
+        return ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -42,6 +56,8 @@ class Proposal:
             **data,
             "changes": tuple(FileChange(**change) for change in data["changes"]),
             "warnings": tuple(data["warnings"]),
+            # Saved before the state was kept: retried like a review that could not run.
+            "review_state": ReviewState(data.get("review_state", ReviewState.UNAVAILABLE)),
             "verification": Verification.from_dict(data["verification"]),
         }
         return cls(**fields)

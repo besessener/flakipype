@@ -10,9 +10,8 @@ from flakipype.actions.service import ActionService
 from flakipype.actions.targets import check_owner
 from flakipype.agent.fix_pipeline import FixRequest, FixResult
 from flakipype.agent.fixer import FixStatus
-from flakipype.agent.pipeline import reviewed
 from flakipype.agent.tools import ActionRequest, Answer, PreparedAction, ToolError
-from flakipype.agent.verdict import Classification, Verdict
+from flakipype.agent.verdict import Classification, ReviewState, Verdict
 from flakipype.agent.workcopy import unified_diff
 from flakipype.config.settings import FixSettings
 from flakipype.fix.checks import DiffLimits, change_errors, change_warnings
@@ -23,21 +22,19 @@ from flakipype.fix.texts import (
     PullRequestFacts,
     branch_name,
     failure_rate,
-    identity_marker,
+    pull_markers,
     pull_request_body,
 )
 from flakipype.fix.verify import Stage, Verification, Verifier
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import PullRequest, RepositoryAccess
-from flakipype.store.audit import AuditEntry, AuditLog
+from flakipype.store.audit import AuditEntry, AuditLog, AuditStatus
 
 FIXABLE = frozenset(
     {Classification.FLAKY_TEST, Classification.FLAKY_INFRASTRUCTURE, Classification.CONFIGURATION}
 )
 _PATHS_SHOWN = 3
-# Reviews that could not run, e.g. on an HTTP error; the fix itself may be fine.
-_REVIEW_UNAVAILABLE = ("not reviewed", "revised, not reviewed again")
 
 type ProposeFix = Callable[[FixRequest], FixResult]
 
@@ -58,6 +55,14 @@ class FixPushedError(FixDeliveryError):
     """The commit was pushed but no pull request opened; it counts against the limits."""
 
 
+class FixGitHubError(ToolError):
+    """GitHub failed before the push, not the fix: the fix may work on the next try."""
+
+    def __init__(self, error: GitHubApiError) -> None:
+        super().__init__(fix_refusal(error))
+        self.login_expired = error.is_authentication_problem
+
+
 class FixPulls(Protocol):
     def access(self, repository: str) -> RepositoryAccess: ...
 
@@ -71,8 +76,9 @@ class FixTarget:
     finding: Finding
     evidence: Evidence
     verdict: Verdict
-    # How the verdict's review went, as the investigation reports it.
-    review: str
+    review_state: ReviewState
+    # How the verdict's review went, as the investigation reports it; for display only.
+    review: str = ""
 
 
 @contextmanager
@@ -80,7 +86,7 @@ def _from_github() -> Generator[None]:
     try:
         yield
     except GitHubApiError as error:
-        raise ToolError(fix_refusal(error)) from error
+        raise FixGitHubError(error) from error
 
 
 class FixService:
@@ -138,7 +144,8 @@ class FixService:
                     "as branches of the repository itself, not through forks."
                 )
                 raise ToolError(message)
-            self._check_no_open_pull(finding.key.repository, finding.identity, finding.number)
+            markers = pull_markers(finding)
+            self._check_no_open_pull(finding.key.repository, markers, finding.number)
             proposal = self._proposals.get(finding.identity)
             if proposal is None or instructions:
                 proposal = self._new_proposal(target, access.default_branch, instructions)
@@ -147,13 +154,14 @@ class FixService:
                 f"No pull request for #{finding.number}: the review {proposal.review}. "
                 "Ask for changes, or /fix N --fresh to start over. The diff:"
             )
+            # A review that could not run is the model's failure; the fix itself may be fine.
             error = (
                 FixUnavailableError
-                if proposal.review.startswith(_REVIEW_UNAVAILABLE)
+                if proposal.review_state is ReviewState.UNAVAILABLE
                 else FixNotMadeError
             )
             raise error(message, unified_diff(list(proposal.changes)))
-        return self._prepared(proposal)
+        return self._prepared(proposal, markers)
 
     def adopt(self, pulls: list[OpenedPull]) -> None:
         """Continue verifying pull requests an earlier session opened; costs no budget."""
@@ -171,8 +179,6 @@ class FixService:
                 verification = self._verifier.poll(pull.verification)
             except ApiRateLimitError:
                 return notes
-            except GitHubApiError:
-                continue
             if self.pulls is not pulls:
                 return []
             pulls[index] = replace(pull, verification=verification)
@@ -208,14 +214,13 @@ class FixService:
             return None
         return max(0.0, (self.deadline - self._now()).total_seconds())
 
-    def _check_no_open_pull(self, repository: str, identity: str, number: int) -> None:
-        marker = identity_marker(identity)
+    def _check_no_open_pull(self, repository: str, markers: frozenset[str], number: int) -> None:
         for pull in self._pulls.open_pulls(repository):
             # Only a branch in the repository itself with the marker code writes first counts;
             # anyone can open a fork pull request with the same branch name and marker.
             own = pull.head_repository.lower() == repository.lower()
-            first_line = pull.body.splitlines()[:1]
-            if own and pull.branch.startswith(BRANCH_PREFIX) and first_line == [marker]:
+            first_line = next(iter(pull.body.splitlines()), "")
+            if own and pull.branch.startswith(BRANCH_PREFIX) and first_line in markers:
                 message = f"An open flakipype pull request for #{number} exists: {pull.url}"
                 raise ToolError(message)
 
@@ -253,7 +258,8 @@ class FixService:
             finding=finding.number, identity=finding.identity, base=base, commit=commit,
             title=result.proposal.title, explanation=result.proposal.explanation,
             body=pull_request_body(facts, result.proposal.explanation), changes=result.changes,
-            warnings=warnings, accepted=result.accepted, review=result.review,
+            warnings=warnings, accepted=result.accepted, review_state=result.review_state,
+            review=result.review,
             verification=Verification(
                 pull_number=0, repository=key.repository, workflow_path=key.workflow_path,
                 workflow_name=key.workflow_name, job=key.job,
@@ -265,25 +271,25 @@ class FixService:
         self._proposals[finding.identity] = proposal
         return proposal
 
-    def _prepared(self, proposal: Proposal) -> PreparedAction:
+    def _prepared(self, proposal: Proposal, markers: frozenset[str]) -> PreparedAction:
         details = self._details(proposal)
         request = ActionRequest(
             "Push fix and open a draft pull request?",
             details,
             model_text=f"{proposal.title}\n\n{proposal.explanation}",
             diff=unified_diff(list(proposal.changes)),
-            needs_person="the diff has warnings" if proposal.warnings else "",
+            needs_person=proposal.needs_person,
             confirm_label="Push",
             decline_label="Don't push",
         )
         session, origin = self._actions.session, self._actions.origin
 
-        def record(answer: Answer, outcome: str) -> None:
+        def record(answer: Answer, outcome: str, *, status: AuditStatus) -> None:
             self._audit.record(
                 AuditEntry(
                     time=self._now().isoformat(), session=session, action="fix", origin=origin,
                     request="\n".join([request.title, *details]), answer=answer.value,
-                    outcome=outcome,
+                    outcome=outcome, status=status, spent=int(status is AuditStatus.DONE),
                 )
             )  # fmt: skip
 
@@ -291,11 +297,9 @@ class FixService:
             # Another flakipype (the chat, a run) may have opened one since the fixer started.
             try:
                 with _from_github():
-                    self._check_no_open_pull(
-                        proposal.repository, proposal.identity, proposal.finding
-                    )
+                    self._check_no_open_pull(proposal.repository, markers, proposal.finding)
             except ToolError as error:
-                record(answer, f"not pushed: {error}")
+                record(answer, f"not pushed: {error}", status=AuditStatus.REFUSED)
                 raise
             try:
                 outcome = self._deliver(proposal)
@@ -303,15 +307,17 @@ class FixService:
                 # Counted like an opened pull request, so no run pushes it again and again.
                 self.opened += 1
                 self._proposals.pop(proposal.identity, None)
-                record(answer, f"pushed, no pull request: {error}")
+                record(answer, f"pushed, no pull request: {error}", status=AuditStatus.DONE)
                 raise FixPushedError(str(error)) from error
             except DeliveryError as error:
-                record(answer, f"failed: {error}")
+                record(answer, f"failed: {error}", status=AuditStatus.FAILED)
                 raise FixDeliveryError(str(error)) from error
-            record(answer, outcome)
+            record(answer, outcome, status=AuditStatus.DONE)
             return outcome
 
-        return PreparedAction(request, run, lambda answer: record(answer, "not pushed"))
+        return PreparedAction(
+            request, run, lambda answer: record(answer, "not pushed", status=AuditStatus.DECLINED)
+        )
 
     def _details(self, proposal: Proposal) -> tuple[str, ...]:
         changes = proposal.changes
@@ -370,7 +376,7 @@ def _check_fixable(target: FixTarget) -> None:
             "flaky tests, flaky infrastructure and configuration problems."
         )
         raise ToolError(message)
-    if not reviewed(target.review):
+    if not target.review_state.reviewed:
         message = (
             f"The verdict for #{number} was not reviewed ({target.review or 'no review'}); "
             f"investigate it again with /investigate {number} --fresh before fixing it."

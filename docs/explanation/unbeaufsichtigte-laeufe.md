@@ -41,10 +41,20 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    ([Verifikationen](#verifikationen-über-läufe-hinweg)) und sofort in der
    Sitzung des neuen Laufs gespeichert, sodass ein Lauf, der später abstürzt,
    sie trotzdem weitergibt.
-3. **Scan** des konfigurierten Owners, wie `flakipype scan` es macht. Ein
-   Scan, den das Rate-Limit von GitHub gestoppt hat, beendet den Schritt
-   hier: Untersuchungen würden nur sehen, wie GitHub ihre Werkzeuge
+3. **Scan** des konfigurierten Owners, wie `flakipype scan` es macht. Vor
+   jeder Anfrage an GitHub prüft der Scan `run.max_minutes`; ist die Zeit
+   um, stoppt er wie bei einem Rate-Limit und gilt als unvollständig. Er
+   stoppt auch, wenn GitHub fünf Anfragen hintereinander nicht beantwortet
+   (Zeitüberschreitung, kein Netz, Serverfehler), statt Tausende Anfragen
+   je bis zu 60 Sekunden warten zu lassen. Ein Scan, den das Rate-Limit,
+   das Zeitlimit oder ein schweigendes GitHub gestoppt hat, beendet den
+   Schritt hier: Untersuchungen würden nur sehen, wie GitHub ihre Werkzeuge
    ablehnt, also warten sie und die Korrekturen auf den nächsten Lauf.
+   Lässt GitHub die Läufe eines Repositorys nicht auflisten (zum Beispiel
+   ein Fine-grained-Token ohne „Actions: read“), ist dieses Repository gar
+   nicht gescannt: Der Lauf geht weiter, ist aber unvollständig (Exit-Code
+   1). Einzelne Jobs oder Logs, die sich nicht lesen ließen, stehen nur unter
+   `Problems:`; der nächste Scan liest sie erneut.
 4. **Untersuchen** der instabilen und wiederkehrenden Befunde, wie
    `flakipype investigate` es macht: Gecachte Urteile werden
    wiederverwendet, bis ein Befund einen neueren Fehlschlag hat. Ein Befund,
@@ -59,12 +69,14 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    wie im Chat ([Korrekturen](korrekturen.md)). Übersprungen werden: Befunde
    mit einem offenen Pull Request von flakipype oder ohne Push-Zugriff sowie
    Befunde, deren Korrektur ein früherer `auto`-Lauf nicht gepusht hat
-   (Warnungen, keine Korrektur, vom Reviewer abgelehnt oder ein gepushter
+   (ausführbarer Code, Warnungen, keine Korrektur, vom Reviewer abgelehnt
+   oder ein gepushter
    Commit, zu dem sich kein Pull Request öffnen ließ), bis sie einen neueren
    Fehlschlag haben, damit ein Lauf nicht jeden Tag für dieselbe abgelehnte
    Korrektur bezahlt. Ein Modellfehler während der Korrektur oder ihrer
-   Prüfung ist ein Problem des Laufs (Exit-Code 1) und wird beim nächsten
-   Mal erneut versucht. Eine Korrektur bekommt höchstens die Zeit, die dem
+   Prüfung und ein GitHub-Fehler vor dem Push (zum Beispiel beim Prüfen des
+   Push-Zugriffs) sind Probleme des Laufs (Exit-Code 1) und werden beim
+   nächsten Mal erneut versucht. Eine Korrektur bekommt höchstens die Zeit, die dem
    Lauf noch bleibt, auch wenn `fix.max_seconds` länger ist. Ein gepushter
    Commit, zu dem sich kein Pull Request öffnen ließ, zählt gegen die
    Pull-Request-Limits wie ein geöffneter.
@@ -85,11 +97,17 @@ Fortschritt geht auf die Standardfehlerausgabe, und nur auf einem Terminal.
 | | `auto` (Standard) | `ask` |
 | --- | --- | --- |
 | Scan, Untersuchung, Fixer und Reviewer | laufen | laufen |
-| Push und Draft-Pull-Request (`critical`) | laufen im Rahmen der Budgets, wenn der Diff keine Warnung hat | laufen nicht: werden mit ihrem Diff berichtet |
+| Push und Draft-Pull-Request (`critical`) | laufen im Rahmen der Budgets, wenn die Korrektur nur Dokumentation ändert und keine Warnung hat | laufen nicht: werden mit ihrem Diff berichtet |
 | Verifikations-Reruns der eigenen Korrektur-Branches des Laufs (`write`) | laufen im Rahmen der Budgets | keine: Pull Requests früherer Läufe warten auf den nächsten `auto`-Lauf |
-| Korrektur mit Warnung (verbirgt Fehlschläge, greift nach außen, `.github/`) | nicht gepusht, aufbewahrt | aufbewahrt |
+| Korrektur an [ausführbarem Code](korrekturen.md#modi) oder mit Warnung (verbirgt Fehlschläge, greift nach außen, `.github/`) | nicht gepusht, aufbewahrt | aufbewahrt |
 | Eine nicht gepushte Korrektur | gemerkt, bis der Befund wieder fehlschlägt | nicht gemerkt |
 | Draft-Pull-Request | immer | – |
+
+Fast jede Korrektur eines flaky Tests ändert Code. Ein `auto`-Lauf öffnet
+für sie keinen Pull Request, sondern bereitet sie vor, lässt sie prüfen und
+meldet sie mit ihrem Diff; pushen kannst du sie aus dem Chat (unten). Die
+Musterliste der Warnungen und der Reviewer sind dabei Hilfen, keine Sperre:
+Die Sperre ist die Regel für ausführbaren Code.
 
 `ask` ohne Fenster ist ein Probelauf, der trotzdem durch das Gate geht: Das
 `HeadlessGate` beantwortet jede `write`- und `critical`-Anfrage mit `report
@@ -104,12 +122,11 @@ eigenen Korrektur-Branches; die Läufe des Scans werden nur gelesen.
 flakipype run · octo-org · auto · 2026-10-12 06:02–06:41 CEST
 Scan: 42 repositories, 1,204 runs, 5 flaky, 2 recurring error
 Investigated: 2 (1 flaky_test, 1 real_bug), 3 verdicts from the cache
-Fixes: #1 octo-org/app › E2E › e2e: Opened draft pull request #57: https://github.com/octo-org/app/pull/57 (branch flakipype/fix-e2e-7c41d0).
+Fixes: #1 octo-org/app › E2E › e2e: not pushed: it changes files that can run as code: tests/e2e/scan.spec.ts (kept for the chat)
        #2 octo-org/app › CI › lint: not fixed: real bug, which flakipype does not fix
        #4 octo-org/api › CI › test: not pushed: the diff has warnings: changes .github/: .github/workflows/ci.yml (kept for the chat)
        #6 octo-org/api › CodeQL › analyze: not investigated again: an earlier run ended without a verdict (no_verdict: …), and it has not failed since
 Verification: octo-org/app#51: flakipype verification: E2E passed 3 of 3 runs on this branch.
-              octo-org/app#57: 1 of 3 runs, continues in the next run
 Budget: pull requests today 1 of 3 · actions today 4 of 20 · tokens 412,000 of 1,000,000 (today 412,000 of 3,000,000)
 ```
 
@@ -123,14 +140,17 @@ Fehler: den Pull Request oder warum es keinen gibt (kein Urteil, eine
 Einstufung, die flakipype nicht korrigiert, ein Urteil, dessen Prüfung nicht
 laufen konnte, ein Limit, eine nicht gepushte Korrektur). Weitere Zeilen
 nennen die Limits, die einen Schritt gestoppt haben (`Stopped by:`), und die
-Fehler (`Problems:`). `--json` gibt dasselbe als ein Objekt mit
-`schema_version` 1 aus, einschließlich des Diffs jeder nicht gepushten
-Korrektur.
+Fehler (`Problems:`), die des Scans zuerst. Eine Verifikation, deren letzte
+Abfrage GitHub nicht beantwortet hat, nennt den Fehler hinter ihrer Zeile.
+Antwortet GitHub mit HTTP 401, sagt die Standardfehlerausgabe zusätzlich,
+dass du dich mit `flakipype setup` neu anmelden musst. `--json` gibt
+dasselbe als ein Objekt mit `schema_version` 1 aus, einschließlich des Diffs
+jeder nicht gepushten Korrektur.
 
 | Code | Bedeutung |
 | --- | --- |
 | 0 | Der Lauf ist fertig geworden; ein erreichtes Budget oder Zeitlimit ist ein normales Ende und wird in der Zusammenfassung genannt |
-| 1 | Etwas war unvollständig: Der Scan hat vorzeitig aufgehört, GitHub oder das Modell sind fehlgeschlagen, eine Untersuchung oder eine Auslieferung ist fehlgeschlagen |
+| 1 | Etwas war unvollständig: Der Scan hat vorzeitig aufgehört oder die Läufe eines Repositorys nicht auflisten können, GitHub oder das Modell sind fehlgeschlagen, eine Untersuchung oder eine Auslieferung ist fehlgeschlagen |
 | 2 | Nicht bereit: keine Konfiguration, kein Key, ein nicht erreichbarer Schlüsselbund, `gh` nicht angemeldet oder sein Token abgelaufen (geprüft vor dem Scan), ein anderer `--owner` als der konfigurierte |
 | 3 | Ein anderes `flakipype run` hält die Sperre |
 
@@ -144,8 +164,10 @@ Erreicht ein Lauf `run.max_minutes`, bleiben unfertige Verifikationen in
 seiner Sitzung. Der nächste Lauf übernimmt die Pull Requests, die der letzte
 Lauf unverifiziert hinterlassen hat, mit den Läufen, die sie unter ihren
 Nummern verfolgen, und ein `auto`-Lauf fragt sie ab, bis sie fertig sind oder
-ihre Beobachtungszeit (`actions.watch_hours`) vorbei ist; der Kommentar am
-Pull Request sagt dann, nach wie vielen Läufen und warum, wie im Chat. Ein
+ihre Beobachtungszeit (`actions.watch_hours`) vorbei ist, auch wenn GitHub
+einen Lauf gar nicht mehr liefert (gelöscht, kein Zugriff mehr); der
+Kommentar am Pull Request sagt dann, nach wie vielen Läufen und warum, wie im
+Chat. Ein
 `ask`-Lauf bewahrt sie nur für den nächsten `auto`-Lauf auf. Reruns, die für
 die Verifikation eines früheren Laufs gestartet werden, zählen gegen die
 Aktionslimits des Laufs, der sie startet.
@@ -155,9 +177,9 @@ Aktionslimits des Laufs, der sie startet.
 Kopie des Scans, der Urteile und der aufbewahrten Korrekturen des Laufs, im
 Modus `ask`. Die gestarteten Läufe und Pull Requests des Laufs bleiben bei
 der Laufsitzung, sodass nur der Timer sie abfragt und nichts zweimal erneut
-ausgeführt wird. Eine aufbewahrte Korrektur mit Warnungen funktioniert dann
-wie im Chat: `/fix N` zeigt die Bestätigung mit den Warnungen und dem
-vollständigen Diff.
+ausgeführt wird. Eine aufbewahrte Korrektur an ausführbarem Code oder mit
+Warnungen funktioniert dann wie im Chat: `/fix N` zeigt die Bestätigung mit
+den Warnungen und dem vollständigen Diff.
 
 ## Budgets
 
@@ -176,8 +198,10 @@ Stunden, sodass ein kurzes Timer-Intervall sie nicht vervielfachen kann:
 | Tokens in 24 Stunden | 3.000.000 | `run.max_tokens_per_day` (10k–50M) |
 
 Pull Requests und Aktionen in 24 Stunden werden aus dem Audit-Log gezählt
-(Einträge mit dem Ursprung `run`, die ausgeführt wurden); Tokens aus den
-Laufsitzungen. Der Chat zählt nicht gegen die Tageslimits, und Läufe zählen
+(Einträge mit dem Ursprung `run` und dem Status `done`, jeweils mit der Zahl
+der gestarteten Läufe, sodass ein Dispatch mit mehreren Läufen jeden zählt;
+siehe [Audit-Log](aktionen.md#audit-log)); Tokens aus der Token-Spalte der
+Laufsitzungen, die jeder Lauf bei jedem Speichern schreibt. Der Chat zählt nicht gegen die Tageslimits, und Läufe zählen
 nicht gegen die des Chats. Ein erreichtes Limit stoppt, was es begrenzt:
 keine weiteren Korrekturen nach dem Pull-Request-Limit, keine Untersuchung
 mehr, wenn die heutigen Tokens aufgebraucht sind, und keine weitere Korrektur
@@ -220,13 +244,24 @@ ist gesperrt. Deshalb:
   Sitzung lesen kann.
 - Ein gesperrter oder nicht erreichbarer Schlüsselbund ist ein typisierter
   Fehler: Exit-Code 2 und genau dieser nächste Schritt, nie ein Traceback.
+  flakipype fragt den Schlüsselbund in einem eigenen Daemon-Thread und
+  wartet höchstens 15 Sekunden: Der Secret Service wartet sonst ohne Limit
+  auf eine Entsperr-Abfrage, die unter einem Timer niemand beantwortet, und
+  ein hängender D-Bus-Aufruf hält den Prozess nicht am Leben.
+- Das null-Backend von keyring zählt für `auto` als kein Schlüsselbund.
+  Setup liest den Key nach dem Speichern zurück, und ein Key, der in der
+  Datei fehlt, nennt ebenfalls den Schritt mit `--secret-store file`: Sonst
+  schickte „Führe setup aus“ dich im Kreis.
 - `doctor` sagt, welcher Speicher den Key hält.
-- `daemon install` prüft, bevor es irgendetwas installiert (unten).
+- `daemon install` prüft, bevor es irgendetwas installiert (unten), und
+  warnt, wenn der Key im Schlüsselbund liegt.
 
 Das GitHub-Token bleibt die Anmeldung von `gh`. Bewahrt `gh` es im
 Schlüsselbund auf, gilt dasselbe für `gh`; `gh auth login --insecure-storage`
 bewahrt es stattdessen in der eigenen Konfigurationsdatei von `gh` auf
-([Zeitgesteuert ausführen](../how-to/zeitgesteuert-ausfuehren.md)).
+([Zeitgesteuert ausführen](../how-to/zeitgesteuert-ausfuehren.md)). Findet
+ein Lauf oder `doctor` `gh` nicht angemeldet, nennt die Meldung diesen
+Befehl.
 
 ## `flakipype daemon`
 
@@ -272,11 +307,15 @@ WantedBy=timers.target
 - `TimeoutStartSec` ist der höchste erlaubte Wert für `run.max_minutes` (720)
   plus 10 Minuten. Das ist eine Rückfallgrenze: Der Lauf behält sein eigenes
   `run.max_minutes`, und eine spätere Änderung dieser Einstellung braucht
-  keine neue Unit. Ein Schritt, der beim Erreichen des Limits schon läuft
-  (der Scan, eine Untersuchung, der letzte Modellaufruf einer Korrektur),
-  wird trotzdem fertig, sodass ein Lauf ein paar Minuten nach
-  `run.max_minutes` enden kann, aber nie auch nur in der Nähe des Limits der
-  Unit.
+  keine neue Unit. Der Scan stoppt nach der Anfrage, die beim Erreichen des
+  Limits läuft. Ein anderer Schritt, der dann schon läuft (eine
+  Untersuchung, der letzte Modellaufruf einer Korrektur), wird trotzdem
+  fertig, sodass ein Lauf ein paar Minuten nach `run.max_minutes` enden
+  kann, aber nie auch nur in der Nähe des Limits der Unit.
+- Schickt systemd trotzdem `SIGTERM` (`systemctl stop` oder das Limit der
+  Unit), endet der Lauf mit seiner Zusammenfassung: Er speichert seine
+  Sitzung, gibt die Zusammenfassung mit dem Problem `stopped by SIGTERM`
+  aus und endet mit Exit-Code 1.
 - `Type=oneshot` bedeutet, dass systemd den Dienst nie zweimal gleichzeitig
   startet; die Laufsperre deckt manuelle Läufe ab.
 - Unit-Dateien, die flakipype nicht geschrieben hat (keine Zeile
@@ -284,10 +323,13 @@ WantedBy=timers.target
 
 **Prüfungen vor der Installation.** `daemon install` prüft den Zeitplan mit
 `systemd-analyze calendar` und führt
-`systemd-run --user --wait --pipe --collect <flakipype> doctor` aus, sodass
-`doctor` in derselben Umgebung läuft wie später der Timer. Schlägt eines
-davon fehl, wird nichts geschrieben, und die Ausgabe sagt, warum,
-typischerweise der Schlüsselbund. Der Pfad zur ausführbaren Datei und der
+`systemd-run --user --wait --pipe --collect --property=RuntimeMaxSec=300
+<flakipype> doctor` aus, sodass `doctor` in derselben Umgebung läuft wie
+später der Timer. systemd beendet die Prüfung selbst nach 300 Sekunden, bevor
+flakipype nach 600 Sekunden aufhört, auf `systemd-run` zu warten; so läuft
+keine vergessene Prüfung weiter, und ein Befehl, der nicht fertig wird, ist
+eine Meldung, kein Traceback. Schlägt eines davon fehl, wird nichts
+geschrieben, und die Ausgabe sagt, warum, typischerweise der Schlüsselbund. Der Pfad zur ausführbaren Datei und der
 Zeitplan dürfen keine Zeichen enthalten, die einer Unit-Datei Zeilen
 hinzufügen könnten. Lehnt systemd ab, nachdem die Dateien geschrieben sind,
 sagt die Meldung, wo sie liegen und dass `daemon uninstall` sie entfernt.
@@ -381,10 +423,15 @@ Fake-Modell getestet.
 
 - Der Lauf-Service über GitHub-Fakes im Speicher und einem Fake-Agenten und
   -Fixer, mit einer einstellbaren Uhr: beide Modi, eine Korrektur mit
-  Warnungen, eine abgelehnte Korrektur, die nicht erneut versucht wird (auch
-  in einem Probelauf), jedes Limit, das Zeitlimit mit übrig gebliebenen
-  Verifikationen, die der nächste `auto`-Lauf zu Ende führt, eine
-  fehlgeschlagene Auslieferung, die Sitzung, die er für den Chat hinterlässt.
+  Warnungen, eine an ausführbarem Code, eine abgelehnte Korrektur, die nicht
+  erneut versucht wird (auch in einem Probelauf), jedes Limit, das Zeitlimit
+  mit übrig gebliebenen Verifikationen, die der nächste `auto`-Lauf zu Ende
+  führt, eine fehlgeschlagene Auslieferung, die Sitzung, die er für den Chat
+  hinterlässt.
+- Die echte Verdrahtung in `open_run` gegen den `gh`-Stub: Ein Lauf in `ask`
+  meldet nur (`report only`) und schickt keinen schreibenden Aufruf an
+  GitHub; nach den Pull Requests, die Läufe heute schon geöffnet haben, lehnt
+  er jede weitere Korrektur mit der Budget-Meldung ab.
 - Eine Zeile für jeden Befund, der nicht korrigiert wurde, und
   Untersuchungen ohne Urteil, die der nächste Lauf bis zu einem neueren
   Fehlschlag überspringt.
@@ -398,7 +445,8 @@ Fake-Modell getestet.
   `doctor`, fremder Unit-Dateien und eines abgelehnten Starts.
 - Der Schlüsselbund-Fehler und jeder Wert von `secrets.store`.
 - Die Zusammenfassung, ihr JSON und jeder Exit-Code von `run`; die
-  `daemon`-Befehle.
+  `daemon`-Befehle; ein Scan, der am Zeitlimit stoppt, und ein `SIGTERM`
+  mitten im Lauf, der trotzdem die Zusammenfassung ausgibt.
 - `install.sh` und der Smoke-Test mit ShellCheck (`shellcheck-py`) in
   `poe check`, ein Test, dass das Skript die Version aus `pyproject.toml`
   installiert, und Ende-zu-Ende im Smoke-Job.

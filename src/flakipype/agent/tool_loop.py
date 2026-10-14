@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from anthropic import Anthropic, APIError
 from anthropic.types import Message, ToolUseBlock
 from pydantic import BaseModel, ValidationError
 
@@ -23,7 +22,7 @@ from flakipype.agent.messages import (
     tool_result,
 )
 from flakipype.agent.tools import PolicyGate, Tool, ToolError
-from flakipype.llm.client import create_message
+from flakipype.llm.client import ModelClient, ModelError
 
 _CORRECTIONS = 2
 _NUDGES = 1
@@ -70,7 +69,7 @@ class Submission[Submitted: BaseModel]:
 class LoopModel:
     """How the loop reaches the model, and what limits and masks it."""
 
-    client: Anthropic
+    client: ModelClient
     settings: ModelSettings
     system: str
     budget: InvestigationBudget
@@ -110,7 +109,6 @@ class ToolLoop[Submitted: BaseModel]:
         self._last_call = ""
 
     def start(self, opening: str) -> LoopOutcome[Submitted]:
-        """The opening message must already be masked."""
         self._messages.append({"role": "user", "content": opening})
         return self._loop()
 
@@ -130,7 +128,7 @@ class ToolLoop[Submitted: BaseModel]:
                 response = self._call()
             except BudgetExceededError as error:
                 return LoopOutcome(LoopStatus.BUDGET, detail=f"Stopped at {error}.")
-            except APIError as error:
+            except ModelError as error:
                 return LoopOutcome(LoopStatus.MODEL_ERROR, detail=str(error))
             budget.record(response.usage)
             if declined(response):
@@ -170,7 +168,7 @@ class ToolLoop[Submitted: BaseModel]:
             tools=cached_tools([*definitions, self._submission.definition()]),
             messages=cached_messages(self._messages),
         )
-        response: Message = create_message(self._model.client, request)
+        response: Message = self._model.client.message(request)
         return response
 
     def _handle(self, use: ToolUseBlock, turn: _Turn[Submitted]) -> LoopOutcome[Submitted] | None:
@@ -196,6 +194,11 @@ class ToolLoop[Submitted: BaseModel]:
 
     def _submit(self, use: ToolUseBlock, turn: _Turn[Submitted]) -> LoopOutcome[Submitted] | None:
         noun = self._submission.noun
+        if turn.submitted is not None:
+            # The API rejects a tool_use without a result, so an extra submission gets one too.
+            text = f"Ignored: the first valid {noun} of this response counts; submit only one."
+            turn.results.append(tool_result(use.id, text, failed=True))
+            return None
         try:
             submitted = self._submission.model.model_validate(use.input)
         except ValidationError as error:

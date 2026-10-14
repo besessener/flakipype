@@ -135,7 +135,7 @@ def test_resume_keeps_the_configured_owner_and_host(cache: ScanCache) -> None:
     chat.handle("/scan 7")
     document = json.loads(cache.sessions.load(1) or "{}")
     document["scan"] |= {"owner": "other-org", "host": "ghe.example.com"}
-    cache.sessions.update(1, now="2026-10-09T08:00:00", data=json.dumps(document))
+    cache.sessions.update(1, now="2026-10-09T08:00:00", data=json.dumps(document), tokens=0)
 
     (note,) = chat.handle("/resume 1")
 
@@ -157,7 +157,7 @@ def test_resume_after_an_upgrade_drops_the_thinking(
     if changed:
         document = json.loads(cache.sessions.load(1) or "{}")
         document["fingerprint"] = "an older prompt"
-        cache.sessions.update(1, now="2026-10-09T08:00:00", data=json.dumps(document))
+        cache.sessions.update(1, now="2026-10-09T08:00:00", data=json.dumps(document), tokens=0)
     later = ScriptedModel([message(text("Welcome back."))])
     resumed = chat_service(cache, later)
 

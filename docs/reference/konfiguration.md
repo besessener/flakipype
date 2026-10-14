@@ -78,7 +78,7 @@ store = "auto"
 | `scan.min_flaky_runs` | `2` | 1–100; Läufe mit nachgewiesenen Flake-Ereignissen, bevor ein Job als instabil gilt (und bevor ein Fehler als wiederkehrend gilt). Mit `1` zählt jedes einzelne Ereignis |
 | `agent.max_rounds` | `12` | 1–50 Modellaufrufe pro Untersuchung |
 | `agent.max_tokens_per_investigation` | `200000` | 10k–2M Tokens (Eingabe, Ausgabe, Cache-Schreib- und -Lesezugriffe mit vollem Gewicht, Thinking) pro Untersuchung; auch pro Chat-Frage, wobei nur zählt, was die Frage hinzufügt |
-| `agent.max_seconds_per_investigation` | `300` | 30–3600 |
+| `agent.max_seconds_per_investigation` | `300` | 30–3600. Eine Anfrage an das Modell wartet höchstens ein Drittel davon (oder von `fix.max_seconds`, wenn das kürzer ist) auf Daten, sodass sie mit den zwei Wiederholungen des SDK hineinpasst |
 | `agent.max_tokens_per_run` | `1000000` | 10k–20M für alle Untersuchungen eines `investigate`-Laufs; ist es erreicht, starten keine neuen mehr |
 | `agent.parallel` | `3` | 1–8 Untersuchungen gleichzeitig (GitHub-Aufrufe gehen weiterhin einzeln nacheinander) |
 | `agent.max_output_tokens` | `16000` | 1k–64k pro Modellaufruf; Aufrufe werden gestreamt, daher funktioniert der ganze Bereich |
@@ -99,7 +99,7 @@ store = "auto"
 | `run.max_prs_per_day` | `3` | 1–20 Draft-PRs, die alle Läufe der letzten 24 Stunden öffnen dürfen |
 | `run.max_actions_per_day` | `20` | 1–200 Reruns und Dispatches, die alle Läufe der letzten 24 Stunden starten dürfen |
 | `run.max_tokens_per_day` | `3000000` | 10k–50M Tokens, die alle Läufe der letzten 24 Stunden verbrauchen dürfen |
-| `secrets.store` | `auto` | `auto` (der System-Keyring, oder `secrets.json`, wo es keinen gibt), `keyring` oder `file` |
+| `secrets.store` | `auto` | `auto` (der System-Keyring, oder `secrets.json`, wo es keinen gibt oder nur das null-Backend von keyring), `keyring` oder `file` |
 
 In einem Lauf sind `fix.max_prs_per_session`, `actions.max_per_session` und
 `agent.max_tokens_per_run` die Limits dieses einen Laufs, und Untersuchungen
@@ -124,6 +124,26 @@ Ein gesperrter oder nicht erreichbarer Keyring, typischerweise unter einem
 systemd-Timer ohne Desktop-Sitzung, wird mit Exit-Code 2 und dem nächsten
 Schritt gemeldet:
 `flakipype setup --non-interactive --secret-store file --api-key-stdin`.
+
+- Antwortet der Keyring nicht innerhalb von 15 Sekunden, etwa weil er auf
+  eine Entsperr-Abfrage wartet, die niemand beantwortet, gilt er als
+  gesperrt. Ein Lauf hängt dann nie bis zum Timeout der systemd-Unit.
+- `auto` behandelt das null-Backend von keyring
+  (`PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`) wie einen
+  fehlenden Keyring und nimmt `secrets.json`.
+- Nach dem Speichern liest setup den Key aus dem Keyring zurück. Behält das
+  Backend ihn nicht, endet setup mit Exit-Code 2 und demselben nächsten
+  Schritt, statt „Saved“ zu melden.
+- Fehlt der Key in `secrets.json`, nennen `run`, `investigate` und `chat`
+  denselben nächsten Schritt, `doctor` ebenso, wenn sonst nichts fehlt. Hat
+  setup den Key in einer Desktop-Sitzung im Keyring gespeichert, erreicht ein
+  Timer ohne Session-Bus ihn nicht; setup dort erneut auszuführen, änderte
+  nichts.
+- Ist `gh` nicht angemeldet, nennen `run` und `doctor` neben
+  `flakipype setup` auch
+  `gh auth login --hostname <host> --insecure-storage`: Ohne
+  Desktop-Sitzung kann `gh` ein Token im Keyring ebenso wenig lesen.
+
 `secrets.json` wird als Ganzes über eine temporäre Datei ersetzt, sodass ein
 fehlgeschlagener Schreibvorgang (volle Festplatte) die vorherige Datei
 behält.

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from flakipype.agent.prompts import data_block
 from flakipype.agent.tools import RiskLevel, Tool, ToolError
+from flakipype.agent.workcopy import normal_path
 from flakipype.flaky.excerpt import failure_excerpt, log_range
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.flaky.model import JobResult, WorkflowRun
@@ -194,7 +195,8 @@ class FindingTools:
         )
 
     def _read_file(self, given: ReadFileInput) -> str:
-        return self._file(given.path, given.ref, given.from_line)
+        # The path becomes part of a gh api path, so ../ must never reach another endpoint.
+        return self._file(normal_path(given.path), given.ref, given.from_line)
 
     def _workflow_file(self, given: WorkflowInput) -> str:
         return self._file(self.finding.key.workflow_path, given.ref, 1)

@@ -47,6 +47,8 @@ class Verification:
     outcome: str = ""
     # Whether flakipype may dispatch the workflow when no push or pull_request run starts.
     dispatchable: bool = False
+    # Why the last poll could not read GitHub; the next poll tries again.
+    detail: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "started": self.started.isoformat()}
@@ -105,9 +107,17 @@ class Verifier:
     def _dispatch(self, verification: Verification) -> Verification:
         try:
             dispatched = self._actions.dispatch_authorised(self._run(verification, run_id=None))
+        except ApiRateLimitError:
+            raise
+        except GitHubApiError as error:
+            return self._finish(verification, f"GitHub refused the dispatch: {error}")
         except ActionRefusedError as error:
             return self._finish(verification, str(error))
         return replace(verification, stage=Stage.WATCHING, watched=(dispatched.number,))
+
+    def stop(self, verification: Verification, reason: str) -> Verification:
+        """Ends the verification and says why on the pull request."""
+        return self._finish(verification, reason)
 
     def poll(self, verification: Verification) -> Verification:
         if verification.stage is Stage.WAITING:
@@ -127,8 +137,9 @@ class Verifier:
         except GitHubApiError as error:
             # A lookup that keeps failing must not keep the verification waiting forever.
             if not waited_long_enough:
-                raise
+                return replace(verification, detail=f"GitHub did not answer: {error}")
             return self._finish(verification, f"GitHub did not answer: {error}")
+        verification = replace(verification, detail="")
         runs = [run for run in found if run.event in _EVENTS]
         if runs:
             watched = self._actions.watch(self._run(verification, run_id=runs[0].run_id))
@@ -148,7 +159,8 @@ class Verifier:
         if run is None or not run.done:
             return verification
         if run.conclusion is None:
-            return self._finish(verification, "a run did not finish while it was watched")
+            unread = f"; {run.detail}" if run.detail else ""
+            return self._finish(verification, f"a run did not finish while it was watched{unread}")
         result = self._result(verification, run)
         updated = replace(verification, results=(*verification.results, result))
         if len(updated.results) >= updated.wanted:
@@ -227,7 +239,7 @@ class Verifier:
             self._github.comments.comment(verification.repository, verification.pull_number, text)
         except GitHubApiError as error:
             text += f"\n(The comment could not be posted on the pull request: {error})"
-        return replace(verification, stage=Stage.DONE, outcome=text)
+        return replace(verification, stage=Stage.DONE, outcome=text, detail="")
 
 
 def _did_not_run(job: str) -> str:

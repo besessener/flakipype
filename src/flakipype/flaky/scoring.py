@@ -41,7 +41,7 @@ class FlakyJob:
     last_seen: datetime
     # The workflow passed between the first and the last affected run: the failure came back.
     recurred: bool
-    # First passing run of the workflow from the last affected run on, if any.
+    # First pass of another run after the last affected run; an affected run's rerun is no fix.
     passing_since: datetime | None
     examples: tuple[str, ...]
     job_ids: tuple[int, ...]
@@ -63,13 +63,16 @@ def completed_runs_per_workflow(runs: Iterable[WorkflowRun]) -> Counter[_Workflo
     )
 
 
-def passes_per_workflow(runs: Iterable[WorkflowRun]) -> dict[_Workflow, list[datetime]]:
-    """Creation times of passing runs, oldest first; a run that passed on rerun counts."""
-    passes: defaultdict[_Workflow, list[datetime]] = defaultdict(list)
+def passes_per_workflow(runs: Iterable[WorkflowRun]) -> dict[_Workflow, list[WorkflowRun]]:
+    """Passing runs, oldest first; a run that passed on rerun counts."""
+    passes: defaultdict[_Workflow, list[WorkflowRun]] = defaultdict(list)
     for run in runs:
         if run.is_tracked and run.succeeded:
-            passes[run.repository, run.workflow_path].append(run.created_at)
-    return {workflow: sorted(times) for workflow, times in passes.items()}
+            passes[run.repository, run.workflow_path].append(run)
+    return {
+        workflow: sorted(passed, key=lambda run: run.created_at)
+        for workflow, passed in passes.items()
+    }
 
 
 def rank_flaky_jobs(
@@ -113,7 +116,7 @@ def _key(failure: FlakyFailure) -> FlakyKey:
 @dataclass(frozen=True)
 class _History:
     total_runs: int
-    passes: list[datetime]
+    passes: list[WorkflowRun]
 
 
 def _summarise(
@@ -125,8 +128,14 @@ def _summarise(
 ) -> FlakyJob:
     newest_first = sorted(group, key=_seen_at, reverse=True)
     signals = Counter(failure.signal for failure in group)
-    run_times = sorted({failure.run.run_id: failure.run.created_at for failure in group}.values())
+    affected = {failure.run.run_id: failure.run.created_at for failure in group}
+    run_times = sorted(affected.values())
     first_run, last_run = run_times[0], run_times[-1]
+    later_passes = (
+        passed.created_at
+        for passed in history.passes
+        if passed.created_at > last_run and passed.run_id not in affected
+    )
     return FlakyJob(
         key=key,
         flaky_failures=len(group),
@@ -136,8 +145,8 @@ def _summarise(
         same_commit=signals[Signal.SAME_COMMIT],
         first_seen=_seen_at(newest_first[-1]),
         last_seen=_seen_at(newest_first[0]),
-        recurred=any(first_run <= passed < last_run for passed in history.passes),
-        passing_since=next((passed for passed in history.passes if passed >= last_run), None),
+        recurred=any(first_run <= passed.created_at < last_run for passed in history.passes),
+        passing_since=next(later_passes, None),
         examples=tuple(failure.job.url for failure in newest_first[:_EXAMPLES]),
         job_ids=tuple(failure.job.job_id for failure in newest_first),
         signatures=_count_signatures(newest_first, signatures),

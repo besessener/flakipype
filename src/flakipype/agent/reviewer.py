@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-from anthropic import Anthropic, APIError
 from anthropic.types import Message, ToolUseBlock
 from pydantic import BaseModel, ValidationError
 
@@ -12,7 +11,7 @@ from flakipype.agent.masking import Masker
 from flakipype.agent.messages import DECLINED, ModelSettings, content_blocks, declined
 from flakipype.agent.prompts import REVIEWER_SYSTEM, data_block
 from flakipype.agent.verdict import Review, Verdict
-from flakipype.llm.client import create_message
+from flakipype.llm.client import ModelClient, ModelError
 
 SUBMIT_REVIEW = "submit_review"
 _NUDGE = "Answer by calling submit_review."
@@ -44,7 +43,7 @@ def review_request(finding_text: str, verdict: Verdict) -> str:
 
 class Reviewer:
     def __init__(
-        self, *, client: Anthropic, settings: ModelSettings, budget: InvestigationBudget
+        self, *, client: ModelClient, settings: ModelSettings, budget: InvestigationBudget
     ) -> None:
         self._client = client
         self._settings = settings
@@ -55,7 +54,7 @@ class Reviewer:
         return self.ask(VERDICT_REVIEW, masker.mask(review_request(finding_text, verdict)))
 
     def ask[Answer: BaseModel](self, kind: ReviewKind[Answer], content: str) -> Answer:
-        """One review of masked content; raises ReviewUnavailableError if none comes back."""
+        """One review of content; raises ReviewUnavailableError if none comes back."""
         messages: list[dict[str, Any]] = [{"role": "user", "content": content}]
         # Some models refuse a forced tool_choice, so the reviewer is asked, and nudged once.
         response = self._call(kind, messages)
@@ -82,8 +81,8 @@ class Reviewer:
         request = self._settings.request(system=kind.system, tools=[tool], messages=messages)
         try:
             self._budget.check()
-            response: Message = create_message(self._client, request)
-        except (APIError, BudgetExceededError) as error:
+            response: Message = self._client.message(request)
+        except (ModelError, BudgetExceededError) as error:
             raise ReviewUnavailableError(str(error)) from error
         self._budget.record(response.usage)
         if declined(response):

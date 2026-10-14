@@ -69,6 +69,20 @@ MIGRATIONS = (
         detail TEXT NOT NULL, PRIMARY KEY (host, identity)
     );
     """,
+    # Earlier entries take their status from the outcome texts their version wrote.
+    """
+    ALTER TABLE action_log ADD COLUMN status TEXT NOT NULL DEFAULT 'done';
+    ALTER TABLE action_log ADD COLUMN spent INTEGER NOT NULL DEFAULT 0;
+    UPDATE action_log SET status = CASE
+        WHEN outcome IN ('not run', 'not pushed') THEN 'declined'
+        WHEN outcome GLOB 'not run*' OR outcome GLOB 'not pushed*' THEN 'refused'
+        WHEN outcome GLOB 'failed*' THEN 'failed'
+        ELSE 'done'
+    END;
+    UPDATE action_log SET spent = 1 WHERE status = 'done' AND action != 'cancel';
+    ALTER TABLE sessions ADD COLUMN tokens INTEGER NOT NULL DEFAULT 0;
+    UPDATE sessions SET tokens = COALESCE(json_extract(data, '$.tokens'), 0) WHERE kind = 'run';
+    """,
 )
 # The chat and a run may write at the same time; a writer waits this long for the other.
 _BUSY_SECONDS = 30

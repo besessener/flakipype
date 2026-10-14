@@ -45,7 +45,7 @@ def propose(
 ) -> FixResult:
     answers = iter(check or [])
     config = FixConfig(
-        client=model.client(),
+        client=model.client("sk-hidden-value"),
         settings=ModelSettings(model="m-1"),
         limits=limits or Limits(rounds=20, tokens=300_000, seconds=600),
         masker=Masker.with_secrets(["sk-hidden-value"]),
@@ -309,7 +309,8 @@ def test_an_earlier_proposal_and_the_users_wishes_are_the_starting_point() -> No
 
     assert result.changes == (earlier,)
     task = model.message_text(0, 0)
-    assert "asked in the chat for these changes to it:\nKeep the assertion." in task
+    assert "The working copy already holds an earlier proposal." in task
+    assert f"<wishes {UNTRUSTED}>\nKeep the assertion.\n</wishes>" in task
     assert "sk-hidden-value" not in model.message_text(1, 0)
 
 
@@ -319,7 +320,8 @@ def test_wishes_without_an_earlier_proposal_are_the_fix_to_make() -> None:
     propose(model, instructions="Keep the assertion.")
 
     task = model.message_text(0, 0)
-    assert "The user asked in the chat for this fix:\nKeep the assertion." in task
+    assert f"<wishes {UNTRUSTED}>\nKeep the assertion.\n</wishes>" in task
+    assert "The user asked" not in task
     assert "earlier proposal" not in task
 
 

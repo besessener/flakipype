@@ -26,7 +26,13 @@ from flakipype.agent.pipeline import AgentConfig, investigate_finding
 from flakipype.agent.tools import Confirmer, HeadlessGate, Mode, PolicyGate
 from flakipype.cli.readiness import NotReadyError, check_logged_in, check_run_owner
 from flakipype.config.paths import AppPaths, app_paths
-from flakipype.config.secrets import LLM_API_KEY, SecretStore, SecretStoreError, secret_store
+from flakipype.config.secrets import (
+    LLM_API_KEY,
+    FileSecretStore,
+    SecretStore,
+    SecretStoreError,
+    secret_store,
+)
 from flakipype.config.settings import (
     FixSettings,
     SecretStoreChoice,
@@ -47,7 +53,13 @@ from flakipype.github.runs import RunControl
 from flakipype.investigate.chat import ChatService
 from flakipype.investigate.service import InvestigationService
 from flakipype.investigate.workspace import ChatWorkspace
-from flakipype.llm.client import ClientSetupError, LlmEndpoint, create_client
+from flakipype.llm.client import (
+    ClientSetupError,
+    LlmEndpoint,
+    ModelClient,
+    create_client,
+    request_timeout,
+)
 from flakipype.llm.connection import (
     ConnectionFailed,
     ConnectionProblem,
@@ -108,6 +120,11 @@ def build_setup_service(choice: SecretStoreChoice | None = None) -> SetupService
     )
 
 
+def configured_secret_store() -> SecretStore:
+    paths = _paths()
+    return _secret_store(paths, _ready_settings(paths).secrets.store)
+
+
 def build_daemon() -> Daemon:
     return Daemon(unit_dir=_paths().systemd_unit_dir, run=run_command, user=getpass.getuser())
 
@@ -163,13 +180,16 @@ def open_scan() -> Generator[tuple[ScanService, Settings]]:
 def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
     agent = settings.agent
     endpoint = LlmEndpoint(settings.llm.base_url, api_key, settings.llm.model)
+    # The client serves investigations and fixes, so a request fits in the shorter time limit.
+    shortest = min(agent.max_seconds_per_investigation, settings.fix.max_seconds)
     try:
-        client = create_client(endpoint)
+        sdk = create_client(endpoint, timeout=request_timeout(shortest))
     except ClientSetupError as error:
         message = f"{error}."
         raise NotReadyError(message) from error
+    masker = Masker.with_secrets([api_key])
     return AgentConfig(
-        client=client,
+        client=ModelClient(sdk, masker.mask),
         settings=ModelSettings(
             model=settings.llm.model,
             max_tokens=agent.max_output_tokens,
@@ -181,7 +201,7 @@ def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
             tokens=agent.max_tokens_per_investigation,
             seconds=agent.max_seconds_per_investigation,
         ),
-        masker=Masker.with_secrets([api_key]),
+        masker=masker,
         logs=ActionsClient(gh),
         contents=ContentsClient(gh),
         clock=time.monotonic,
@@ -212,7 +232,9 @@ def _open_agentic() -> Generator[_Agentic]:
         message = f"Cannot read the API key from the {secrets.location}: {error}. {KEY_IN_A_FILE}"
         raise NotReadyError(message) from error
     if not api_key:
-        message = f"No API key stored. {RUN_SETUP}"
+        # Setup may have kept the key in a keyring this environment cannot reach; setup again loops.
+        next_step = KEY_IN_A_FILE if isinstance(secrets, FileSecretStore) else RUN_SETUP
+        message = f"No API key stored in the {secrets.location}. {next_step}"
         raise NotReadyError(message)
     gh = _gh_cli(paths, settings.github.host)
     config = _agent_config(settings, api_key, gh)
@@ -296,7 +318,6 @@ def open_chat() -> Generator[tuple[ChatService, Settings]]:
             ),
             tools=workspace_tools(workspace),
             gate=gate,
-            masker=agentic.config.masker,
             clock=time.monotonic,
         )
         chat = ChatService(

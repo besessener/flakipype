@@ -1,25 +1,35 @@
+import hashlib
+import json
 from dataclasses import replace
 
 import pytest
 
 from flakipype.agent.tools import Answer, ToolError
+from flakipype.agent.verdict import ReviewState
 from flakipype.agent.workcopy import FileChange
 from flakipype.config.settings import FixSettings
-from flakipype.fix.service import FixDeliveryError, FixNotMadeError, FixTarget
-from flakipype.fix.texts import finding_marker
+from flakipype.fix.service import (
+    FixDeliveryError,
+    FixNotMadeError,
+    FixTarget,
+    FixUnavailableError,
+)
+from flakipype.fix.texts import PullRequestFacts, Rate, finding_marker, pull_request_body
 from flakipype.fix.verify import Stage, Verification
-from flakipype.flaky.findings import Finding
+from flakipype.flaky.findings import Finding, FindingKind
 from flakipype.flaky.signature import Category, ErrorSignature
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError, api_error
 from flakipype.github.gh import GhResult
 from flakipype.github.pulls import PullRequest
 from flakipype.github.runs import CommitRun
+from flakipype.store.audit import AuditStatus
 from flakipype.store.database import ScanCache
 
 from support.fake_fix import (
     CHANGE,
     COMMIT,
     FIX_COMMIT,
+    PROSE,
     TITLE,
     FakeFixer,
     FixWorld,
@@ -35,19 +45,29 @@ WORKFLOW_CHANGE = FileChange(E2E, "on: push\njobs: {}\n", "on:\n  push:\njobs: {
 
 
 def target(
-    finding: Finding | None = None, *, classification: str = "flaky_test", review: str = "accepted"
+    finding: Finding | None = None,
+    *,
+    classification: str = "flaky_test",
+    review: tuple[ReviewState, str] = (ReviewState.ANSWERED, "accepted"),
 ) -> FixTarget:
     signature = ErrorSignature(Category.TIMEOUT, "wait timed out", "f" * 12, "excerpt")
     evidence = replace(e2e_evidence(), signatures={41: signature})
-    return FixTarget(finding or e2e_finding(), evidence, verdict(classification), review)
+    return FixTarget(finding or e2e_finding(), evidence, verdict(classification), *review)
 
 
 @pytest.mark.parametrize(
     ("fix_target", "problem"),
     [
         (target(classification="real_bug"), "#2 is real bug: flakipype fixes only flaky tests"),
-        (target(review="not reviewed: HTTP 500"), r"not reviewed \(not reviewed: HTTP 500\)"),
-        (target(review=""), r"not reviewed \(no review\); investigate it again with /investigate"),
+        (target(review=(ReviewState.UNAVAILABLE, "not reviewed: HTTP 500")),
+         r"not reviewed \(not reviewed: HTTP 500\)"),
+        (target(review=(ReviewState.UNAVAILABLE, "")),
+         r"not reviewed \(no review\); investigate it again with /investigate"),
+        (target(review=(ReviewState.REVISION_ENDED, "sent back, revision ended: Stopped at x.")),
+         r"not reviewed \(sent back, revision ended: Stopped at"),
+        # The state decides, not the wording of the text.
+        (target(review=(ReviewState.UNAVAILABLE, "accepted: looks right")),
+         r"not reviewed \(accepted: looks right\)"),
         (target(e2e_finding(repository="other/app")), "does not belong to the configured owner"),
     ],
 )  # fmt: skip
@@ -111,6 +131,42 @@ def test_an_open_flakipype_pull_request_is_linked_instead(cache: ScanCache) -> N
     assert world.fixer.requests == []
 
 
+def test_a_pull_request_for_the_finding_under_another_kind_is_linked_instead(
+    cache: ScanCache,
+) -> None:
+    world = FixWorld(cache)
+    flaky = e2e_finding()
+    # The first run saw a recurring error and opened a pull request; now it is proven flaky.
+    recurring = replace(flaky, kind=FindingKind.RECURRING, fingerprint="f" * 12)
+    body = pull_request_body(
+        PullRequestFacts(recurring, verdict("flaky_test"), Rate(1, 2, "main"), (), 3), "Waits."
+    )
+    world.github.open = [
+        PullRequest(5, "https://github.com/octo-org/app/pull/5", "flakipype/fix-e2e-1", body,
+                    "octo-org/app"),
+    ]  # fmt: skip
+
+    with pytest.raises(ToolError, match=r"An open flakipype pull request for #2 exists: .+/pull/5"):
+        world.fixes.prepare(target(flaky))
+    assert world.fixer.requests == []
+
+
+def test_a_pull_request_with_the_marker_of_older_versions_is_still_found(
+    cache: ScanCache,
+) -> None:
+    world = FixWorld(cache)
+    finding = e2e_finding()
+    # Older versions hashed the identity, which includes the kind.
+    digest = hashlib.sha256(finding.identity.encode()).hexdigest()[:12]
+    world.github.open = [
+        PullRequest(6, "https://github.com/octo-org/app/pull/6", "flakipype/fix-e2e-1",
+                    f"<!-- flakipype:finding={digest} -->\n## Flaky", "octo-org/app"),
+    ]  # fmt: skip
+
+    with pytest.raises(ToolError, match=r"An open flakipype pull request for #2 exists: .+/pull/6"):
+        world.fixes.prepare(target(finding))
+
+
 def test_an_outsiders_pull_request_with_the_marker_does_not_block_the_fix(
     cache: ScanCache,
 ) -> None:
@@ -147,7 +203,7 @@ def test_the_confirmation_shows_facts_the_model_text_and_the_diff(cache: ScanCac
     )
     assert request.model_text == f"{TITLE}\n\nThe test counts rows before the import finished."
     assert "+await rows.waitFor()" in request.diff
-    assert request.needs_person == ""
+    assert request.needs_person == f"it changes files that can run as code: {CHANGE.path}"
     assert (request.confirm_label, request.decline_label) == ("Push", "Don't push")
     (fix_request,) = world.fixer.requests
     assert (fix_request.commit, fix_request.default_branch) == (COMMIT, "main")
@@ -179,7 +235,15 @@ def test_warnings_need_a_person(cache: ScanCache) -> None:
         "4 files · +5 −2 · tests/e2e/scan.spec.ts, .github/workflows/e2e.yml, a.txt …"
     )
     assert request.details[-2:] == ("Warnings:", f"⚠ changes .github/: {E2E}")
-    assert request.needs_person == "the diff has warnings"
+    assert request.needs_person == f"the diff has warnings: changes .github/: {E2E}"
+
+
+def test_only_a_fix_of_documentation_may_be_pushed_without_a_person(cache: ScanCache) -> None:
+    world = FixWorld(cache, fixer=FakeFixer([fixed((PROSE,))]))
+
+    request = world.fixes.prepare(target()).request
+
+    assert request.needs_person == ""
 
 
 def test_a_proposal_is_shown_again_until_it_is_discarded(cache: ScanCache) -> None:
@@ -250,6 +314,7 @@ def test_a_confirmed_fix_is_delivered_and_audited(cache: ScanCache) -> None:
         "fix", "model", "confirmed", outcome,
     )  # fmt: skip
     assert entry.request.startswith("Push fix and open a draft pull request?\nocto-org/app")
+    assert (entry.status, entry.spent) == (AuditStatus.DONE, 1)
 
 
 def test_a_fix_whose_verification_ends_at_once_says_so(cache: ScanCache) -> None:
@@ -275,6 +340,7 @@ def test_a_declined_fix_is_kept_and_audited(cache: ScanCache) -> None:
     assert len(world.fixes.state()["proposals"]) == 1
     (entry,) = cache.audit.entries(world.actions.session)
     assert (entry.origin, entry.answer, entry.outcome) == ("command", "declined", "not pushed")
+    assert (entry.status, entry.spent) == (AuditStatus.DECLINED, 0)
 
 
 def test_a_failed_delivery_is_reported_and_audited(cache: ScanCache) -> None:
@@ -288,6 +354,7 @@ def test_a_failed_delivery_is_reported_and_audited(cache: ScanCache) -> None:
     assert world.fixes.opened == 0
     (entry,) = cache.audit.entries(world.actions.session)
     assert entry.outcome.startswith("failed: Branch flakipype/fix-e2e-")
+    assert (entry.status, entry.spent) == (AuditStatus.FAILED, 0)
 
 
 def opened_fix(world: FixWorld) -> None:
@@ -311,7 +378,7 @@ def test_poll_moves_verifications_and_notes_finished_ones(cache: ScanCache) -> N
     assert world.fixes.poll() == []
 
 
-def test_poll_waits_for_the_rate_limit_and_skips_errors(cache: ScanCache) -> None:
+def test_poll_waits_for_the_rate_limit_and_records_errors(cache: ScanCache) -> None:
     world = FixWorld(cache)
     opened_fix(world)
     opened_fix(world)
@@ -319,13 +386,20 @@ def test_poll_waits_for_the_rate_limit_and_skips_errors(cache: ScanCache) -> Non
 
     world.github.errors["commit_runs"] = ApiRateLimitError("rate limit", 403)
     assert world.fixes.poll() == []
+    assert world.fixes.pulls == before
     world.github.errors["commit_runs"] = SERVER_ERROR
     assert world.fixes.poll() == []
 
-    assert world.fixes.pulls == before
+    assert [pull.verification.detail for pull in world.fixes.pulls] == [
+        "GitHub did not answer: Server Error (HTTP 500)"
+    ] * 2
+    assert [pull.verification.stage for pull in world.fixes.pulls] == [Stage.WAITING] * 2
     assert (
         world.github.calls.count("commit_runs octo-org/app .github/workflows/e2e.yml c0ffee1") == 3
     )
+    del world.github.errors["commit_runs"]
+    world.fixes.poll()
+    assert world.fixes.pulls == before
 
 
 def test_a_poll_never_writes_into_pull_requests_replaced_meanwhile(
@@ -408,6 +482,7 @@ def test_a_pull_request_opened_meanwhile_stops_the_push(cache: ScanCache) -> Non
     assert world.github.drafts == []
     (entry,) = cache.audit.entries(world.actions.session)
     assert entry.outcome.startswith("not pushed: An open flakipype pull request")
+    assert (entry.status, entry.spent) == (AuditStatus.REFUSED, 0)
 
 
 def test_fixes_that_were_not_made_and_failed_deliveries_have_their_own_errors(
@@ -422,3 +497,28 @@ def test_fixes_that_were_not_made_and_failed_deliveries_have_their_own_errors(
         rejected.fixes.prepare(target())
     with pytest.raises(FixDeliveryError, match="opening the pull request failed"):
         prepared.run(Answer.AUTO)
+
+
+def test_a_fix_whose_review_could_not_run_is_unavailable_whatever_the_text(
+    cache: ScanCache,
+) -> None:
+    result = fixed(accepted=False, review="rejected: no", review_state=ReviewState.UNAVAILABLE)
+    world = FixWorld(cache, fixer=FakeFixer([result]))
+
+    with pytest.raises(FixUnavailableError):
+        world.fixes.prepare(target())
+
+
+def test_a_proposal_saved_before_the_review_state_counts_as_unavailable(cache: ScanCache) -> None:
+    world = FixWorld(cache, fixer=FakeFixer([fixed(accepted=False, review="rejected: no")]))
+    with pytest.raises(FixNotMadeError):
+        world.fixes.prepare(target())
+    state = json.loads(json.dumps(world.fixes.state()))
+    del state["proposals"][0]["review_state"]
+
+    resumed = FixWorld(cache)
+    resumed.fixes.restore(state)
+
+    with pytest.raises(FixUnavailableError):
+        resumed.fixes.prepare(target())
+    assert resumed.fixer.requests == []

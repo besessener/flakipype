@@ -25,6 +25,7 @@ _RATE_LIMIT = re.compile(r"rate limit", re.IGNORECASE)
 _HTTP_UNAUTHORIZED = 401
 _HTTP_NOT_FOUND = 404
 _HTTP_GONE = 410
+_HTTP_SERVER_ERROR = 500
 _REPOSITORIES = TypeAdapter(list[RepositoryPayload])
 
 
@@ -36,6 +37,11 @@ class GitHubApiError(Exception):
     @property
     def is_authentication_problem(self) -> bool:
         return self.status == _HTTP_UNAUTHORIZED
+
+    @property
+    def is_no_answer(self) -> bool:
+        """No HTTP answer (a timeout, the network) or a server error: not this request's fault."""
+        return self.status is None or self.status >= _HTTP_SERVER_ERROR
 
 
 class ApiRateLimitError(GitHubApiError):

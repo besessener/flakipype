@@ -16,7 +16,7 @@ in jedem Modus und lässt sich nicht wegkonfigurieren.
 | Modus | Standard für | Verhalten |
 | --- | --- | --- |
 | `ask` | den Chat | Jede `write`- und `critical`-Aktion wartet auf deine Bestätigung. |
-| `auto` | Headless-Befehle und den systemd-Timer | Aktionen laufen ohne Bestätigung innerhalb der Budgets; Pull Requests werden **nur als Entwurf** geöffnet. |
+| `auto` | Headless-Befehle und den systemd-Timer | Aktionen laufen ohne Bestätigung innerhalb der Budgets; Pull Requests werden **nur als Entwurf** geöffnet, und eine Korrektur an ausführbarem Code wird nur vorbereitet und gemeldet. |
 
 Umschalten kannst du im Chat mit `/mode ask|auto` (der Chat startet immer in
 `ask`, und `/new` und `/resume` schalten dorthin zurück) oder auf der
@@ -26,11 +26,24 @@ bestätigen, daher ist `ask` dort ein Probelauf: Jede `write`- und
 gepusht ([unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)). Jeder Pull
 Request von flakipype ist ein Entwurf, in beiden Modi.
 
-Im Modus `auto` wird eine Korrektur nicht gepusht, deren Diff `.github/`
-berührt, etwas hinzufügt, das einen Fehlschlag verbergen könnte, oder auf
-das Netzwerk oder Secrets zugreift: Ein gepushter Branch führt seine eigenen
-Workflow-Dateien mit den Secrets des Repositorys aus, bevor ihn jemand
-geprüft hat ([Korrekturen](korrekturen.md#modi)).
+Im Modus `auto` pusht flakipype eine Korrektur nur, wenn sie ausschließlich
+reine Dokumentation ändert (Markdown, reStructuredText oder AsciiDoc ohne
+Code darin) und ihr Diff keine Warnung hat. Jede andere Datei gilt als
+ausführbar, im Zweifel auch Konfiguration, Manifeste, `Makefile`,
+`conftest.py` und das YAML von Workflows und Actions: Eine solche Korrektur
+bereitet `auto` vor und meldet sie, pushen kannst du sie nach Prüfung in
+`ask` ([Korrekturen](korrekturen.md#modi)). Der Grund: Ein gepushter Branch
+führt seine eigenen Workflows und seinen Code mit den Secrets des
+Repositorys aus, bevor ihn jemand geprüft hat, und Logs oder Dateien im
+Repository können das Modell zu einer bösartigen Änderung verleiten.
+
+Was davon garantiert ist: nur diese Regel im Code. Die Warnungen sind eine
+Musterliste (verbirgt Fehlschläge, greift nach außen, `.github/`), die die
+üblichen Formen findet, aber nicht jede; ein zusammengesetzter URL-String
+oder `dict(os.environ)` fällt ihr nicht auf. Der Reviewer ist ein Modell und
+lässt sich wie der Fixer täuschen. Beide helfen dir beim Prüfen; dass
+ausführbarer Code nie ohne eine Person auf einen Branch kommt, hängt an
+keinem von beiden.
 
 ## Risikostufen, im Code erzwungen
 
@@ -42,7 +55,7 @@ ein Werkzeug läuft:
 | --- | --- | --- | --- |
 | `read` | Läufe auflisten, Logs lesen, Dateien lesen, die Kopie des Fixers im Speicher bearbeiten | läuft | läuft |
 | `write` | einen Job erneut ausführen, einen Workflow per Dispatch starten, einen Lauf abbrechen | bestätigen | läuft innerhalb des Budgets |
-| `critical` | einen Korrektur-Branch pushen und einen Draft-PR öffnen | bestätigen, mit dem Diff | läuft innerhalb des Budgets, außer der Diff hat eine Warnung |
+| `critical` | einen Korrektur-Branch pushen und einen Draft-PR öffnen | bestätigen, mit dem Diff | läuft innerhalb des Budgets nur für reine Dokumentation ohne Warnung; sonst wartet die Korrektur auf dich |
 
 Bearbeitungen sind `read`, weil sie nur den Speicher ändern: Nichts wird
 geklont oder auf die Platte geschrieben, und nichts verlässt den Rechner vor
@@ -68,17 +81,33 @@ wird. Einzelheiten zu Reruns und Dispatches: [Aktionen](aktionen.md).
 
 Job-Logs, Workflow-Dateien, Quellcode und Issue- oder PR-Text können Text
 enthalten, den irgendwer geschrieben hat. Sie gehen immer als Daten markiert
-an das Modell, nie als Anweisungen. Aktionen kommen nur aus deiner Anfrage
-oder dem eingestellten Modus.
+an das Modell, nie als Anweisungen. Ein schließendes Tag im Text, egal in
+welcher Groß- und Kleinschreibung und mit welchen Leerzeichen
+(`</LOG>`, `</ log>`), wird entschärft, sodass er sein Datenelement nicht
+vorzeitig beenden kann. Aktionen kommen nur aus deiner Anfrage oder dem
+eingestellten Modus. Auch die Wünsche, die das Chat-Modell für eine
+Korrektur an den Fixer weitergibt (`instructions`), sind für den Fixer als
+Daten markiert, weil das Modell darin Log- oder Repository-Text zitieren
+kann.
 
 ## Secrets bleiben lokal
 
 Alles, was an das Modell geht, durchläuft zuerst die Maskierung von Secrets
-(`agent/masking.py`): der konfigurierte API-Key selbst, Tokens von GitHub,
-Anthropic, AWS und Slack, JWTs, Blöcke privater Schlüssel (PEM und PGP),
-Zugangsdaten in URLs, Bearer-Tokens und Zuweisungen im Stil von
-`password=`/`token:` (auch mit ausgerichteten Leerzeichen) werden zu
-`[masked: …]`. Ein Header eines privaten Schlüssels ohne seine END-Zeile
+(`agent/masking.py`). Das passiert an einer einzigen Stelle im Code:
+`ModelClient` (`llm/client.py`) maskiert jeden Text und jedes
+Werkzeugergebnis jeder Nachricht direkt vor dem Senden, sodass ein neuer
+Weg zum Modell die Maskierung nicht vergessen kann.
+
+Zu `[masked: …]` werden der konfigurierte API-Key selbst, Tokens von
+GitHub, Anthropic, AWS, Slack, GitLab, npm, PyPI, Google und Stripe, JWTs,
+Blöcke privater Schlüssel (PEM und PGP), Zugangsdaten in URLs, Bearer- und
+Basic-Authentifizierung, Passwörter von `docker login` und Zuweisungen im
+Stil von `password=`/`token:`. Zuweisungen erkennt
+die Maskierung auch mit ausgerichteten Leerzeichen, mit Zusätzen am Namen
+(`DB_PASSWORD_PROD=`, `DJANGO_SECRET_KEY=`), für `key`, `auth`, `sig` und
+`credentials` (etwa `AccountKey=` in Azure-Verbindungszeichenfolgen, `sig=`
+in SAS-URLs, `"auth":` in der Docker-Konfiguration) und mit dem Wert in der
+nächsten YAML-Zeile. Ein Header eines privaten Schlüssels ohne seine END-Zeile
 maskiert nur den Schlüsselinhalt danach, nie den Rest des Prompts. Jedes
 Muster läuft in linearer Zeit, sodass eine präparierte Log-Zeile die
 Maskierung nicht aufhalten kann. GitHubs eigenes `***` bleibt, wie es ist.

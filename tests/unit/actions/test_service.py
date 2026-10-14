@@ -10,6 +10,7 @@ from flakipype.config.settings import ActionSettings
 from flakipype.github.actions import GitHubApiError, api_error
 from flakipype.github.gh import GhResult
 from flakipype.github.runs import JobState
+from flakipype.store.audit import AuditStatus
 from flakipype.store.database import ScanCache
 
 from support.builders import START
@@ -67,6 +68,7 @@ def test_a_confirmed_rerun_of_failed_jobs_starts_and_watches_it(cache: ScanCache
     assert (entry.action, entry.origin, entry.answer, entry.run_id) == (
         "rerun_failed", "model", "confirmed", 4,
     )  # fmt: skip
+    assert (entry.status, entry.spent) == (AuditStatus.DONE, 1)
     assert entry.request.startswith("Rerun failed jobs?\nocto-org/app · E2E · run 4")
     assert actions.watched_runs() == (
         "R1 app · E2E #4/2: queued · run 4\nActions used in this session: 1 of 10."
@@ -86,6 +88,8 @@ def test_a_declined_action_is_audited_and_does_nothing(cache: ScanCache) -> None
     assert actions.audit_text() == (
         "Actions in this session:\n- 08:00 `rerun_failed` asked by command, declined: not run"
     )
+    (entry,) = cache.audit.entries(actions.session)
+    assert (entry.status, entry.spent) == (AuditStatus.DECLINED, 0)
 
 
 def test_reruns_need_a_finished_run_with_failed_jobs(cache: ScanCache) -> None:
@@ -162,7 +166,10 @@ def test_a_repeated_dispatch_on_the_default_branch(cache: ScanCache) -> None:
     ]
     assert actions.used == 3
     (entry,) = cache.audit.entries(actions.session)
-    assert (entry.origin, entry.run_id) == ("command", 70)
+    # One entry, three runs: the daily limits count each one.
+    assert (entry.origin, entry.run_id, entry.status, entry.spent) == (
+        "command", 70, AuditStatus.DONE, 3,
+    )  # fmt: skip
 
 
 def test_a_single_dispatch_on_a_named_ref(cache: ScanCache) -> None:
@@ -214,6 +221,7 @@ def test_github_errors_become_tool_errors_with_a_next_step(cache: ScanCache) -> 
 
     (entry,) = cache.audit.entries(actions.session)
     assert entry.outcome == "failed: Resource not accessible by integration (HTTP 403)"
+    assert (entry.status, entry.spent) == (AuditStatus.FAILED, 0)
     assert actions.used == 0
 
 
@@ -287,6 +295,7 @@ def test_authorised_reruns_and_dispatches_use_the_budget(cache: ScanCache) -> No
         ("verify_dispatch", "covered by the push", "Started R1.", 70),
         ("verify_rerun", "covered by the push", "Started R2.", 70),
     ]
+    assert {(entry.status, entry.spent) for entry in entries} == {(AuditStatus.DONE, 1)}
     assert entries[0].request == "app · E2E verify 1/3 on flakipype/fix-e2e-1 @ c0ffee1"
 
 
@@ -303,9 +312,9 @@ def test_the_budget_is_checked_again_when_the_action_runs(cache: ScanCache) -> N
     assert actions.used == 1
     assert not [call for call in runs.calls if call.startswith("dispatch ")]
     entries = cache.audit.entries(actions.session)
-    assert [(entry.action, entry.outcome[:8]) for entry in entries] == [
-        ("verify_rerun", "Started "),
-        ("dispatch", "not run:"),
+    assert [(entry.action, entry.outcome[:8], entry.status) for entry in entries] == [
+        ("verify_rerun", "Started ", AuditStatus.DONE),
+        ("dispatch", "not run:", AuditStatus.REFUSED),
     ]
 
 
@@ -322,7 +331,9 @@ def test_a_dispatch_that_fails_partway_names_the_runs_that_started(cache: ScanCa
     )
     assert (actions.used, [run.run_id for run in actions.watched]) == (1, [70])
     (entry,) = cache.audit.entries(actions.session)
-    assert (entry.outcome, entry.run_id) == (outcome, 70)
+    assert (entry.outcome, entry.run_id, entry.status, entry.spent) == (
+        outcome, 70, AuditStatus.DONE, 1,
+    )  # fmt: skip
 
 
 def test_a_dispatch_whose_first_run_fails_starts_nothing(cache: ScanCache) -> None:
@@ -369,6 +380,7 @@ def test_refused_authorised_runs_are_audited(cache: ScanCache) -> None:
         ("verify_rerun", "covered by the push", f"failed: {FORBIDDEN}"),
         ("verify_dispatch", "covered by the push", f"failed: {FORBIDDEN}"),
     ]
+    assert {(entry.status, entry.spent) for entry in entries} == {(AuditStatus.FAILED, 0)}
     assert actions.used == 0
 
 

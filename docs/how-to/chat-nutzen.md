@@ -108,8 +108,10 @@ als Hinweis und als Kommentar am Pull Request. Mergen bleibt immer dir
 überlassen.
 
 Die Statuszeile zeigt den Modus. In `/mode auto` laufen Aktionen ohne Dialog
-innerhalb der Budgets, und eine Korrektur mit Warnungen (sie verdeckt
-Fehlschläge, greift nach außen oder ändert `.github/`) wird nicht gepusht.
+innerhalb der Budgets, aber eine Korrektur wird nur gepusht, wenn sie
+ausschließlich Dokumentation ändert und keine Warnung hat (sie verdeckt
+Fehlschläge, greift nach außen oder ändert `.github/`). Jede andere wartet,
+bis du sie in `/mode ask` bestätigst.
 Eine Sitzung erlaubt standardmäßig 3 Pull Requests (`[fix]` in der
 [Konfiguration](../reference/konfiguration.md)). So funktioniert es:
 [Korrekturen](../explanation/korrekturen.md).
