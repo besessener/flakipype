@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 import pytest
 
 from flakipype.agent.budget import Limits
-from flakipype.agent.masking import Masker
 from flakipype.agent.messages import ModelSettings
 from flakipype.agent.orchestrator import ChatAgent, ChatSettings, ignore_steps, workspace_tools
 from flakipype.agent.prompts import CHAT_SYSTEM
@@ -86,13 +85,12 @@ def chat_agent(
     clock: Callable[[], float] = lambda: 0.0,
 ) -> ChatAgent:
     return ChatAgent(
-        client=model.client(),
+        client=model.client(SECRET),
         settings=ChatSettings(
             model=ModelSettings(model="m-1"), limits=limits or Limits(), turn_tokens=1_000_000
         ),
         tools=workspace_tools(workspace),
         gate=PolicyGate(Mode.ASK, confirm),
-        masker=Masker.with_secrets([SECRET]),
         clock=clock,
     )
 
@@ -523,7 +521,6 @@ def test_the_fingerprint_follows_the_model_and_the_tools() -> None:
         settings=ChatSettings(model=ModelSettings(model="m-2"), limits=Limits(), turn_tokens=1),
         tools=workspace_tools(FakeWorkspace()),
         gate=PolicyGate(Mode.ASK, deny_all),
-        masker=Masker(),
         clock=lambda: 0.0,
     )
     fewer_tools = ChatAgent(
@@ -531,7 +528,6 @@ def test_the_fingerprint_follows_the_model_and_the_tools() -> None:
         settings=ChatSettings(model=ModelSettings(model="m-1"), limits=Limits(), turn_tokens=1),
         tools=workspace_tools(FakeWorkspace())[:-1],
         gate=PolicyGate(Mode.ASK, deny_all),
-        masker=Masker(),
         clock=lambda: 0.0,
     )
 

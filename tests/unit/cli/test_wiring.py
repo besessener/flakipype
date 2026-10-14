@@ -315,7 +315,7 @@ class ParallelModel(ScriptedModel):
 
     def create_client(self, endpoint: LlmEndpoint) -> Anthropic:
         self.endpoints.append(endpoint)
-        return self.client()
+        return self.sdk()
 
 
 def test_investigation_is_wired_with_agent_settings(
@@ -375,7 +375,7 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
     binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
     monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
     model = ScriptedModel([message(text("Noted."))])
-    monkeypatch.setattr(wiring, "create_client", lambda _: model.client())
+    monkeypatch.setattr(wiring, "create_client", lambda _: model.sdk())
 
     with open_chat() as (chat, _):
         assert chat.workspace.request.owner == "octo-org"

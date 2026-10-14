@@ -3,8 +3,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from anthropic import Anthropic
-
 from flakipype.agent.budget import InvestigationBudget, Limits, RunBudget, Stop
 from flakipype.agent.finding_tools import ContentsSource, FindingTools, LogSource
 from flakipype.agent.investigator import Investigator, Outcome, Status
@@ -15,6 +13,7 @@ from flakipype.agent.reviewer import Reviewer, ReviewUnavailableError
 from flakipype.agent.tools import Mode, PolicyGate, deny_all
 from flakipype.agent.verdict import Decision, Review, Verdict, apply_review
 from flakipype.flaky.findings import Evidence, Finding
+from flakipype.llm.client import ModelClient
 
 _NOT_REVIEWED = "not reviewed"
 _SECOND_REVIEW_UNAVAILABLE = "revised, second review unavailable"
@@ -27,7 +26,7 @@ def reviewed(review: str) -> bool:
 
 @dataclass(frozen=True)
 class AgentConfig:
-    client: Anthropic
+    client: ModelClient
     settings: ModelSettings
     limits: Limits
     masker: Masker

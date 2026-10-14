@@ -7,7 +7,8 @@ from typing import Any
 import httpx2
 from anthropic import Anthropic
 
-from flakipype.llm.client import LlmEndpoint, create_client
+from flakipype.agent.masking import Masker
+from flakipype.llm.client import LlmEndpoint, ModelClient, create_client
 
 USAGE = {"input_tokens": 1_000, "output_tokens": 200}
 
@@ -68,12 +69,16 @@ class ScriptedModel:
             )
         return httpx2.Response(200, json=turn)
 
-    def client(self) -> Anthropic:
+    def sdk(self) -> Anthropic:
         endpoint = LlmEndpoint("https://api.anthropic.com", "test-key", "m-1")
         transport = httpx2.MockTransport(self._handle)
         return create_client(
             endpoint, http_client=httpx2.Client(transport=transport), max_retries=0
         )
+
+    def client(self, *secrets: str) -> ModelClient:
+        """A client that masks like the real one, plus the given known secrets."""
+        return ModelClient(self.sdk(), Masker.with_secrets(secrets).mask)
 
     def tool_results(self, request_index: int) -> dict[str, dict[str, Any]]:
         """tool_result blocks of the last user message of one request, by tool_use_id."""

@@ -6,12 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from anthropic import Anthropic, APIError
+from anthropic import APIError
 from anthropic.types.beta import BetaMessage, BetaTextBlock, BetaToolUseBlock
 from pydantic import BaseModel, Field
 
 from flakipype.agent.budget import BudgetExceededError, Limits, QuestionBudget, RunBudget, Stop
-from flakipype.agent.masking import Masker
 from flakipype.agent.messages import (
     DECLINED,
     ModelSettings,
@@ -33,7 +32,7 @@ from flakipype.agent.tools import (
 )
 from flakipype.config.settings import MAX_WINDOW_DAYS
 from flakipype.github.actions import GitHubApiError
-from flakipype.llm.client import create_beta_message
+from flakipype.llm.client import ModelClient
 
 type StepListener = Callable[[str], None]
 
@@ -158,18 +157,16 @@ class ChatAgent:
     def __init__(  # noqa: PLR0913 - collaborators of the chat, all keyword-only
         self,
         *,
-        client: Anthropic,
+        client: ModelClient,
         settings: ChatSettings,
         tools: list[Tool],
         gate: PolicyGate,
-        masker: Masker,
         clock: Callable[[], float],
     ) -> None:
         self._client = client
         self._settings = settings
         self._tools = {tool.name: tool for tool in tools}
         self._gate = gate
-        self._masker = masker
         self._clock = clock
         self._messages: list[dict[str, Any]] = []
         # Where the running question's turn starts; None between questions.
@@ -225,7 +222,7 @@ class ChatAgent:
             self._model_clock,
             stop=self._settings.stop,
         )
-        self._messages.append({"role": "user", "content": self._masker.mask(question)})
+        self._messages.append({"role": "user", "content": question})
         last_call = ""
         while True:
             try:
@@ -272,7 +269,7 @@ class ChatAgent:
             "betas": [_CONTEXT_MANAGEMENT],
             "context_management": {"edits": [_CLEAR_OLD_TOOL_RESULTS]},
         }
-        return create_beta_message(self._client, request)
+        return self._client.beta_message(request)
 
     def _run(self, use: BetaToolUseBlock, on_step: StepListener) -> dict[str, Any]:
         tool = self._tools.get(use.name)
@@ -290,14 +287,13 @@ class ChatAgent:
             return tool_result(use.id, str(error), failed=True)
         except ToolError as error:
             data = f"\n{data_block('tool-data', error.data, tool=use.name)}" if error.data else ""
-            return tool_result(use.id, self._masker.mask(f"{error}{data}"), failed=True)
+            return tool_result(use.id, f"{error}{data}", failed=True)
         except GitHubApiError as error:
             failure = f"GitHub failed:\n{data_block('tool-data', str(error), tool=use.name)}"
-            return tool_result(use.id, self._masker.mask(failure), failed=True)
+            return tool_result(use.id, failure, failed=True)
         finally:
             self._tool_seconds += self._clock() - started
-        masked = self._masker.mask(data_block("tool-result", text, tool=use.name))
-        return tool_result(use.id, masked, failed=False)
+        return tool_result(use.id, data_block("tool-result", text, tool=use.name), failed=False)
 
 
 _LIMIT_HINT = "Ask in smaller steps, start over with /new, or raise the [agent] limits."

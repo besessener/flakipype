@@ -77,11 +77,16 @@ oder dem eingestellten Modus.
 ## Secrets bleiben lokal
 
 Alles, was an das Modell geht, durchläuft zuerst die Maskierung von Secrets
-(`agent/masking.py`): der konfigurierte API-Key selbst, Tokens von GitHub,
-Anthropic, AWS, Slack, GitLab, npm, PyPI, Google und Stripe, JWTs, Blöcke
-privater Schlüssel (PEM und PGP), Zugangsdaten in URLs, Bearer- und
+(`agent/masking.py`). Das passiert an einer einzigen Stelle im Code:
+`ModelClient` (`llm/client.py`) maskiert jeden Text und jedes
+Werkzeugergebnis jeder Nachricht direkt vor dem Senden, sodass ein neuer
+Weg zum Modell die Maskierung nicht vergessen kann.
+
+Zu `[masked: …]` werden der konfigurierte API-Key selbst, Tokens von
+GitHub, Anthropic, AWS, Slack, GitLab, npm, PyPI, Google und Stripe, JWTs,
+Blöcke privater Schlüssel (PEM und PGP), Zugangsdaten in URLs, Bearer- und
 Basic-Authentifizierung, Passwörter von `docker login` und Zuweisungen im
-Stil von `password=`/`token:` werden zu `[masked: …]`. Zuweisungen erkennt
+Stil von `password=`/`token:`. Zuweisungen erkennt
 die Maskierung auch mit ausgerichteten Leerzeichen, mit Zusätzen am Namen
 (`DB_PASSWORD_PROD=`, `DJANGO_SECRET_KEY=`), für `key`, `auth`, `sig` und
 `credentials` (etwa `AccountKey=` in Azure-Verbindungszeichenfolgen, `sig=`

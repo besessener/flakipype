@@ -203,7 +203,8 @@ immer neben – nie statt – den Fakten des Scans.
   Chat-Modell innerhalb eines `tool-data`-Elements. Investigators haben kein
   Werkzeug, das etwas ändert.
 - **Maskierung vor dem Senden.** Alles, was an das Modell geht, durchläuft
-  zuerst die Maskierung.
+  zuerst die Maskierung, an einer Stelle: im `ModelClient`, durch den jede
+  Anfrage geht.
 - **Policy-Gate im Code.** Die Werkzeugregistrierung legt die Risikostufe
   jedes Werkzeugs fest; das Gate läuft vor jedem Aufruf. Ein Werkzeug mit
   `write` oder `critical` muss dem Gate eine vom Code gebaute

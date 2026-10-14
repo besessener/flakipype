@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -64,13 +64,40 @@ def create_client(
     )
 
 
-def create_message(client: Anthropic, request: Mapping[str, Any]) -> Message:
-    """One model turn, streamed: the SDK refuses non-streaming calls with a large max_tokens."""
-    with client.messages.stream(**request) as stream:
-        return stream.get_final_message()
+@dataclass(frozen=True)
+class ModelClient:
+    """The only way to the model: every message is masked here, right before it is sent."""
 
+    sdk: Anthropic
+    # Replaces secrets in a text; the composition root binds it to the configured masker.
+    mask: Callable[[str], str]
 
-def create_beta_message(client: Anthropic, request: Mapping[str, Any]) -> BetaMessage:
-    """create_message for requests that use beta features; the request names them in betas."""
-    with client.beta.messages.stream(**request) as stream:
-        return stream.get_final_message()
+    def message(self, request: Mapping[str, Any]) -> Message:
+        """One model turn, streamed: the SDK refuses non-streaming calls with a large max_tokens."""
+        with self.sdk.messages.stream(**self._masked(request)) as stream:
+            return stream.get_final_message()
+
+    def beta_message(self, request: Mapping[str, Any]) -> BetaMessage:
+        """message for requests that use beta features; the request names them in betas."""
+        with self.sdk.beta.messages.stream(**self._masked(request)) as stream:
+            return stream.get_final_message()
+
+    def _masked(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        messages = [
+            {**message, "content": self._content(message["content"])}
+            for message in request["messages"]
+        ]
+        return {**request, "messages": messages}
+
+    def _content(self, content: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
+        if isinstance(content, str):
+            return self.mask(content)
+        return [self._block(block) for block in content]
+
+    def _block(self, block: dict[str, Any]) -> dict[str, Any]:
+        # Thinking blocks are signed and tool calls are the model's own; both go back unchanged.
+        if block["type"] == "text":
+            return {**block, "text": self.mask(block["text"])}
+        if block["type"] == "tool_result":
+            return {**block, "content": self._content(block["content"])}
+        return block

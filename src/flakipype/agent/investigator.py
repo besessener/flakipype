@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from anthropic import Anthropic
 from anthropic.types import Message, ToolUseBlock
 
 from flakipype.agent.budget import InvestigationBudget
@@ -13,6 +12,7 @@ from flakipype.agent.prompts import INVESTIGATOR_SYSTEM
 from flakipype.agent.tool_loop import LoopModel, LoopOutcome, LoopStatus, Submission, ToolLoop
 from flakipype.agent.tools import PolicyGate, Tool
 from flakipype.agent.verdict import FINDING_REFERENCE, Verdict, citation_problems
+from flakipype.llm.client import ModelClient
 
 SUBMIT_VERDICT = "submit_verdict"
 _NUDGE = "Continue the investigation and finish by calling submit_verdict."
@@ -52,7 +52,7 @@ class Investigator:
     def __init__(  # noqa: PLR0913 - collaborators of one investigation, all keyword-only
         self,
         *,
-        client: Anthropic,
+        client: ModelClient,
         settings: ModelSettings,
         tools: list[Tool],
         gate: PolicyGate,

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from anthropic import Anthropic, APIError
+from anthropic import APIError
 from anthropic.types import Message, ToolUseBlock
 from pydantic import BaseModel, ValidationError
 
@@ -23,7 +23,7 @@ from flakipype.agent.messages import (
     tool_result,
 )
 from flakipype.agent.tools import PolicyGate, Tool, ToolError
-from flakipype.llm.client import create_message
+from flakipype.llm.client import ModelClient
 
 _CORRECTIONS = 2
 _NUDGES = 1
@@ -70,7 +70,7 @@ class Submission[Submitted: BaseModel]:
 class LoopModel:
     """How the loop reaches the model, and what limits and masks it."""
 
-    client: Anthropic
+    client: ModelClient
     settings: ModelSettings
     system: str
     budget: InvestigationBudget
@@ -110,7 +110,6 @@ class ToolLoop[Submitted: BaseModel]:
         self._last_call = ""
 
     def start(self, opening: str) -> LoopOutcome[Submitted]:
-        """The opening message must already be masked."""
         self._messages.append({"role": "user", "content": opening})
         return self._loop()
 
@@ -170,7 +169,7 @@ class ToolLoop[Submitted: BaseModel]:
             tools=cached_tools([*definitions, self._submission.definition()]),
             messages=cached_messages(self._messages),
         )
-        response: Message = create_message(self._model.client, request)
+        response: Message = self._model.client.message(request)
         return response
 
     def _handle(self, use: ToolUseBlock, turn: _Turn[Submitted]) -> LoopOutcome[Submitted] | None:

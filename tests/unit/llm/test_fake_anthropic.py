@@ -3,8 +3,6 @@ from typing import Any
 import pytest
 from anthropic import BadRequestError
 
-from flakipype.llm.client import create_message
-
 from support.fake_anthropic import ScriptedModel, call, message, text
 
 ASK = {"role": "user", "content": "Hi"}
@@ -14,7 +12,7 @@ RESULT = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1
 
 def send(model: ScriptedModel, messages: list[dict[str, Any]]) -> str:
     request = {"model": "m-1", "max_tokens": 10, "messages": messages}
-    response = create_message(model.client(), request)
+    response = model.client().message(request)
     return "".join(block.text for block in response.content if block.type == "text")
 
 
