@@ -56,7 +56,8 @@ sh install.sh
 ```
 
 Mit bereits installiertem uv: `uv tool install git+https://github.com/besessener/flakipype@v0.2.0`.
-Schritt für Schritt: [Erste Schritte](docs/tutorials/erste-schritte.md).
+Schritt für Schritt: [Erste Schritte](docs/tutorials/erste-schritte.md);
+gefahrlos ausprobieren: [Demo an der Sandbox](docs/tutorials/demo-sandbox.md).
 Releases und Änderungen: [GitHub Releases](https://github.com/besessener/flakipype/releases).
 
 ## Benutzung
