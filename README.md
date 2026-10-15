@@ -39,7 +39,7 @@ du ihn reviewst.
   ist ein Draft-PR
   ([Sicherheitsmodell](docs/explanation/sicherheitsmodell.md)).
 
-> **Stand:** Version 0.2.1. Einrichtung, Scannen, Untersuchungen durch den
+> **Stand:** Version 0.2.2. Einrichtung, Scannen, Untersuchungen durch den
 > Agenten, der Chat, bestätigte Reruns und Dispatches, Korrekturen als
 > Draft-PRs und unbeaufsichtigte Läufe per systemd-Timer funktionieren.
 
@@ -51,11 +51,11 @@ noch nicht hast, geprüft gegen dessen veröffentlichte SHA-256-Prüfsumme, und
 danach flakipype für deinen Benutzer:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.2.1/install.sh
+curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.2.2/install.sh
 sh install.sh
 ```
 
-Mit bereits installiertem uv: `uv tool install git+https://github.com/besessener/flakipype@v0.2.1`.
+Mit bereits installiertem uv: `uv tool install git+https://github.com/besessener/flakipype@v0.2.2`.
 Schritt für Schritt: [Erste Schritte](docs/tutorials/erste-schritte.md);
 gefahrlos ausprobieren: [Demo an der Sandbox](docs/tutorials/demo-sandbox.md).
 Releases und Änderungen: [GitHub Releases](https://github.com/besessener/flakipype/releases).
