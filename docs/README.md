@@ -11,6 +11,7 @@ geordnet, was du gerade brauchst.
 ## Tutorials
 
 - [Erste Schritte](tutorials/erste-schritte.md) – installieren, einrichten, prüfen.
+- [Demo an der Sandbox](tutorials/demo-sandbox.md) – scannen, untersuchen und einen Draft-PR öffnen, ohne ein echtes Projekt anzufassen.
 - [Entwicklungsumgebung aufsetzen](tutorials/entwicklungsumgebung.md) – vom Klonen, bis alle Qualitätsprüfungen grün sind.
 
 ## Anleitungen
