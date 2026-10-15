@@ -8,7 +8,7 @@ mit Zugriff auf die Repositories, die du scannen willst.
 ## 1. Installieren
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.1.0/install.sh
+curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.2.0/install.sh
 sh install.sh
 flakipype --version
 ```
@@ -22,7 +22,7 @@ dein System keines hat. Nichts braucht root. Ist `uv` schon installiert, ist
 das hier dasselbe:
 
 ```bash
-uv tool install git+https://github.com/besessener/flakipype@v0.1.0
+uv tool install git+https://github.com/besessener/flakipype@v0.2.0
 ```
 
 ## 2. Den Einrichtungsassistenten starten
