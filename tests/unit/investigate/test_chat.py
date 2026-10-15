@@ -125,6 +125,15 @@ def test_scan_names_repositories_and_a_bare_scan_takes_all_again(cache: ScanCach
     assert chat.workspace.request.repositories == ()
 
 
+def test_a_scan_says_which_repository_names_match_nothing(cache: ScanCache) -> None:
+    chat = chat_service(cache, ScriptedModel([]))
+
+    (_, note) = chat.handle("/scan ap")
+
+    assert note.text.startswith("Scanned 0 repositories")
+    assert "Note: No repository named ap in octo-org" in note.text
+
+
 def test_questions_go_to_the_agent(cache: ScanCache) -> None:
     model = ScriptedModel(
         [message(call("t1", "list_findings", {})), message(text("#1 is flaky.")), 500]

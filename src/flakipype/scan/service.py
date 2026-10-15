@@ -123,11 +123,17 @@ def select_repositories(
     if not names:
         return list(repositories)
     wanted = {name.lower() for name in names}
-    return [
-        repository
-        for repository in repositories
-        if {repository.full_name.lower(), repository.full_name.split("/")[-1].lower()} & wanted
-    ]
+    return [repository for repository in repositories if _names_of(repository) & wanted]
+
+
+def unknown_names(repositories: Sequence[Repository], names: Sequence[str]) -> list[str]:
+    """The names that match none of the repositories, as given."""
+    known = {name for repository in repositories for name in _names_of(repository)}
+    return [name for name in dict.fromkeys(names) if name.lower() not in known]
+
+
+def _names_of(repository: Repository) -> set[str]:
+    return {repository.full_name.lower(), repository.full_name.split("/")[-1].lower()}
 
 
 def no_time_limit() -> bool:
@@ -171,6 +177,10 @@ class ScanService:
                 f"{REPOSITORY_LIMIT} were scanned. Choose repositories with --repo."
             )
         repositories = select_repositories(listed, request.repositories)
+        scan.problems.extend(
+            f"No repository named {name} in {request.owner} (archived ones and forks are skipped)."
+            for name in unknown_names(listed, request.repositories)
+        )
         self._stage(scan, lambda: self._read_runs(scan, repositories))
         self._stage(scan, lambda: self._read_jobs(scan))
         to_read = self._cached_logs(scan)

@@ -32,7 +32,7 @@ Tokens.
 
 | Befehl | Wirkung |
 | --- | --- |
-| `/scan [days] [repo …]` | Die Workflow-Läufe scannen und die Befunde nummerieren; mit Repositories (`repo` oder `owner/repo`) nur diese, z. B. `/scan 7 app docs`. Die Auswahl bleibt in der Sitzung, bis ein Scan ohne Repositories wieder alle scannt |
+| `/scan [days] [repo …]` | Die Workflow-Läufe scannen und die Befunde nummerieren; mit Repositories (`repo` oder `owner/repo`) nur diese, z. B. `/scan 7 app docs`. Die Auswahl bleibt in der Sitzung, bis ein Scan ohne Repositories wieder alle scannt; ein Name, der auf kein Repository passt, steht als Hinweis im Ergebnis |
 | `/findings`, `/flaky` | Die Befunde des aktuellen Scans auflisten |
 | `/investigate N [N …]` | Befunde nach Nummer untersuchen; `all` für die instabilen Jobs und wiederkehrenden Fehler; `--fresh` ignoriert gespeicherte Urteile |
 | `/why N` | Das Urteil zu Befund N zeigen (untersucht ihn vorher, falls nötig) |

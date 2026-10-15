@@ -67,6 +67,10 @@ flakipype scan --max-logs 200           # read more logs this time
 flakipype scan --min-runs 3             # need 3 runs before calling a job flaky
 ```
 
+Passt ein Name bei `--repo` auf kein Repository des Owners (vertippt,
+archiviert oder ein Fork), nennt der Scan ihn unter den Hinweisen; der Rest
+läuft normal weiter.
+
 Die Standardwerte kommen aus dem Abschnitt `[scan]` der
 [Konfiguration](../reference/konfiguration.md).
 
