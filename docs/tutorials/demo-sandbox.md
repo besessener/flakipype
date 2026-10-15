@@ -104,6 +104,10 @@ flakipype
 /fix N                 the fix with its diff; Push opens a draft pull request
 ```
 
+Ohne den Probelauf aus Schritt 4 fängst du stattdessen mit
+`/scan flakipype-test` an: Das scannt nur die Sandbox, und die Auswahl bleibt
+für den Rest der Sitzung.
+
 Der Chat steht in `ask`: Jeder Rerun und jeder Push wartet auf deine
 Bestätigung im Dialog. **Push** legt einen Branch `flakipype/fix-…` und
 einen Draft-PR in der Sandbox an und führt den Workflow auf dem Fix-Branch

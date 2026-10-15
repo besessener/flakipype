@@ -321,7 +321,7 @@ sie nicht jeden Tag für dieselbe Sackgasse bezahlen.
 ## Im Chat
 
 ```text
-/scan [days]             run the scan (progress in the activity line)
+/scan [days] [repo …]    run the scan, of all or only these repositories
 /findings, /flaky        the numbered findings of the current scan
 /investigate 1 3         investigate findings 1 and 3 (all: flaky and recurring; --fresh)
 /why 1                   show the verdict with its evidence

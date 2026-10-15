@@ -2,7 +2,7 @@ from dataclasses import replace
 
 from flakipype.agent.investigator import Status
 from flakipype.flaky.model import WorkflowRun
-from flakipype.github.actions import GitHubApiError
+from flakipype.github.actions import GitHubApiError, Repository
 from flakipype.investigate.chat import ChatEntry, EntryKind, SidebarItem
 from flakipype.investigate.chat_text import HELP
 from flakipype.store.database import ScanCache
@@ -96,9 +96,33 @@ def test_scan_days_stay_within_the_window_limit(cache: ScanCache) -> None:
 
     (_, too_many) = chat.handle("/scan 1000000")
     (_, none) = chat.handle("/scan 0")
+    (_, two_windows) = chat.handle("/scan 7 14 app")
 
-    assert too_many == ChatEntry(EntryKind.ERROR, "Scan 1 to 400 days, e.g. /scan 7.")
+    assert too_many == ChatEntry(
+        EntryKind.ERROR,
+        "Scan 1 to 400 days and any repositories, e.g. /scan 7 or /scan 7 app.",
+    )
     assert none.kind is EntryKind.ERROR
+    assert two_windows == too_many
+    assert chat.workspace.report is None
+
+
+def test_scan_names_repositories_and_a_bare_scan_takes_all_again(cache: ScanCache) -> None:
+    actions = world()
+    actions.repositories_found.append(Repository("octo-org/docs", "main"))
+    chat = chat_service(cache, ScriptedModel([]), actions=actions)
+
+    (_, one) = chat.handle("/scan app 14")
+    one_request = chat.workspace.request
+    (_, by_full_name) = chat.handle("/scan octo-org/docs")
+    (_, every) = chat.handle("/scan")
+
+    assert one.text.startswith("Scanned 1 repositories")
+    assert (one_request.window_days, one_request.repositories) == (14, ("app",))
+    assert by_full_name.text.startswith("Scanned 1 repositories")
+    assert "No findings." in by_full_name.text
+    assert every.text.startswith("Scanned 2 repositories")
+    assert chat.workspace.request.repositories == ()
 
 
 def test_questions_go_to_the_agent(cache: ScanCache) -> None:
