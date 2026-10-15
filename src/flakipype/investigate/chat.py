@@ -28,6 +28,7 @@ _ALL = "all"
 _FRESH = "--fresh"
 _ALL_JOBS = "--all"
 _REPEATS = re.compile(r"x(\d+)")
+_SCAN_USAGE = f"Scan 1 to {MAX_WINDOW_DAYS} days and any repositories, e.g. /scan 7 or /scan 7 app."
 # Commands that name findings by the number the sidebar shows.
 _BY_FINDING = frozenset({"/investigate", "/why", "/rerun", "/dispatch", "/fix"})
 _MODES = {
@@ -197,9 +198,10 @@ class ChatService:
 
     def _scan(self, arguments: list[str]) -> ChatEntry:
         days = _numbers(arguments)
-        if days and not 1 <= days[0] <= MAX_WINDOW_DAYS:
-            return ChatEntry(EntryKind.ERROR, f"Scan 1 to {MAX_WINDOW_DAYS} days, e.g. /scan 7.")
-        return self._note(self._workspace.scan(days[0] if days else None, ()))
+        if len(days) > 1 or (days and not 1 <= days[0] <= MAX_WINDOW_DAYS):
+            return ChatEntry(EntryKind.ERROR, _SCAN_USAGE)
+        repositories = tuple(argument for argument in arguments if _number(argument) is None)
+        return self._note(self._workspace.scan(days[0] if days else None, repositories))
 
     def _investigate(self, arguments: list[str]) -> ChatEntry:
         if _ALL in arguments:

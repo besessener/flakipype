@@ -19,7 +19,7 @@ _QUOTE_LENGTH = 300
 HELP = """\
 **Commands**
 
-- `/scan [days]` – scan the workflow runs and number the findings
+- `/scan [days] [repo …]` – scan the runs of all or only these repositories, number the findings
 - `/findings` – list the findings of the current scan
 - `/investigate N [N …] | all [--fresh]` – let the agent investigate findings
 - `/why N` – show the verdict for finding N with its evidence
