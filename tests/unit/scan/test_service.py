@@ -404,3 +404,16 @@ def test_select_repositories(names: tuple[str, ...], expected: list[str]) -> Non
     selected = select_repositories(repositories, names)
 
     assert [repository.full_name for repository in selected] == expected
+
+
+def test_names_that_match_no_repository_are_reported(cache: ScanCache) -> None:
+    names = ("APP", "apq", "other-org/docs", "apq")
+
+    report = service(flaky_world(), cache).scan(request(repositories=names))
+
+    assert report.complete
+    assert report.repositories == 1
+    assert report.problems == [
+        "No repository named apq in octo-org (archived ones and forks are skipped).",
+        "No repository named other-org/docs in octo-org (archived ones and forks are skipped).",
+    ]
