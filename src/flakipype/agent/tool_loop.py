@@ -22,7 +22,8 @@ from flakipype.agent.messages import (
     tool_result,
 )
 from flakipype.agent.tools import PolicyGate, Tool, ToolError
-from flakipype.llm.client import ModelClient, ModelError
+from flakipype.llm.client import ModelClient
+from flakipype.llm.connection import ModelError
 
 _CORRECTIONS = 2
 _NUDGES = 1

@@ -57,14 +57,13 @@ from flakipype.llm.client import (
     ClientSetupError,
     LlmEndpoint,
     ModelClient,
-    create_client,
+    create_model_api,
     request_timeout,
 )
 from flakipype.llm.connection import (
     ConnectionFailed,
     ConnectionProblem,
     ConnectionResult,
-    check_connection,
 )
 from flakipype.scan.service import ScanRequest, ScanService
 from flakipype.setup.daemon import Daemon, UnitOptions, installed_executable, run_command
@@ -80,10 +79,10 @@ _DOWNLOAD_TIMEOUT_SECONDS = 120
 
 def check_llm_endpoint(endpoint: LlmEndpoint) -> ConnectionResult:
     try:
-        client = create_client(endpoint, max_retries=0)
+        api = create_model_api(endpoint, max_retries=0)
     except ClientSetupError as error:
         return ConnectionFailed(ConnectionProblem.ENVIRONMENT, str(error))
-    return check_connection(client, endpoint.model)
+    return api.check(endpoint.model)
 
 
 def _paths() -> AppPaths:
@@ -179,17 +178,18 @@ def open_scan() -> Generator[tuple[ScanService, Settings]]:
 
 def _agent_config(settings: Settings, api_key: str, gh: GhCli) -> AgentConfig:
     agent = settings.agent
-    endpoint = LlmEndpoint(settings.llm.base_url, api_key, settings.llm.model)
+    llm = settings.llm
+    endpoint = LlmEndpoint(llm.base_url, api_key, llm.model, llm.provider)
     # The client serves investigations and fixes, so a request fits in the shorter time limit.
     shortest = min(agent.max_seconds_per_investigation, settings.fix.max_seconds)
     try:
-        sdk = create_client(endpoint, timeout=request_timeout(shortest))
+        api = create_model_api(endpoint, timeout=request_timeout(shortest))
     except ClientSetupError as error:
         message = f"{error}."
         raise NotReadyError(message) from error
     masker = Masker.with_secrets([api_key])
     return AgentConfig(
-        client=ModelClient(sdk, masker.mask),
+        client=ModelClient(api, masker.mask),
         settings=ModelSettings(
             model=settings.llm.model,
             max_tokens=agent.max_output_tokens,

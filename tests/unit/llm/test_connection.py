@@ -4,6 +4,7 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 
+from flakipype.config.settings import LlmProvider
 from flakipype.llm.client import (
     ClientSetupError,
     EndpointKind,
@@ -58,7 +59,13 @@ def client_answering(
     ],
 )
 def test_endpoint_kind_is_derived_from_the_host(base_url: str, kind: EndpointKind) -> None:
-    assert endpoint_kind(base_url) is kind
+    assert endpoint_kind(LlmProvider.ANTHROPIC, base_url) is kind
+
+
+def test_an_openai_endpoint_is_openai_compatible_whatever_its_host() -> None:
+    kind = endpoint_kind(LlmProvider.OPENAI, "https://acme.services.ai.azure.com/openai/v1")
+
+    assert kind is EndpointKind.OPENAI
 
 
 def test_endpoint_repr_never_shows_the_key() -> None:

@@ -88,7 +88,8 @@ eingerichtet. Anleitung: [instabile Pipelines finden](../how-to/instabile-pipeli
 
 | Option | Bedeutung |
 | --- | --- |
-| `--base-url URL` | Basis-URL der Anthropic Messages API |
+| `--provider anthropic\|openai` | API des Endpunkts (`llm.provider`): die Anthropic Messages API oder eine OpenAI-kompatible Chat Completions API |
+| `--base-url URL` | Basis-URL des Endpunkts |
 | `--model NAME` | Modell, auf Foundry der Deployment-Name |
 | `--host HOST` | GitHub-Host |
 | `--owner NAME` | GitHub-Benutzer oder -Organisation, die gescannt wird |

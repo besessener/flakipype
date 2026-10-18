@@ -58,9 +58,17 @@ def validate_owner(value: str) -> str:
     return owner
 
 
+class LlmProvider(StrEnum):
+    """The API the endpoint speaks; Azure AI Foundry speaks the Anthropic one."""
+
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+
+
 class LlmSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    provider: LlmProvider = LlmProvider.ANTHROPIC
     base_url: Annotated[str, AfterValidator(validate_base_url)] = DEFAULT_BASE_URL
     model: str = ""
 

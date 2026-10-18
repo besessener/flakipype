@@ -47,6 +47,7 @@ def run_checks(service: SetupService) -> list[Check]:
     if state.problem:
         return [Check("Configuration", CheckStatus.FAILED, state.problem, RUN_SETUP)]
     draft = SetupDraft(
+        provider=settings.llm.provider,
         base_url=settings.llm.base_url,
         model=settings.llm.model,
         host=settings.github.host,
@@ -78,7 +79,7 @@ def _complete_step(service: SetupService, error: InvalidSetupError) -> str:
 
 def llm_check(service: SetupService, draft: SetupDraft) -> Check:
     result = service.check_llm(draft)
-    name = f"Model ({endpoint_kind(draft.base_url)})"
+    name = f"Model ({endpoint_kind(draft.provider, draft.base_url)})"
     if isinstance(result, ConnectionFailed):
         return Check(name, CheckStatus.FAILED, result.detail, result.problem.next_step)
     detail = f"{result.model} at {draft.base_url}, key in {service.secret_location}"

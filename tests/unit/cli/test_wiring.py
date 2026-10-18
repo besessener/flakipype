@@ -34,13 +34,13 @@ from flakipype.cli.wiring import (
     unit_options,
 )
 from flakipype.config.secrets import LLM_API_KEY, FileSecretStore
-from flakipype.config.settings import SecretStoreChoice, Settings
+from flakipype.config.settings import LlmProvider, SecretStoreChoice, Settings
 from flakipype.fix.service import FixService, FixTarget
 from flakipype.flaky.findings import Evidence, Finding
 from flakipype.github.binary import GhBinary
 from flakipype.github.provider import ManagedGh
 from flakipype.investigate.service import InvestigationRequest, Selection
-from flakipype.llm.client import LlmEndpoint
+from flakipype.llm.client import LlmEndpoint, ModelApi
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.scan.service import ScanRequest, ScanService
 from flakipype.setup.daemon import UnitOptions
@@ -54,6 +54,7 @@ from support.fake_anthropic import ScriptedModel, message, text
 from support.fake_fix import COMMIT, fixed, verdict
 from support.fake_gh import FakeGh
 from support.fake_investigation import APP, SCAN, world
+from support.fake_openai import Answer, ScriptedChat
 from support.fake_run import NOW as RUN_NOW
 from support.fake_run import ClassifyingAgent
 from support.fake_runs import e2e_evidence, e2e_finding
@@ -274,6 +275,15 @@ def test_llm_check_against_a_closed_local_port() -> None:
     assert result.problem is ConnectionProblem.UNREACHABLE
 
 
+def test_openai_compatible_check_against_a_closed_local_port() -> None:
+    endpoint = LlmEndpoint("http://127.0.0.1:9/v1", "unused", "m-1", LlmProvider.OPENAI)
+
+    result = check_llm_endpoint(endpoint)
+
+    assert isinstance(result, ConnectionFailed)
+    assert result.problem is ConnectionProblem.UNREACHABLE
+
+
 FOUNDRY_URL = "https://acme.services.ai.azure.com/anthropic"
 
 
@@ -371,7 +381,7 @@ def test_investigation_is_wired_with_agent_settings(
         text("No verdict yet."), usage={"input_tokens": 10_000, "output_tokens": 0}
     )
     model = ParallelModel([no_verdict, no_verdict])
-    monkeypatch.setattr(wiring, "create_client", model.create_client)
+    monkeypatch.setattr(wiring, "create_model_api", model.create_model_api)
     scan = ScanService(actions=world(), cache=cache, now=lambda: START.replace(day=9)).scan(SCAN)
     request = InvestigationRequest(SCAN, Selection(numbers=(1, 2, 3)))
 
@@ -401,6 +411,32 @@ def test_a_conflicting_foundry_resource_is_not_ready(
         pass
 
 
+def test_chat_talks_to_an_openai_compatible_endpoint(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_url = "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1"
+    config = f'[llm]\nprovider = "openai"\nbase_url = "{base_url}"\nmodel = "qwen-1"\n'
+    write_config(isolated_home, config + '\n[github]\nowner = "octo-org"\n')
+    store_api_key(isolated_home)
+    binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
+    monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
+    model = ScriptedChat([Answer(text="Noted.")])
+    created: list[tuple[LlmEndpoint, float]] = []
+
+    def create_model_api(endpoint: LlmEndpoint, *, timeout: float) -> ModelApi:
+        created.append((endpoint, timeout))
+        return model.api()
+
+    monkeypatch.setattr(wiring, "create_model_api", create_model_api)
+
+    with open_chat() as (chat, _):
+        assert chat.handle(f"Is {API_KEY} still valid?")[1].text == "Noted."
+
+    assert created == [(LlmEndpoint(base_url, API_KEY, "qwen-1", LlmProvider.OPENAI), 100.0)]
+    (sent,) = model.requests
+    assert sent["messages"][-1]["content"].endswith("Is [masked: configured secret] still valid?")
+
+
 def test_chat_is_wired_with_scan_settings_and_sessions(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -414,7 +450,7 @@ def test_chat_is_wired_with_scan_settings_and_sessions(
     binary = GhBinary(path=isolated_home / "gh", version=(2, 102, 0))
     monkeypatch.setattr(ManagedGh, "find", lambda _: binary)
     model = ScriptedModel([message(text("Noted."))])
-    monkeypatch.setattr(wiring, "create_client", model.create_client)
+    monkeypatch.setattr(wiring, "create_model_api", model.create_model_api)
 
     with open_chat() as (chat, _):
         assert chat.workspace.request.owner == "octo-org"

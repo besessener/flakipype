@@ -38,6 +38,14 @@ Screen {
     width: 1fr;
 }
 
+#provider-row Label {
+    margin: 0 1 0 0;
+}
+
+#provider-row Select {
+    width: 1fr;
+}
+
 #gh-progress {
     display: none;
     margin: 1 0 0 1;

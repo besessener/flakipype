@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from flakipype.config.settings import (
     AgentSettings,
     GitHubSettings,
+    LlmProvider,
     LlmSettings,
     Settings,
     SettingsError,
@@ -18,6 +19,7 @@ def test_missing_file_gives_defaults(tmp_path: Path) -> None:
     settings = load_settings(tmp_path / "config.toml")
 
     assert settings.llm.base_url == "https://api.anthropic.com"
+    assert settings.llm.provider is LlmProvider.ANTHROPIC
     assert settings.github.host == "github.com"
     assert settings.llm.model == ""
     assert settings.github.owner == ""
@@ -33,6 +35,25 @@ def test_saved_settings_load_back_unchanged(tmp_path: Path) -> None:
     save_settings(settings, path)
 
     assert load_settings(path) == settings
+
+
+def test_an_openai_compatible_endpoint_loads_back_unchanged(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    base_url = "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1"
+    llm = LlmSettings(provider=LlmProvider.OPENAI, base_url=base_url, model="qwen-1")
+
+    save_settings(Settings(llm=llm), path)
+
+    assert load_settings(path).llm == llm
+    assert 'provider = "openai"' in path.read_text(encoding="utf-8")
+
+
+def test_an_unknown_provider_is_a_settings_error(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[llm]\nprovider = "gemini"\n', encoding="utf-8")
+
+    with pytest.raises(SettingsError, match="provider"):
+        load_settings(path)
 
 
 def test_scan_settings_have_safe_defaults_and_limits(tmp_path: Path) -> None:

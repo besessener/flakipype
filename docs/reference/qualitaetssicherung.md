@@ -45,6 +45,11 @@ Tests erreichen nie das echte GitHub oder ein echtes Modell.
   oder ein Tool-Aufruf ohne sein Ergebnis in der nächsten Nachricht), mit 400
   ab, sodass ein kaputter Chat-Verlauf den nächsten Zug scheitern lässt. Der
   echte `anthropic`-Client wird verwendet, nur der Transport ist gefälscht.
+  `tests/support/fake_openai.py` tut dasselbe für eine OpenAI-kompatible
+  Chat Completions API: Es streamt Antworten wie vLLM (Text, Tool-Aufrufe in
+  Teilen, Verbrauch am Ende), schlägt mit HTTP-Fehlern, abgebrochenen Streams
+  oder fremden Antworten fehl und lehnt Tool-Aufrufe ohne ihre
+  `tool`-Nachrichten mit 400 ab; dahinter läuft der echte `openai`-Client.
 - **Agent**: `tests/support/fake_sources.py` (Logs, Commits, Dateien) und
   `tests/support/fake_investigation.py` (eine Scan-Welt mit einem Befund
   jeder Art und einem Platzhalter für den Agenten).

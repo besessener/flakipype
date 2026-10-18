@@ -33,6 +33,9 @@ printf '%s' "$ANTHROPIC_KEY" | flakipype setup --non-interactive \
 
 - Optionen, die du weglässt, behalten ihren gespeicherten Wert (oder den
   Standard).
+- Für eine OpenAI-kompatible API wie STACKIT AI Model Serving gib dazu
+  `--provider openai` und deren `/v1`-Basis als `--base-url` an; siehe
+  [Ein Modell verbinden](modell-verbinden.md#eine-openai-kompatible-api).
 - Der Key wird von der Standardeingabe gelesen, damit er nie in der
   Prozessliste oder im Shell-Verlauf auftaucht. Ohne `--api-key-stdin` bleibt
   der gespeicherte Key erhalten.

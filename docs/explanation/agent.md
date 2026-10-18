@@ -268,10 +268,18 @@ Modellaufruf.
 
 ## Modellnutzung
 
-- Anthropic Messages API (api.anthropic.com oder Azure AI Foundry), das
+- Anthropic Messages API (api.anthropic.com oder Azure AI Foundry) oder eine
+  OpenAI-kompatible Chat Completions API (`llm.provider = "openai"`), das
   konfigurierte Modell für alle Rollen; ein günstigeres Modell für den
   Reviewer lässt sich später einstellen, wenn Evaluierungen zeigen, dass es
   gut genug ist.
+- Der Agent spricht immer die Messages API. Für eine OpenAI-kompatible API
+  übersetzt `llm` jede schon maskierte Anfrage in Chat Completions und die
+  gestreamte Antwort zurück in eine Messages-API-Nachricht: `tool_use` wird zu
+  `tool_calls`, `tool_result` zu `tool`-Nachrichten (ein Fehler mit dem
+  Präfix `Error:`), der Verbrauch zu denselben vier Token-Zahlen. Thinking,
+  Cache-Breakpoints und Context Editing fallen dabei weg; Werkzeug-Argumente,
+  die kein JSON-Objekt sind, beenden die Runde als `unexpected answer`.
 - Werkzeugnutzung überall mit `tool_choice: auto`; parallele
   Werkzeugaufrufe sind erlaubt. Neuere Modelle lehnen `any` und erzwungene
   Werkzeuge ab, deshalb wird ein Modell, das aufhört, ohne `submit_verdict`
@@ -351,7 +359,8 @@ Urteile aus; siehe [Befunde untersuchen](../how-to/befunde-untersuchen.md).
 - **Agentenschleife**: Ein lokaler Fake-Anthropic-Server antwortet mit
   vorgegebenen Runden (Werkzeugaufrufe, dann `submit_verdict`), einschließlich
   ungültiger Zitate und `revise` vom Reviewer, sodass der ganze Ablauf ohne
-  echtes Modell getestet wird. Der Chat wird genauso getestet, sein Fenster
+  echtes Modell getestet wird. Ein Fake-Chat-Completions-Server zeigt, dass
+  dieselbe Untersuchung über eine OpenAI-kompatible API läuft. Der Chat wird genauso getestet, sein Fenster
   mit Textual Pilot und einem Snapshot.
 - **Evaluierung** (geplant, noch nicht gebaut; echtes Modell, kostet Geld,
   nur auf Anfrage): aufgezeichnete Fälle mit bekannter Antwort – der
