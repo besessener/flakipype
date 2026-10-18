@@ -68,8 +68,12 @@ Wert dann.
 | API key | ein AI-Model-Serving-Auth-Token aus dem STACKIT Portal |
 | Model | der Modellname aus der Liste der [Shared Models](https://docs.stackit.cloud/products/data-and-ai/ai-model-serving/basics/available-shared-models/) |
 
-Nimm ein Modell, bei dem STACKIT „Tool calling“ als unterstützt angibt.
-Headless sieht das so aus:
+Nimm ein Modell, bei dem STACKIT „Tool calling“ als unterstützt angibt. Im
+Oktober 2026 sind das unter anderem Qwen3-VL 235B, Qwen3.8 27B und
+Llama 3.3 70B; die Liste ändert sich, maßgeblich ist die Seite von STACKIT.
+Den genauen Modellnamen für **Model** findest du dort. **Test connection**
+und `flakipype doctor` prüfen Tool Calling gleich mit. Headless sieht das so
+aus:
 
 ```bash
 printf '%s' "$STACKIT_AI_TOKEN" | flakipype setup --non-interactive \
