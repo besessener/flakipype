@@ -31,7 +31,8 @@ from flakipype.agent.tools import (
 )
 from flakipype.config.settings import MAX_WINDOW_DAYS
 from flakipype.github.actions import GitHubApiError
-from flakipype.llm.client import ModelClient, ModelError
+from flakipype.llm.client import ModelClient
+from flakipype.llm.connection import ModelError
 
 type StepListener = Callable[[str], None]
 

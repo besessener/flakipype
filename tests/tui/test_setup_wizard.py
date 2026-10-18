@@ -8,7 +8,7 @@ from textual.pilot import Pilot
 from textual.widgets import Button, Input, ProgressBar, Static
 
 from flakipype.config.secrets import LLM_API_KEY, SecretStoreError
-from flakipype.config.settings import load_settings
+from flakipype.config.settings import LlmProvider, load_settings
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.tui.setup_wizard import LOGIN_BUTTONS, SetupWizard, StatusLine, download_status
 
@@ -78,6 +78,34 @@ async def test_fresh_setup_is_filled_in_and_saved(tmp_path: Path, fake_gh: FakeG
 
     assert app.return_value is True
     assert load_settings(world.paths.config_file).github.owner == "octo-org"
+
+
+async def test_an_openai_compatible_endpoint_is_chosen_and_saved(
+    tmp_path: Path, fake_gh: FakeGh
+) -> None:
+    logged_in(fake_gh)
+    world = setup_world(tmp_path, fake_gh)
+    app = SetupWizard(world.service)
+    base_url = "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1"
+
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(pilot)
+        await pilot.click("#provider")
+        await pilot.press("down", "enter")
+        app.query_one("#base-url", Input).clear()
+        await type_into(pilot, "base-url", base_url)
+        await type_into(pilot, "api-key", "key-1")
+        await type_into(pilot, "model", "qwen-1")
+        await type_into(pilot, "owner", "octo-org")
+        await click_button(pilot, "test-llm")
+        await settle(pilot)
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+
+    assert app.return_value is True
+    llm = load_settings(world.paths.config_file).llm
+    assert (llm.provider, llm.base_url, llm.model) == (LlmProvider.OPENAI, base_url, "qwen-1")
+    assert world.llm.endpoints[-1].provider is LlmProvider.OPENAI
     assert world.secrets.get(LLM_API_KEY) == "key-1"
 
 

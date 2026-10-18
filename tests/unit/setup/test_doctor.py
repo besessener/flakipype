@@ -1,8 +1,10 @@
+from dataclasses import replace
 from pathlib import Path
 
 from keyring.backends import null
 
 from flakipype.config.secrets import KeyringSecretStore
+from flakipype.config.settings import LlmProvider
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.setup.doctor import KEY_IN_A_FILE, RUN_SETUP, Check, CheckStatus, run_checks
 from flakipype.setup.service import SetupService
@@ -98,6 +100,18 @@ def test_unreadable_config_stops_early(tmp_path: Path, fake_gh: FakeGh) -> None:
 
     assert len(checks) == 1
     assert "Cannot read" in checks[0].detail
+
+
+def test_an_openai_compatible_endpoint_is_checked_as_such(tmp_path: Path, fake_gh: FakeGh) -> None:
+    logged_in(fake_gh)
+    world = setup_world(tmp_path, fake_gh)
+    world.service.save(replace(complete_draft(), provider=LlmProvider.OPENAI))
+
+    model_check = run_checks(world.service)[1]
+
+    assert model_check.name == "Model (OpenAI-compatible API)"
+    assert model_check.status is CheckStatus.OK
+    assert world.llm.endpoints[-1].provider is LlmProvider.OPENAI
 
 
 def test_failed_model_check_carries_the_next_step(tmp_path: Path, fake_gh: FakeGh) -> None:

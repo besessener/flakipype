@@ -5,8 +5,8 @@ import httpx2
 import pytest
 from anthropic import APIResponseValidationError
 
-from flakipype.llm.client import ModelError, request_timeout
-from flakipype.llm.connection import ConnectionProblem, problem_for_error
+from flakipype.llm.client import request_timeout
+from flakipype.llm.connection import ConnectionProblem, ModelError, problem_for_error
 
 from support.fake_anthropic import Broken, ScriptedModel, call, message, text, thinking
 

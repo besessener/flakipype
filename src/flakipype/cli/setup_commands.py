@@ -9,7 +9,7 @@ from rich.console import Console
 from flakipype.cli import wiring
 from flakipype.cli.report import print_checks
 from flakipype.config.secrets import SecretStoreError
-from flakipype.config.settings import SecretStoreChoice
+from flakipype.config.settings import LlmProvider, SecretStoreChoice
 from flakipype.github.binary import GhInstallError
 from flakipype.setup.doctor import KEY_IN_A_FILE, run_checks
 from flakipype.setup.service import InvalidSetupError, SetupDraft, SetupService
@@ -33,7 +33,11 @@ def setup(  # noqa: PLR0913 - Typer maps every command line option to one parame
         bool,
         typer.Option("--non-interactive", help="No wizard: take values from the options."),
     ] = False,
-    base_url: Annotated[str | None, typer.Option(help="Anthropic Messages API base URL.")] = None,
+    provider: Annotated[
+        LlmProvider | None,
+        typer.Option(help="API of the endpoint: the Anthropic Messages API or OpenAI-compatible."),
+    ] = None,
+    base_url: Annotated[str | None, typer.Option(help="Base URL of the model endpoint.")] = None,
     model: Annotated[str | None, typer.Option(help="Model, or deployment name on Foundry.")] = None,
     host: Annotated[str | None, typer.Option(help="GitHub host, e.g. github.com.")] = None,
     owner: Annotated[str | None, typer.Option(help="GitHub user or organisation to scan.")] = None,
@@ -54,6 +58,7 @@ def setup(  # noqa: PLR0913 - Typer maps every command line option to one parame
             return
         state = service.load()
         draft = SetupDraft(
+            provider=provider or state.settings.llm.provider,
             base_url=base_url or state.settings.llm.base_url,
             model=model or state.settings.llm.model,
             host=host or state.settings.github.host,

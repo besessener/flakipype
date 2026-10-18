@@ -21,7 +21,7 @@ geordnet, was du gerade brauchst.
 - [Instabile Pipelines finden](how-to/instabile-pipelines-finden.md) – `flakipype scan`, Optionen, Skripte.
 - [Befunde untersuchen](how-to/befunde-untersuchen.md) – sie vom Agenten mit Belegen erklären lassen.
 - [Den Chat nutzen](how-to/chat-nutzen.md) – Fragen stellen, interaktiv scannen und untersuchen, Sitzungen.
-- [Ein Modell verbinden](how-to/modell-verbinden.md) – Anthropic API, Azure AI Foundry oder ein Proxy.
+- [Ein Modell verbinden](how-to/modell-verbinden.md) – Anthropic API, Azure AI Foundry, ein Proxy oder eine OpenAI-kompatible API wie STACKIT AI Model Serving.
 - [Einen Rechner headless einrichten](how-to/headless-einrichten.md) – Server, Container, SSH.
 - [Zeitgesteuert ausführen](how-to/zeitgesteuert-ausfuehren.md) – `flakipype run` und der systemd-Benutzer-Timer.
 

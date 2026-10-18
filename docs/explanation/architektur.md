@@ -6,7 +6,7 @@ die Schichten: Eine höhere Schicht darf eine niedrigere importieren, nie
 umgekehrt, und Pakete auf derselben Schicht importieren einander nicht. Der
 Vertrag ist erschöpfend, ein neues Unterpaket muss also eine Schicht
 bekommen. Zwei weitere Verträge halten `flaky` rein (kein `os`, `pathlib`,
-`subprocess`, `sqlite3`, `socket`, `time`, `httpx2`, `anthropic` oder
+`subprocess`, `sqlite3`, `socket`, `time`, `httpx2`, `anthropic`, `openai` oder
 `config`) und erlauben `subprocess` nur in `github` und `setup/daemon.py`.
 Die Uhr liest nur `cli/wiring.py`: ruff verbietet `datetime.now`,
 `date.today`, `time.time` und ihre Verwandten überall sonst (`TID251`), alle
@@ -22,7 +22,7 @@ cli                               Typer entry point, composition root (cli/wirin
                  ├─ agent         investigator, fixer, reviewer, chat orchestrator, working copy, tools, gate, budgets, masking
                  ├─ setup         setup and health checks (wizard, headless, doctor); systemd units
                  └─ scan          scan an owner: fetch, cache, detect, rank
-                     ├─ llm       Anthropic Messages API client; masks every message it sends
+                     ├─ llm       Anthropic Messages API or OpenAI-compatible client; masks every message it sends
                      ├─ github    gh CLI wrapper; Actions, runs, commits, files, branches, pull requests; downloads gh
                      └─ store     SQLite cache, chat sessions and the action audit log
                          ├─ flaky   pure detection, scoring, findings, log excerpts
@@ -47,7 +47,7 @@ cli                               Typer entry point, composition root (cli/wirin
   github.com und GitHub Enterprise Server (`GH_HOST`). flakipype nutzt die
   `gh`-Anmeldung des Benutzers mit, statt ein eigenes Token zu halten. Die
   Release- und Versionslogik (`release.py`) ist rein; der Download läuft über
-  `httpx2`, denselben HTTP-Stack, den das `anthropic`-SDK nutzt.
+  `httpx2`, denselben HTTP-Stack, den die SDKs `anthropic` und `openai` nutzen.
   `actions.py` liest Repositories, Läufe, Jobs und Logs mit `gh api`,
   validiert die Antworten mit pydantic-Modellen (`payloads.py`) und macht aus
   `gh`-Fehlern typisierte Exceptions (Rate Limit, Authentifizierung, andere).
@@ -57,18 +57,24 @@ cli                               Typer entry point, composition root (cli/wirin
   Branch nur dort an, wo keiner existiert, committet über GraphQL
   `createCommitOnBranch` (von GitHub signiert, mit dem erwarteten
   Head-Commit), öffnet Pull Requests immer als Entwurf und kommentiert.
-- **`llm`** kapselt das offizielle `anthropic`-SDK mit konfigurierbarer
-  Basis-URL, sodass derselbe Code mit api.anthropic.com und Azure AI Foundry
-  spricht (gewählt am Hostnamen). Verbindungsprobleme werden kategorisiert
+- **`llm`** kapselt die offiziellen SDKs hinter einem `ModelApi`-Protokoll,
+  gewählt mit `llm.provider`. `anthropic` nutzt das `anthropic`-SDK mit
+  konfigurierbarer Basis-URL, sodass derselbe Code mit api.anthropic.com und
+  Azure AI Foundry spricht (gewählt am Hostnamen). `openai` nutzt das
+  `openai`-SDK gegen eine OpenAI-kompatible Chat Completions API wie STACKIT
+  AI Model Serving; `chat_format.py` übersetzt die Messages-API-Anfragen des
+  Agenten in Chat Completions und die gestreamte Antwort zurück, sodass
+  `agent` nur eine API kennt. Verbindungsprobleme werden kategorisiert
   (`ConnectionProblem`), jedes mit einem nächsten Schritt für den Benutzer.
   `ModelClient` ist der einzige Weg des Agenten zum Modell: Er maskiert
   jeden Text und jedes Werkzeugergebnis jeder Nachricht direkt vor dem
-  Senden. Die Maskierungsfunktion reicht `cli/wiring.py` hinein; die Muster
-  liegen in `agent/masking.py`, sodass `llm` nichts aus `agent` importiert.
+  Senden, noch vor der Übersetzung. Die Maskierungsfunktion reicht
+  `cli/wiring.py` hinein; die Muster liegen in `agent/masking.py`, sodass `llm` nichts aus `agent` importiert.
   Scheitert ein Aufruf, wirft er `ModelError` mit einem `ConnectionProblem`
-  samt nächstem Schritt; der Agent fängt nur diesen Typ. Das SDK wiederholt
-  fehlgeschlagene Anfragen zweimal, aber nicht eine Überlastung, die einen
-  schon laufenden Stream beendet: Die wiederholt `ModelClient` einmal. Jede
+  samt nächstem Schritt; der Agent fängt nur diesen Typ. Beide SDKs
+  wiederholen fehlgeschlagene Anfragen zweimal, das `anthropic`-SDK aber
+  nicht eine Überlastung, die einen schon laufenden Stream beendet: Die
+  wiederholt `AnthropicApi` einmal. Beide streamen die Antwort; jede
   Anfrage wartet höchstens ein Drittel des kürzeren Zeitlimits von
   Untersuchung und Korrektur auf Daten, sodass sie samt den Wiederholungen
   hineinpasst.

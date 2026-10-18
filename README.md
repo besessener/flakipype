@@ -6,6 +6,7 @@
 ![Typer](https://img.shields.io/badge/CLI-Typer-009688)
 ![Pydantic](https://img.shields.io/badge/validation-Pydantic-E92063?logo=pydantic&logoColor=white)
 ![Anthropic](https://img.shields.io/badge/LLM-Anthropic%20Messages%20API-191919?logo=anthropic&logoColor=white)
+![OpenAI-kompatibel](https://img.shields.io/badge/LLM-OpenAI--kompatibel-191919)
 ![gh](https://img.shields.io/badge/GitHub-gh%20CLI-181717?logo=github&logoColor=white)
 ![Ruff](https://img.shields.io/badge/lint-Ruff-D7FF64?logo=ruff&logoColor=black)
 ![ty](https://img.shields.io/badge/types-ty-261230)
@@ -23,7 +24,8 @@
 flakipype ist ein agentisches Kommandozeilenwerkzeug für Linux. Richte es auf
 einen GitHub-Benutzer oder eine Organisation, und es durchsucht die
 Workflow-Läufe, bewertet, wie instabil jeder Workflow, Job und Schritt ist,
-erklärt die wahrscheinliche Ursache mit einem Anthropic-Modell und behebt sie
+erklärt die wahrscheinliche Ursache mit einem Anthropic-Modell oder über eine
+OpenAI-kompatible API und behebt sie
 per Pull Request – überprüft durch erneutes Ausführen des Fix-Branches, bevor
 du ihn reviewst.
 

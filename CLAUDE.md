@@ -17,8 +17,10 @@ slash commands and headless commands for cron and a systemd timer. Full docs:
   `investigate`, `fix`, `actions`, `agent`, `setup`, `scan`, `llm`, `github`,
   `store`, `flaky`, `config`. Responsibilities and allowed imports:
   [architektur.md](docs/explanation/architektur.md).
-- **LLM**: Anthropic Messages API only (api.anthropic.com or Azure AI
-  Foundry), configured with base URL, API key and model.
+- **LLM**: the Anthropic Messages API (api.anthropic.com or Azure AI
+  Foundry) or an OpenAI-compatible Chat Completions API (`llm.provider`),
+  configured with base URL, API key and model. The agent speaks the Messages
+  API; `llm` translates for Chat Completions.
 - **GitHub**: only through the `gh` CLI, which flakipype downloads and
   checksum-verifies itself if none is installed.
 - **Target**: Linux only. Development may happen on Windows; the Linux gate
@@ -119,9 +121,9 @@ and say so; never work around it quietly. Reasoning lives in
   German and address the reader as „du“; everything else is English — UI,
   prompts, identifiers, comments, logs and this file.
 - **Tests:** assert behaviour, not implementation. GitHub is faked with a
-  `gh` stub replaying recorded JSON, the model with a fake Messages API on an
-  `httpx2.MockTransport`; TUI changes get a Textual Pilot test (and a
-  snapshot for new views).
+  `gh` stub replaying recorded JSON, the model with a fake Messages API or
+  Chat Completions API on an `httpx2.MockTransport`; TUI changes get a
+  Textual Pilot test (and a snapshot for new views).
 - **Docs sync:** a change to behaviour, setup, configuration, architecture or
   a design decision updates the matching `docs/` file in the same change. The
   root `README.md` stays short.

@@ -18,6 +18,8 @@ from flakipype.agent.tools import (
 from flakipype.llm.connection import ConnectionProblem
 
 from support.fake_anthropic import ScriptedModel, call, message, text, thinking, verdict_input
+from support.fake_openai import Answer, ScriptedChat
+from support.fake_openai import call as chat_call
 from support.fake_sources import FakeContents, FakeLogs, evidence, finding
 
 QUOTE = "Test timed out after 5000ms"
@@ -29,7 +31,7 @@ class Nothing(BaseModel):
 
 
 def investigator(
-    model: ScriptedModel,
+    model: ScriptedModel | ScriptedChat,
     *,
     limits: Limits | None = None,
     extra: list[Tool] | None = None,
@@ -71,6 +73,23 @@ def test_tool_calls_then_a_cited_verdict() -> None:
     assert second["messages"][1]["content"][0]["type"] == "thinking"
     assert QUOTE in model.tool_results(1)["toolu_1"]["content"]
     assert set(agent.results) == {"finding", "toolu_1", "r1"}
+
+
+def test_an_openai_compatible_model_investigates_through_the_same_tools() -> None:
+    model = ScriptedChat([
+        Answer(calls=[chat_call("call_1", "failure_excerpt", {"job_id": 11})]),
+        Answer(calls=[chat_call("call_2", "submit_verdict", verdict_input(QUOTE, "call_1"))]),
+    ])  # fmt: skip
+
+    outcome = investigator(model).start(finding_text(finding()))
+
+    assert outcome.status is Status.COMPLETED
+    assert outcome.verdict is not None
+    assert outcome.verdict.evidence[0].quote == QUOTE
+    answer = model.requests[1]["messages"][-1]
+    assert answer["role"] == "tool"
+    assert answer["tool_call_id"] == "call_1"
+    assert QUOTE in answer["content"]
 
 
 def test_results_carry_a_short_id_the_model_can_cite() -> None:

@@ -5,10 +5,10 @@ from textual import on, work
 from textual.app import App, ComposeResult, SuspendNotSupported
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, Footer, Header, Input, Label, ProgressBar, Static
+from textual.widgets import Button, Footer, Header, Input, Label, ProgressBar, Select, Static
 
 from flakipype.config.secrets import SecretStoreError
-from flakipype.config.settings import DEFAULT_BASE_URL, SecretStoreChoice
+from flakipype.config.settings import DEFAULT_BASE_URL, LlmProvider, SecretStoreChoice
 from flakipype.github.auth import browser_login_arguments
 from flakipype.github.binary import GhInstallError
 from flakipype.github.gh import GhCommandError
@@ -27,6 +27,10 @@ _STATUS_CLASSES = ("ok", "warning", "failed", "busy")
 GH_BUTTON = "install-gh"
 LOGIN_BUTTONS = ("login-browser", "check-login", "login-token")
 _BYTES_PER_MEGABYTE = 1_000_000
+_PROVIDERS = [
+    ("Anthropic Messages API", LlmProvider.ANTHROPIC),
+    ("OpenAI-compatible Chat Completions API", LlmProvider.OPENAI),
+]
 
 
 def download_status(received: int, total: int | None) -> str:
@@ -71,7 +75,7 @@ class SetupWizard(App[bool]):
         yield Header()
         with VerticalScroll(id="form"):
             yield Static(
-                "Connect flakipype to an Anthropic model and to GitHub. "
+                "Connect flakipype to a model and to GitHub. "
                 "Secrets go to the system keyring and never into the config file.",
                 classes="intro",
             )
@@ -85,8 +89,11 @@ class SetupWizard(App[bool]):
 
     def _compose_model_section(self) -> ComposeResult:
         with Vertical(classes="section", id="model-section") as section:
-            section.border_title = "1  Model · Anthropic Messages API"
-            yield Label("Base URL (api.anthropic.com, Azure AI Foundry or a proxy)")
+            section.border_title = "1  Model"
+            with Horizontal(classes="row", id="provider-row"):
+                yield Label("API")
+                yield Select(_PROVIDERS, id="provider", allow_blank=False, compact=True)
+            yield Label("Base URL (api.anthropic.com, Azure AI Foundry, a proxy or a …/v1 URL)")
             yield Input(id="base-url", placeholder=DEFAULT_BASE_URL)
             yield Label("API key")
             yield Input(id="api-key", password=True)
@@ -118,6 +125,7 @@ class SetupWizard(App[bool]):
 
     def on_mount(self) -> None:
         state = self._service.load()
+        self.query_one("#provider", Select).value = state.settings.llm.provider
         self.query_one("#base-url", Input).value = state.settings.llm.base_url
         self.query_one("#model", Input).value = state.settings.llm.model
         self.query_one("#host", Input).value = state.settings.github.host
@@ -131,6 +139,7 @@ class SetupWizard(App[bool]):
 
     def draft(self) -> SetupDraft:
         return SetupDraft(
+            provider=LlmProvider(self.query_one("#provider", Select).value),
             base_url=self.query_one("#base-url", Input).value,
             model=self.query_one("#model", Input).value,
             host=self.query_one("#host", Input).value,

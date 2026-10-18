@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from flakipype.llm.client import ModelError
+from flakipype.llm.connection import ModelError
 
 from support.fake_anthropic import ScriptedModel, call, message, text
 

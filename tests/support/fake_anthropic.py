@@ -9,7 +9,7 @@ import httpx2
 from anthropic import Anthropic
 
 from flakipype.agent.masking import Masker
-from flakipype.llm.client import LlmEndpoint, ModelClient, create_client
+from flakipype.llm.client import AnthropicApi, LlmEndpoint, ModelClient, create_client
 
 USAGE = {"input_tokens": 1_000, "output_tokens": 200}
 _OVERLOADED = 529
@@ -66,7 +66,7 @@ class ScriptedModel:
     script: Sequence[dict[str, Any] | int | Broken]
     requests: list[dict[str, Any]] = field(default_factory=list)
     headers: list[dict[str, str]] = field(default_factory=list)
-    # What wiring asked create_client for: the endpoint and the request timeout.
+    # What wiring asked create_model_api for: the endpoint and the request timeout.
     created: list[tuple[LlmEndpoint, float]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -106,12 +106,12 @@ class ScriptedModel:
 
     def client(self, *secrets: str) -> ModelClient:
         """A client that masks like the real one, plus the given known secrets."""
-        return ModelClient(self.sdk(), Masker.with_secrets(secrets).mask)
+        return ModelClient(AnthropicApi(self.sdk()), Masker.with_secrets(secrets).mask)
 
-    def create_client(self, endpoint: LlmEndpoint, *, timeout: float) -> Anthropic:
-        """Stands in for llm.client.create_client in the wiring."""
+    def create_model_api(self, endpoint: LlmEndpoint, *, timeout: float) -> AnthropicApi:
+        """Stands in for llm.client.create_model_api in the wiring."""
         self.created.append((endpoint, timeout))
-        return self.sdk()
+        return AnthropicApi(self.sdk())
 
     def tool_results(self, request_index: int) -> dict[str, dict[str, Any]]:
         """tool_result blocks of the last user message of one request, by tool_use_id."""

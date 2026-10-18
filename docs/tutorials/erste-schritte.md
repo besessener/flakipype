@@ -2,7 +2,8 @@
 
 Das hier führt dich von der Installation bis zu einem gesunden
 `flakipype doctor`. Du brauchst einen Linux-Rechner, einen Anthropic-API-Key
-(oder ein Claude-Deployment auf Azure AI Foundry) und einen GitHub-Account
+(oder ein Claude-Deployment auf Azure AI Foundry, oder einen Key für eine
+OpenAI-kompatible API mit Tool Calling) und einen GitHub-Account
 mit Zugriff auf die Repositories, die du scannen willst.
 
 ## 1. Installieren
@@ -35,8 +36,12 @@ Der Assistent ist ein Vollbild-Formular mit zwei Abschnitten.
 
 **1 Model**
 
+- **API**: `Anthropic Messages API` für api.anthropic.com, Foundry oder einen
+  Proxy; `OpenAI-compatible Chat Completions API` etwa für STACKIT AI Model
+  Serving.
 - **Base URL**: `https://api.anthropic.com`, dein Foundry-Endpunkt
-  (`https://<resource>.services.ai.azure.com/anthropic`) oder ein Proxy.
+  (`https://<resource>.services.ai.azure.com/anthropic`), ein Proxy oder die
+  `/v1`-Basis einer OpenAI-kompatiblen API.
   Siehe [Modell verbinden](../how-to/modell-verbinden.md).
 - **API key**: wird im System-Schlüsselbund gespeichert, nie in der
   Konfigurationsdatei.

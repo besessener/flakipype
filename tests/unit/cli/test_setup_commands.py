@@ -8,7 +8,7 @@ from typer.testing import CliRunner, Result
 
 from flakipype.cli import app, setup_commands, wiring
 from flakipype.config.secrets import LLM_API_KEY, KeyringSecretStore, SecretStoreError
-from flakipype.config.settings import SecretStoreChoice, load_settings
+from flakipype.config.settings import LlmProvider, SecretStoreChoice, load_settings
 from flakipype.llm.connection import ConnectionFailed, ConnectionProblem
 from flakipype.setup.service import SetupService
 from flakipype.tui.setup_wizard import SetupWizard
@@ -56,6 +56,23 @@ def test_headless_setup_saves_and_reports(world: SetupWorld, fake_gh: FakeGh) ->
     assert world.secrets.get(LLM_API_KEY) == "key-1"
     assert "Saved" in output_of(result)
     assert "octocat" in output_of(result)
+
+
+def test_headless_setup_connects_an_openai_compatible_endpoint(
+    world: SetupWorld, fake_gh: FakeGh
+) -> None:
+    logged_in(fake_gh)
+    base_url = "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1"
+    arguments = ["setup", "--non-interactive", "--provider", "openai", "--base-url", base_url]
+    arguments += ["--model", "qwen-1", "--owner", "octo-org", "--api-key-stdin"]
+
+    result = runner.invoke(app, arguments, input="key-1\n")
+
+    assert result.exit_code == 0, result.output
+    llm = load_settings(world.paths.config_file).llm
+    assert (llm.provider, llm.base_url) == (LlmProvider.OPENAI, base_url)
+    assert world.llm.endpoints[-1].provider is LlmProvider.OPENAI
+    assert "Model (OpenAI-compatible API)" in output_of(result)
 
 
 def test_headless_setup_saves_the_secret_store(

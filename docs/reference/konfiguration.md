@@ -18,6 +18,7 @@ verlangt.
 
 ```toml
 [llm]
+provider = "anthropic"
 base_url = "https://api.anthropic.com"
 model = "claude-sonnet-4-5"
 
@@ -68,7 +69,8 @@ store = "auto"
 
 | Schlüssel | Standard | Regeln |
 | --- | --- | --- |
-| `llm.base_url` | `https://api.anthropic.com` | `https://`; `http://` nur für `localhost`, `127.0.0.1`, `::1`. Ein Host, der auf `.services.ai.azure.com` endet, nutzt den Azure-AI-Foundry-Client. Ein abschließender Schrägstrich wird entfernt. |
+| `llm.provider` | `anthropic` | `anthropic` (Anthropic Messages API, auch auf Azure AI Foundry) oder `openai` (OpenAI-kompatible Chat Completions API, z. B. STACKIT AI Model Serving); siehe [Ein Modell verbinden](../how-to/modell-verbinden.md) |
+| `llm.base_url` | `https://api.anthropic.com` | `https://`; `http://` nur für `localhost`, `127.0.0.1`, `::1`. Mit `anthropic` nutzt ein Host, der auf `.services.ai.azure.com` endet, den Azure-AI-Foundry-Client; mit `openai` die Basis bis einschließlich `/v1`. Ein abschließender Schrägstrich wird entfernt. |
 | `llm.model` | — (Pflicht) | Modellname; auf Foundry der Deployment-Name |
 | `github.host` | `github.com` | Hostname ohne Schema, z. B. `github.example.com` für GitHub Enterprise Server |
 | `github.owner` | — (Pflicht) | Name des GitHub-Benutzers oder der Organisation |
@@ -82,7 +84,7 @@ store = "auto"
 | `agent.max_tokens_per_run` | `1000000` | 10k–20M für alle Untersuchungen eines `investigate`-Laufs; ist es erreicht, starten keine neuen mehr |
 | `agent.parallel` | `3` | 1–8 Untersuchungen gleichzeitig (GitHub-Aufrufe gehen weiterhin einzeln nacheinander) |
 | `agent.max_output_tokens` | `16000` | 1k–64k pro Modellaufruf; Aufrufe werden gestreamt, daher funktioniert der ganze Bereich |
-| `agent.thinking` | `adaptive` | `adaptive`, `enabled` (nutzt `thinking_budget`) oder `off`. Neuere Modelle akzeptieren nur `adaptive`; die anderen sind für ältere Modelle |
+| `agent.thinking` | `adaptive` | `adaptive`, `enabled` (nutzt `thinking_budget`) oder `off`. Neuere Modelle akzeptieren nur `adaptive`; die anderen sind für ältere Modelle. Nur mit `llm.provider = "anthropic"` |
 | `agent.thinking_budget` | `8000` | 1.024–60k; nur mit `thinking = "enabled"`, muss dann unter `max_output_tokens` liegen |
 | `agent.excerpt_lines` | `120` | 20–400 Zeilen in einem Log-Auszug |
 | `actions.max_per_session` | `10` | 1–100 Reruns und Dispatches pro Chat-Sitzung (jede Wiederholung eines Dispatches zählt); `/new` beginnt eine neue Zählung |

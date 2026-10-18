@@ -8,7 +8,8 @@ ist auf bekannte Weise instabil und dafür da, Reruns und Draft-PRs zu
 empfangen.
 
 Du brauchst einen Linux-Rechner (unter Windows reicht WSL), einen
-Anthropic-API-Key (oder ein Claude-Deployment auf Azure AI Foundry) und einen
+Anthropic-API-Key (oder ein Claude-Deployment auf Azure AI Foundry, oder eine
+OpenAI-kompatible API mit Tool Calling) und einen
 GitHub-Account. Für Schritt 5 und 6 brauchst du Schreibrechte auf die Sandbox;
 ohne sie hörst du nach Schritt 4 auf.
 
@@ -28,8 +29,9 @@ flakipype --version
 flakipype setup
 ```
 
-- **Model**: Base URL (`https://api.anthropic.com` oder dein
-  Foundry-Endpunkt), API-Key und Modell; drück **Test connection**.
+- **Model**: API, Base URL (`https://api.anthropic.com`, dein
+  Foundry-Endpunkt oder eine OpenAI-kompatible `/v1`-Basis), API-Key und
+  Modell; drück **Test connection**.
 - **GitHub**: Host `github.com`, als User oder Organisation **`besessener`**.
   Fehlt `gh`, drück **Download gh**; dann melde dich an.
 

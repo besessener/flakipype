@@ -7,6 +7,7 @@ from flakipype.config.paths import AppPaths
 from flakipype.config.secrets import LLM_API_KEY, FileSecretStore, SecretStore
 from flakipype.config.settings import (
     GitHubSettings,
+    LlmProvider,
     LlmSettings,
     SecretStoreChoice,
     Settings,
@@ -46,6 +47,7 @@ class SetupDraft:
     model: str
     host: str
     owner: str
+    provider: LlmProvider = LlmProvider.ANTHROPIC
     api_key: str = field(default="", repr=False)
     # None keeps the saved choice.
     secret_store: SecretStoreChoice | None = None
@@ -112,7 +114,7 @@ class SetupService:
         if llm is None or errors:
             raise InvalidSetupError(errors)
         api_key = draft.api_key or self._secrets.get(LLM_API_KEY) or ""
-        return LlmEndpoint(llm.base_url, api_key, llm.model)
+        return LlmEndpoint(llm.base_url, api_key, llm.model, llm.provider)
 
     def settings_from(self, draft: SetupDraft) -> Settings:
         """Validate the whole draft at once, so the user sees every problem together."""
@@ -148,7 +150,10 @@ class SetupService:
 
     def _validated_llm(self, draft: SetupDraft) -> tuple[LlmSettings | None, dict[str, str]]:
         model = draft.model.strip()
-        llm, errors = _validated(lambda: LlmSettings(base_url=draft.base_url, model=model), "llm")
+        llm, errors = _validated(
+            lambda: LlmSettings(provider=draft.provider, base_url=draft.base_url, model=model),
+            "llm",
+        )
         if not model:
             errors["llm.model"] = "is required"
         if not draft.api_key and self._secrets.get(LLM_API_KEY) is None:
