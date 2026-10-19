@@ -15,11 +15,14 @@ from flakipype.agent.verdict import Classification, ReviewState, Verdict
 from flakipype.agent.workcopy import unified_diff
 from flakipype.config.settings import FixSettings
 from flakipype.fix.checks import DiffLimits, change_errors, change_warnings
+from flakipype.fix.confirm import Budgets, confirmation, opened_text, retried_text
 from flakipype.fix.delivery import Delivery, DeliveryError, PushedWithoutPullError, fix_refusal
+from flakipype.fix.retry import failed_verification, retry_hint, why_no_retry
 from flakipype.fix.state import OpenedPull, Proposal
 from flakipype.fix.texts import (
     BRANCH_PREFIX,
     PullRequestFacts,
+    Rate,
     branch_name,
     failure_rate,
     pull_markers,
@@ -34,7 +37,6 @@ from flakipype.store.audit import AuditEntry, AuditLog, AuditStatus
 FIXABLE = frozenset(
     {Classification.FLAKY_TEST, Classification.FLAKY_INFRASTRUCTURE, Classification.CONFIGURATION}
 )
-_PATHS_SHOWN = 3
 
 type ProposeFix = Callable[[FixRequest], FixResult]
 
@@ -79,6 +81,15 @@ class FixTarget:
     review_state: ReviewState
     # How the verdict's review went, as the investigation reports it; for display only.
     review: str = ""
+
+
+@dataclass(frozen=True)
+class _Start:
+    """Where a new proposal starts: the default branch, or the pull request it retries."""
+
+    base: str
+    instructions: str
+    retry_of: OpenedPull | None
 
 
 @contextmanager
@@ -130,12 +141,8 @@ class FixService:
         finding = target.finding
         check_owner(finding.key.repository, self._actions.owner)
         _check_fixable(target)
-        if self.opened >= self._settings.max_prs_per_session:
-            message = (
-                f"Pull request budget used up: {self.opened} of "
-                f"{self._settings.max_prs_per_session} in this session. /new starts a new session."
-            )
-            raise ToolError(message)
+        if not self._may_retry(finding):
+            self._check_pull_budget()
         with _from_github():
             access = self._pulls.access(finding.key.repository)
             if not access.can_push:
@@ -145,10 +152,13 @@ class FixService:
                 )
                 raise ToolError(message)
             markers = pull_markers(finding)
-            self._check_no_open_pull(finding.key.repository, markers, finding.number)
+            retry_of = self._retry_of(finding, markers)
+            if retry_of is None:
+                self._check_pull_budget()
             proposal = self._proposals.get(finding.identity)
-            if proposal is None or instructions:
-                proposal = self._new_proposal(target, access.default_branch, instructions)
+            if proposal is None or instructions or proposal.retry_of != retry_of:
+                start = _Start(access.default_branch, instructions, retry_of)
+                proposal = self._new_proposal(target, start)
         if not proposal.accepted:
             message = (
                 f"No pull request for #{finding.number}: the review {proposal.review}. "
@@ -183,8 +193,15 @@ class FixService:
                 return []
             pulls[index] = replace(pull, verification=verification)
             if verification.stage is Stage.DONE:
-                notes.append(f"Pull request #{verification.pull_number}: {verification.outcome}")
+                hint = retry_hint(pulls[index], self._settings.max_attempts)
+                notes.append(
+                    f"Pull request #{verification.pull_number}: {verification.outcome}{hint}"
+                )
         return notes
+
+    def retries_pending(self) -> list[OpenedPull]:
+        """Pull requests whose fix did not hold and that may get one more."""
+        return [pull for pull in self.pulls if pull.may_retry(self._settings.max_attempts)]
 
     def state(self) -> dict[str, Any]:
         return {
@@ -214,27 +231,89 @@ class FixService:
             return None
         return max(0.0, (self.deadline - self._now()).total_seconds())
 
-    def _check_no_open_pull(self, repository: str, markers: frozenset[str], number: int) -> None:
+    def _may_retry(self, finding: Finding) -> bool:
+        """Whether this session holds a pull request for the finding that may get one more fix."""
+        max_attempts = self._settings.max_attempts
+        return any(
+            pull.identity == finding.identity and pull.may_retry(max_attempts)
+            for pull in self.pulls
+        )
+
+    def _check_pull_budget(self) -> None:
+        if self.opened >= self._settings.max_prs_per_session:
+            message = (
+                f"Pull request budget used up: {self.opened} of "
+                f"{self._settings.max_prs_per_session} in this session. /new starts a new session."
+            )
+            raise ToolError(message)
+
+    def _open_pull(self, repository: str, markers: frozenset[str]) -> PullRequest | None:
         for pull in self._pulls.open_pulls(repository):
             # Only a branch in the repository itself with the marker code writes first counts;
             # anyone can open a fork pull request with the same branch name and marker.
             own = pull.head_repository.lower() == repository.lower()
             first_line = next(iter(pull.body.splitlines()), "")
             if own and pull.branch.startswith(BRANCH_PREFIX) and first_line in markers:
-                message = f"An open flakipype pull request for #{number} exists: {pull.url}"
-                raise ToolError(message)
+                return pull
+        return None
 
-    def _new_proposal(self, target: FixTarget, base: str, instructions: str) -> Proposal:
-        finding, key = target.finding, target.finding.key
-        earlier = self._proposals.get(finding.identity) if instructions else None
-        commit = earlier.commit if earlier else self._pulls.branch_head(key.repository, base)
+    def _retry_of(self, finding: Finding, markers: frozenset[str]) -> OpenedPull | None:
+        """This session's open pull request for the finding if its fix may be retried."""
+        repository = finding.key.repository
+        open_pull = self._open_pull(repository, markers)
+        if open_pull is None:
+            return None
+        message = f"An open flakipype pull request for #{finding.number} exists: {open_pull.url}"
+        ours = next(
+            (
+                pull
+                for pull in self.pulls
+                if pull.verification.repository.lower() == repository.lower()
+                and pull.verification.pull_number == open_pull.number
+            ),
+            None,
+        )
+        if ours is None:
+            raise ToolError(message)
+        reason = why_no_retry(ours, self._settings.max_attempts)
+        if reason:
+            message = f"{message}; {reason}."
+            raise ToolError(message)
+        return ours
+
+    def _check_still_open(self, proposal: Proposal, markers: frozenset[str]) -> None:
+        """Another flakipype (the chat, a run) may have opened or closed one meanwhile."""
+        open_pull = self._open_pull(proposal.repository, markers)
+        retry_of = proposal.retry_of
+        if retry_of is None:
+            if open_pull is not None:
+                message = (
+                    f"An open flakipype pull request for #{proposal.finding} exists: "
+                    f"{open_pull.url}"
+                )
+                raise ToolError(message)
+            return
+        number = retry_of.verification.pull_number
+        if open_pull is None or open_pull.number != number:
+            message = f"Pull request #{number} is no longer open; nothing was pushed."
+            raise ToolError(message)
+
+    def _new_proposal(self, target: FixTarget, start: _Start) -> Proposal:
+        finding = target.finding
+        earlier = self._proposals.get(finding.identity) if start.instructions else None
+        if earlier is not None and earlier.retry_of != start.retry_of:
+            earlier = None
+        retry_of = start.retry_of
+        commit = earlier.commit if earlier else self._start_commit(finding, start)
         limits = DiffLimits(self._settings.max_files, self._settings.max_changed_lines)
         result = self._propose(
             FixRequest(
                 finding=finding, evidence=target.evidence, verdict=target.verdict, commit=commit,
-                default_branch=base, check=lambda changes: change_errors(changes, limits),
-                earlier=earlier.changes if earlier else (), instructions=instructions,
+                default_branch=retry_of.branch if retry_of else start.base,
+                check=lambda changes: change_errors(changes, limits),
+                earlier=earlier.changes if earlier else (), instructions=start.instructions,
                 max_seconds=self._seconds_left(),
+                failed_verification=failed_verification(retry_of) if retry_of else None,
             )
         )  # fmt: skip
         self.tokens += result.tokens
@@ -245,36 +324,51 @@ class FixService:
             raise FixNotMadeError(message)
         changes = list(result.changes)
         warnings = tuple(change_warnings(changes))
-        rate = failure_rate(finding, target.evidence, base)
+        rate = failure_rate(finding, target.evidence, start.base)
         facts = PullRequestFacts(
             finding, target.verdict, rate, warnings, self._settings.verify_runs
         )
-        fingerprints = tuple(
-            signature.fingerprint
-            for job_id in finding.job_ids
-            if (signature := target.evidence.signatures.get(job_id)) is not None
-        )
         proposal = Proposal(
-            finding=finding.number, identity=finding.identity, base=base, commit=commit,
+            finding=finding.number, identity=finding.identity, base=start.base, commit=commit,
             title=result.proposal.title, explanation=result.proposal.explanation,
             body=pull_request_body(facts, result.proposal.explanation), changes=result.changes,
             warnings=warnings, accepted=result.accepted, review_state=result.review_state,
-            review=result.review,
-            verification=Verification(
-                pull_number=0, repository=key.repository, workflow_path=key.workflow_path,
-                workflow_name=key.workflow_name, job=key.job,
-                branch=branch_name(finding, changes), commit=commit,
-                wanted=self._settings.verify_runs, started=self._now(), rate=rate,
-                fingerprints=fingerprints,
+            review=result.review, retry_of=retry_of,
+            verification=(
+                retry_of.verification.restarted(commit, self._now()) if retry_of
+                else self._verification(target, branch_name(finding, changes), commit, rate=rate)
             ),
         )  # fmt: skip
         self._proposals[finding.identity] = proposal
         return proposal
 
+    def _start_commit(self, finding: Finding, start: _Start) -> str:
+        """A retry edits on top of the pushed fix; a new fix on the default branch's head."""
+        if start.retry_of is not None:
+            return start.retry_of.verification.commit
+        return self._pulls.branch_head(finding.key.repository, start.base)
+
+    def _verification(
+        self, target: FixTarget, branch: str, commit: str, *, rate: Rate
+    ) -> Verification:
+        finding, key = target.finding, target.finding.key
+        fingerprints = tuple(
+            signature.fingerprint
+            for job_id in finding.job_ids
+            if (signature := target.evidence.signatures.get(job_id)) is not None
+        )
+        return Verification(
+            pull_number=0, repository=key.repository, workflow_path=key.workflow_path,
+            workflow_name=key.workflow_name, job=key.job, branch=branch, commit=commit,
+            wanted=self._settings.verify_runs, started=self._now(), rate=rate,
+            fingerprints=fingerprints,
+        )  # fmt: skip
+
     def _prepared(self, proposal: Proposal, markers: frozenset[str]) -> PreparedAction:
-        details = self._details(proposal)
+        retry_of = proposal.retry_of
+        title, details = confirmation(proposal, self._budgets())
         request = ActionRequest(
-            "Push fix and open a draft pull request?",
+            title,
             details,
             model_text=f"{proposal.title}\n\n{proposal.explanation}",
             diff=unified_diff(list(proposal.changes)),
@@ -285,19 +379,20 @@ class FixService:
         session, origin = self._actions.session, self._actions.origin
 
         def record(answer: Answer, outcome: str, *, status: AuditStatus) -> None:
+            # A retry adds a commit to an open pull request; it opens none.
+            spent = int(status is AuditStatus.DONE and retry_of is None)
             self._audit.record(
                 AuditEntry(
                     time=self._now().isoformat(), session=session, action="fix", origin=origin,
                     request="\n".join([request.title, *details]), answer=answer.value,
-                    outcome=outcome, status=status, spent=int(status is AuditStatus.DONE),
+                    outcome=outcome, status=status, spent=spent,
                 )
             )  # fmt: skip
 
         def run(answer: Answer) -> str:
-            # Another flakipype (the chat, a run) may have opened one since the fixer started.
             try:
                 with _from_github():
-                    self._check_no_open_pull(proposal.repository, markers, proposal.finding)
+                    self._check_still_open(proposal, markers)
             except ToolError as error:
                 record(answer, f"not pushed: {error}", status=AuditStatus.REFUSED)
                 raise
@@ -319,53 +414,36 @@ class FixService:
             request, run, lambda answer: record(answer, "not pushed", status=AuditStatus.DECLINED)
         )
 
-    def _details(self, proposal: Proposal) -> tuple[str, ...]:
-        changes = proposal.changes
-        added = sum(len(change.added) for change in changes)
-        removed = sum(len(change.removed) for change in changes)
-        paths = [change.path for change in changes]
-        shown = ", ".join(paths[:_PATHS_SHOWN]) + (" …" if len(paths) > _PATHS_SHOWN else "")
-        verification, actions = proposal.verification, self._actions
-        warnings = (
-            ["Warnings:", *(f"⚠ {item}" for item in proposal.warnings)]
-            if proposal.warnings
-            else ["Warnings: none"]
-        )
-        return (
-            f"{proposal.repository} · base {proposal.base} @ {proposal.commit[:7]}",
-            f"new branch {verification.branch}",
-            f"{len(changes)} files · +{added} −{removed} · {shown}",
-            (
-                f"then reruns {verification.workflow_name} on the fix branch "
-                f"{verification.wanted} times"
-            ),
-            (
-                f"Pull requests this session: {self.opened + 1} of "
-                f"{self._settings.max_prs_per_session} · Actions: {actions.used} of "
-                f"{actions.max_per_session}"
-            ),
-            "Opens a draft pull request; merging stays with you.",
-            *warnings,
-        )
-
     def _deliver(self, proposal: Proposal) -> str:
+        if proposal.retry_of is not None:
+            return self._deliver_retry(proposal)
         opened = self._delivery.deliver(proposal)
         self.opened += 1
         self._proposals.pop(proposal.identity, None)
         self.pulls.append(opened)
-        verification = opened.verification
-        status = (
-            verification.outcome
-            if verification.stage is Stage.DONE
-            else (
-                f"Verification: {verification.wanted} runs of {verification.workflow_name} on "
-                "the branch; the result follows here and on the pull request."
-            )
-        )
-        return (
-            f"Opened draft pull request #{verification.pull_number}: {opened.url} "
-            f"(branch {opened.branch}).\n{status}"
-        )
+        return opened_text(opened)
+
+    def _deliver_retry(self, proposal: Proposal) -> str:
+        max_attempts = self._settings.max_attempts
+        retried = self._delivery.deliver_retry(proposal, max_attempts)
+        self._proposals.pop(proposal.identity, None)
+        pull = retried.pull
+        # Polled from a timer thread: change only by index. A finished verification is not polled.
+        pulls = self.pulls
+        index = next((i for i, item in enumerate(pulls) if item.same_pull(pull)), None)
+        if index is None:
+            pulls.append(pull)
+        else:
+            pulls[index] = pull
+        return retried_text(pull, max_attempts, retried.problem)
+
+    def _budgets(self) -> Budgets:
+        settings, actions = self._settings, self._actions
+        return Budgets(
+            pulls_opened=self.opened, max_pulls=settings.max_prs_per_session,
+            actions_used=actions.used, max_actions=actions.max_per_session,
+            max_attempts=settings.max_attempts,
+        )  # fmt: skip
 
 
 def _check_fixable(target: FixTarget) -> None:

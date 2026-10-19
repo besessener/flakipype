@@ -142,7 +142,9 @@ cli                               Typer entry point, composition root (cli/wirin
   eine übergebene Funktion laufen, prüft den Diff im Code (`checks.py`),
   bereitet die eine Bestätigung mit dem Diff vor, liefert Branch, Commit und
   Draft-PR aus (`delivery.py`), prüft den Korrektur-Branch und kommentiert
-  das Ergebnis (`verify.py`) und hält Vorschläge, geöffnete Pull Requests und
+  das Ergebnis (`verify.py`), lässt den Fixer nach einem Fehlschlag mit dem
+  Fehler des Befunds einen weiteren Commit auf denselben Branch schreiben
+  (`retry.py`) und hält Vorschläge, geöffnete Pull Requests und
   das Pull-Request-Budget als Sitzungszustand ([Korrekturen](korrekturen.md)).
 - **`investigate`** führt einen Scan aus, nummeriert die Befunde, wählt die
   angeforderten aus, lässt Untersuchungen parallel unter einem gemeinsamen

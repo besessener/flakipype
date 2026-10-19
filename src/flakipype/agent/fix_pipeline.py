@@ -39,6 +39,17 @@ class FixConfig:
 
 
 @dataclass(frozen=True)
+class FailedVerification:
+    """A pushed fix whose verification failed with the finding's error again."""
+
+    branch: str
+    # The fix branch's jobs that failed with the finding's error.
+    jobs: tuple[int, ...]
+    # The verification's result as code wrote it; quotes error messages from logs.
+    outcome: str
+
+
+@dataclass(frozen=True)
 class FixRequest:
     finding: Finding
     evidence: Evidence
@@ -51,6 +62,8 @@ class FixRequest:
     instructions: str = ""
     # Less time than the configured limit, e.g. what an unattended run has left.
     max_seconds: float | None = None
+    # Set when the working copy holds a pushed fix that did not hold.
+    failed_verification: FailedVerification | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +87,8 @@ def fix_task(request: FixRequest) -> str:
         data_block("verdict", request.verdict.model_dump_json(indent=2)),
         f"The working copy is {where}.",
     ]
+    if request.failed_verification:
+        parts.append(_retry_text(request.failed_verification))
     if request.earlier:
         parts.append("The working copy already holds an earlier proposal.")
     if request.instructions:
@@ -84,6 +99,17 @@ def fix_task(request: FixRequest) -> str:
         )
     parts.append("Fix the cause and submit with submit_fix.")
     return "\n\n".join(parts)
+
+
+def _retry_text(failed: FailedVerification) -> str:
+    jobs = ", ".join(str(job) for job in failed.jobs)
+    return (
+        f"The working copy holds a fix that is already pushed to {failed.branch}. Its "
+        "verification failed with the finding's error again, so the fix did not hold. Read the "
+        f"failed job(s) {jobs} with failure_excerpt and log_range, find out why, and change the "
+        "working copy so that the cause is fixed; your edits become one more commit on that "
+        "branch.\n" + data_block("verification", failed.outcome)
+    )
 
 
 def review_task(task: str, proposal: FixProposal, changes: list[FileChange]) -> str:
@@ -102,9 +128,11 @@ def propose_fix(config: FixConfig, request: FixRequest) -> FixResult:
     budget = InvestigationBudget(limits, RunBudget(limits.tokens), config.clock, stop=config.stop)
     copy = WorkingCopy(config.files, request.finding.key.repository, request.commit)
     copy.apply(list(request.earlier))
+    failed = request.failed_verification
     finding_tools = FindingTools(
-        request.finding, request.evidence, config.logs, config.contents, config.excerpt_lines
-    )
+        request.finding, request.evidence, config.logs, config.contents, config.excerpt_lines,
+        fix_jobs=failed.jobs if failed else (),
+    )  # fmt: skip
     fixer = Fixer(
         client=config.client,
         settings=config.settings,

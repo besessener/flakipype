@@ -81,8 +81,13 @@ def test_fix_limits_have_safe_defaults_and_are_never_unlimited(tmp_path: Path) -
         300_000,
         600,
     )
+    assert fix.max_attempts == 2
     with pytest.raises(SettingsError):
         load_settings(path)
+    for attempts in (0, 4):
+        path.write_text(f"[fix]\nmax_attempts = {attempts}\n", encoding="utf-8")
+        with pytest.raises(SettingsError):
+            load_settings(path)
 
 
 def test_invalid_toml_is_a_settings_error(tmp_path: Path) -> None:

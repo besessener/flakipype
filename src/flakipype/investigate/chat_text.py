@@ -23,7 +23,8 @@ HELP = """\
 - `/findings` – list the findings of the current scan
 - `/investigate N [N …] | all [--fresh]` – let the agent investigate findings
 - `/why N` – show the verdict for finding N with its evidence
-- `/fix N [--fresh]` – write a fix for finding N and push it as a draft pull request
+- `/fix N [--fresh]` – write a fix for finding N and push it as a draft pull request, or revise
+  one whose verification showed the error again
 - `/rerun N [--all]` – rerun the failed jobs (or all jobs) of finding N's newest run
 - `/dispatch N [ref] [xK]` – start finding N's workflow on the default branch or `ref`, K times
 - `/runs` – runs started in this session · `/cancel R` – cancel run R

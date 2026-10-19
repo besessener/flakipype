@@ -144,7 +144,7 @@ class RunService:
                 self._progress.problems.append(f"GitHub: {error}")
                 self._progress.login_expired |= error.is_authentication_problem
             if self._gate.mode is Mode.AUTO:
-                self._poll_until(deadline)
+                self._poll_and_retry(deadline)
         except RunTerminatedError as error:
             self._progress.problems.append(str(error))
         finally:
@@ -242,10 +242,14 @@ class RunService:
 
     def _stop_before_fix(self, deadline: datetime) -> str:
         limits = self._limits
-        if self._clock.now() >= deadline:
-            return f"the time limit of {limits.minutes} minutes"
         if self._workspace.fixes.opened >= limits.pull_requests:
             return f"the pull request limit ({limits.pull_requests} for this run)"
+        return self._out_of_time_or_tokens(deadline)
+
+    def _out_of_time_or_tokens(self, deadline: datetime) -> str:
+        limits = self._limits
+        if self._clock.now() >= deadline:
+            return f"the time limit of {limits.minutes} minutes"
         if self._workspace.tokens >= limits.tokens:
             return f"the token limit ({limits.tokens:,} for this run)"
         return ""
@@ -297,6 +301,50 @@ class RunService:
         self._cache.save_unpushed_fix(
             host, finding.identity, last_seen=finding.last_seen.isoformat(), outcome=reason
         )
+
+    def _poll_and_retry(self, deadline: datetime) -> None:
+        """Polls verifications; a fix that did not hold gets one more try, within the limits."""
+        # A retry that pushed nothing leaves the pull request as it was; it is tried once.
+        tried: set[tuple[str, int]] = set()
+        self._poll_until(deadline)
+        while True:
+            pending = [
+                pull
+                for pull in self._workspace.fixes.retries_pending()
+                if (pull.url, pull.attempt) not in tried
+            ]
+            if not pending or self._clock.now() >= deadline:
+                return
+            for pull in pending:
+                stopped = self._out_of_time_or_tokens(deadline)
+                if stopped:
+                    self._progress.stops.append(f"{stopped}; fixes that did not hold wait")
+                    return
+                tried.add((pull.url, pull.attempt))
+                self._retry(pull)
+                self._save()
+            self._poll_until(deadline)
+
+    def _retry(self, pull: OpenedPull) -> None:
+        workspace = self._workspace
+        result = next(
+            (r for r in workspace.results.values() if r.finding.identity == pull.identity), None
+        )
+        if result is None:
+            number = pull.verification.pull_number
+            # Shown in the run's session; the summary's verification line says it did not hold.
+            self._progress.notes.append(
+                f"Pull request #{number}: its fix did not hold, but its finding is not among "
+                "this run's verdicts, so it was not tried again"
+            )
+            return
+        reason = _not_fixable(result)
+        if reason:
+            text = f"its fix did not hold; not tried again: {reason}"
+            self._progress.fixes.append(_outcome(result.finding, FixOutcomeKind.SKIPPED, text))
+            return
+        # Results exist only for the current scan, so this does not scan again.
+        self._progress.fixes.append(self._fix(result.finding, workspace.scan_report().host))
 
     def _poll_until(self, deadline: datetime) -> None:
         actions, fixes = self._workspace.actions, self._workspace.fixes

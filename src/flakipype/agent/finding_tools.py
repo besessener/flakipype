@@ -71,6 +71,8 @@ class FindingTools:
     logs: LogSource
     contents: ContentsSource
     excerpt_lines: int = 120
+    # Jobs of the finding's job on a fix branch, which the scan never saw.
+    fix_jobs: tuple[int, ...] = ()
     _log_cache: dict[int, str] = field(default_factory=dict)
 
     @property
@@ -114,32 +116,39 @@ class FindingTools:
         ]
         return sorted(runs, key=lambda run: run.created_at, reverse=True)
 
-    def _log(self, job_id: int) -> tuple[JobResult, str]:
+    def _job(self, job_id: int) -> tuple[str, str]:
+        """The job's name and failed step; only jobs of this workflow can be read."""
         known = self._known_jobs()
-        if job_id not in known:
-            message = f"job {job_id} is not a job of this workflow known to the scan"
-            raise ToolError(message)
+        if job_id in known:
+            job = known[job_id][1]
+            return job.name, job.failed_step
+        if job_id in self.fix_jobs:
+            return self.finding.key.job, ""
+        message = f"job {job_id} is not a job of this workflow known to the scan"
+        raise ToolError(message)
+
+    def _log(self, job_id: int) -> str:
         if job_id not in self._log_cache:
             log = _github(lambda: self.logs.job_log(self.repository, job_id))
             if log is None:
                 message = f"the log of job {job_id} is no longer available on GitHub"
                 raise ToolError(message)
             self._log_cache[job_id] = log
-        return known[job_id][1], self._log_cache[job_id]
+        return self._log_cache[job_id]
 
     def _failure_excerpt(self, given: JobInput) -> str:
-        job, log = self._log(given.job_id)
-        excerpt = failure_excerpt(log, self.excerpt_lines)
+        name, failed_step = self._job(given.job_id)
+        excerpt = failure_excerpt(self._log(given.job_id), self.excerpt_lines)
         return data_block(
-            "log", excerpt.text, job=str(job.job_id), job_name=job.name,
-            step=excerpt.step_header or job.failed_step,
+            "log", excerpt.text, job=str(given.job_id), job_name=name,
+            step=excerpt.step_header or failed_step,
             lines=f"{excerpt.first_line}-{excerpt.last_line} of {excerpt.total_lines}",
         )  # fmt: skip
 
     def _log_range(self, given: LogRangeInput) -> str:
-        job, log = self._log(given.job_id)
-        text = log_range(log, given.from_line, given.to_line)
-        return data_block("log", text, job=str(job.job_id), job_name=job.name)
+        name, _ = self._job(given.job_id)
+        text = log_range(self._log(given.job_id), given.from_line, given.to_line)
+        return data_block("log", text, job=str(given.job_id), job_name=name)
 
     def _run_history(self, given: HistoryInput) -> str:
         failed_jobs: dict[int, list[str]] = {}

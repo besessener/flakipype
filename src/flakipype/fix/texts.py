@@ -134,6 +134,28 @@ def commit_body(explanation: str) -> str:
 
 
 @dataclass(frozen=True)
+class RetryFacts:
+    commit: str
+    attempt: int
+    max_attempts: int
+    workflow: str
+    verify_runs: int
+
+
+def retry_comment(facts: RetryFacts, title: str, explanation: str) -> str:
+    change = _quoted(f"{title}\n\n{explanation}")
+    return f"""flakipype pushed a revised fix as commit {facts.commit[:7]} \
+(attempt {facts.attempt} of {facts.max_attempts}): the verification of the earlier commit \
+failed with the same error as before.
+
+### The change (written by the model)
+
+{change}
+
+Pending: flakipype reruns {facts.workflow} on this branch {facts.verify_runs} times."""
+
+
+@dataclass(frozen=True)
 class VerificationFacts:
     workflow: str
     # One entry per finished run: "passed", or what failed.

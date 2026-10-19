@@ -32,6 +32,8 @@ Orchestrator-Modell:
 
 ```text
 lock ──▶ continue earlier verifications ──▶ scan ──▶ investigate ──▶ fix ──▶ poll until done or time is up ──▶ summary
+                                                                              ▲              │ the finding's error again
+                                                                              └── retry ◀────┘
 ```
 
 1. **Sperre.** Ein zweites `flakipype run`, während eines läuft, endet sofort
@@ -81,7 +83,19 @@ lock ──▶ continue earlier verifications ──▶ scan ──▶ investiga
    Commit, zu dem sich kein Pull Request öffnen ließ, zählt gegen die
    Pull-Request-Limits wie ein geöffneter.
 6. **Abfragen** (nur `auto`) gestarteter Verifikationen alle 10 Sekunden,
-   bis alle fertig sind oder `run.max_minutes` erreicht ist.
+   bis alle fertig sind oder `run.max_minutes` erreicht ist. Zeigt eine
+   Verifikation den Fehler des Befunds wieder, versucht der Lauf einen
+   [zweiten Versuch](korrekturen.md#zweiter-versuch) über dasselbe Werkzeug
+   `fix` und dasselbe Gate, solange `fix.max_attempts`, die Zeit und die
+   Tokens reichen, und fragt dann weiter ab. Das gilt auch für einen Pull
+   Request, den der Lauf von einem früheren übernommen hat. Der Befund bekommt
+   dafür eine zweite Zeile unter `Fixes`; eine Korrektur an ausführbarem Code
+   wird wie jede andere nicht gepusht, sondern für den Chat aufbewahrt. Ein
+   zweiter Versuch öffnet keinen Pull Request und zählt nicht gegen die
+   Pull-Request-Limits. Erreicht ein Lauf sein Zeitlimit genau dann, wenn
+   die Verifikation fertig wird, holt kein späterer Lauf den Versuch nach:
+   Spätere Läufe übernehmen nur unfertige Verifikationen, und der Chat kennt
+   die Pull Requests eines Laufs nicht. Der Pull Request bleibt dann bei dir.
 7. **Zusammenfassung** auf der Standardausgabe, die systemd an das Journal
    schickt.
 
@@ -138,7 +152,8 @@ benannt, zum Beispiel `run 2026-10-12 06:02 CEST (auto)`.
 `Fixes` hat eine Zeile für jeden instabilen Befund und jeden wiederkehrenden
 Fehler: den Pull Request oder warum es keinen gibt (kein Urteil, eine
 Einstufung, die flakipype nicht korrigiert, ein Urteil, dessen Prüfung nicht
-laufen konnte, ein Limit, eine nicht gepushte Korrektur). Weitere Zeilen
+laufen konnte, ein Limit, eine nicht gepushte Korrektur), und eine zweite
+Zeile für jeden zweiten Versuch, auch in `--json`. Weitere Zeilen
 nennen die Limits, die einen Schritt gestoppt haben (`Stopped by:`), und die
 Fehler (`Problems:`), die des Scans zuerst. Eine Verifikation, deren letzte
 Abfrage GitHub nicht beantwortet hat, nennt den Fehler hinter ihrer Zeile.

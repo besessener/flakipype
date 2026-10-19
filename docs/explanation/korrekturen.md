@@ -15,11 +15,14 @@ deine Entscheidung.
   Prüfungen des Diffs; eine Bestätigung für Push, Pull Request und
   Verifikation; ein Branch plus ein signierter Commit über die API von
   GitHub; ein Draft-Pull-Request; Verifikations-Reruns mit einem
-  Ergebniskommentar; `/mode ask|auto` im Chat.
+  Ergebniskommentar; ein [zweiter Versuch](#zweiter-versuch), wenn die
+  Verifikation den Fehler des Befunds wieder zeigt; `/mode ask|auto` im Chat.
 - **Nicht enthalten**: headless Korrekturen, die stattdessen `flakipype run`
   macht (siehe [unbeaufsichtigte Läufe](unbeaufsichtigte-laeufe.md)); Forks
   (eine Korrektur braucht Push-Zugriff auf das Repository); Dateien löschen;
-  einen Pull Request aktualisieren, nachdem er geöffnet wurde; Mergen, niemals.
+  einen Pull Request anders aktualisieren als mit einem weiteren Commit nach
+  einer fehlgeschlagenen Verifikation (kein Force-Push, keine geänderte
+  Beschreibung); Mergen, niemals.
 
 ## Der Ablauf
 
@@ -38,8 +41,11 @@ deine Entscheidung.
         ┌───────────┐
         │ Reviewer  │  does the diff fix the cause without hiding it? (model)
         └─────┬─────┘
-              ▼ critical: one confirmation (ask) or the auto rules
+               ▼ critical: one confirmation (ask) or the auto rules
    branch + commit ──▶ draft pull request ──▶ verification runs ──▶ PR comment
+                                                      │ the finding's error again
+                                                      ▼
+                     fixer with the failure log ──▶ one more commit on the branch
 ```
 
 1. **Welche Befunde.** `/fix N` braucht ein geprüftes Urteil mit der
@@ -55,7 +61,9 @@ deine Entscheidung.
    einem wiederkehrenden Fehler mit offenem Pull Request später ein
    nachweislich instabiler Befund, bleibt es derselbe Pull Request. Die
    Markierung älterer Versionen enthielt die Art; solche Pull Requests werden
-   gefunden, solange der Befund dieselbe Art hat.
+   gefunden, solange der Befund dieselbe Art hat. Die Ausnahme ist ein
+   [zweiter Versuch](#zweiter-versuch) für einen Pull Request dieser Sitzung,
+   dessen Verifikation den Fehler des Befunds wieder gezeigt hat.
 2. **Push-Zugriff.** flakipype liest `permissions.push` des Repositorys,
    bevor der Fixer startet. Fehlt er, bricht `/fix` ab und sagt das. Keine
    Forks.
@@ -195,9 +203,11 @@ hinter vielen neueren gefunden wird.
    `refs/heads/flakipype/fix-<workflow>-<hash>` am festgelegten Commit an
    (der Hash ist der des Diffs). Der Name beginnt immer mit `flakipype/`.
    Eine existierende Ref anzulegen schlägt fehl, also probiert flakipype die
-   Suffixe `-2` bis `-5` und hört dann auf; es committet immer nur auf einen
-   Branch, den es gerade selbst angelegt hat, sodass kein existierender
-   Branch beschrieben wird, auch nicht der Standardbranch.
+   Suffixe `-2` bis `-5` und hört dann auf; es committet nur auf einen
+   Branch, den es gerade selbst angelegt hat, oder bei einem
+   [zweiten Versuch](#zweiter-versuch) auf seinen eigenen Korrektur-Branch,
+   solange dieser noch auf seinem eigenen Commit endet. So wird kein fremder
+   Branch beschrieben, auch nicht der Standardbranch.
 2. **Commit.** GraphQL `createCommitOnBranch` fügt die geänderten Dateien als
    einen Commit hinzu, mit `expectedHeadOid` auf dem festgelegten Commit,
    sodass er nur an den neuen Branch anhängen und nie etwas überschreiben
@@ -307,6 +317,50 @@ fortgesetzte Sitzung setzt sie fort. Einen Pull Request, den ein
 [unbeaufsichtigter Lauf](unbeaufsichtigte-laeufe.md) geöffnet hat, fragt
 dieser Lauf ab und, wenn er nicht rechtzeitig fertig ist, der nächste.
 
+## Zweiter Versuch
+
+Zeigt die Verifikation in mindestens einem Lauf den Fehler des Befunds
+wieder („the fix did not hold“), bekommt der Fixer die Gelegenheit, aus
+diesem Fehlschlag zu lernen. Ein Fehlschlag mit einer anderen Signatur oder
+in einem anderen Job löst keinen zweiten Versuch aus: Dann ist unklar, ob die
+Korrektur schuld ist.
+
+- **Auslöser.** Im Chat endet der Hinweis der Verifikation mit „The fix did
+  not hold: /fix N tries again with the failure log (attempt 2 of 2).“
+  `/fix N`, oder das Werkzeug `fix` des Chat-Modells, startet den Versuch;
+  der Chat startet ihn nie von selbst. Ein
+  [unbeaufsichtigter Lauf](unbeaufsichtigte-laeufe.md) im Modus `auto`
+  versucht es selbst, nachdem er die Verifikationen abgefragt hat. Es zählt
+  nur ein Pull Request, den diese Sitzung geöffnet oder von einem früheren
+  Lauf übernommen hat; jeden anderen offenen Pull Request von flakipype
+  verlinkt `/fix` wie bisher.
+- **Fixer.** Frisch, wie beim ersten Mal, aber die Arbeitskopie steht auf dem
+  gepushten Korrektur-Commit, nicht auf dem Standardbranch. Die Aufgabe nennt
+  den Branch und die Jobs, die mit dem Fehler des Befunds fehlschlugen, und
+  enthält das Ergebnis der Verifikation als Daten markiert.
+  `failure_excerpt` und `log_range` dürfen genau diese Jobs des
+  Korrektur-Branchs lesen, die der Scan nie gesehen hat. Prüfungen und
+  Reviewer laufen wie beim ersten Mal, über den Diff gegen den
+  Korrektur-Commit.
+- **Bestätigung.** Dieselbe `critical`-Aktion mit dem Titel „Push a revised
+  fix to draft pull request #N?“, dem Versuch („attempt 2 of 2“) und dem
+  vollständigen Diff. Im Modus `auto` gelten dieselben Regeln: Nur reine
+  Dokumentation ohne Warnung wird gepusht, alles andere bleibt für `/fix N`
+  in der Sitzung.
+- **Auslieferung.** Ein weiterer signierter Commit über
+  `createCommitOnBranch` auf demselben Branch, mit `expectedHeadOid` auf dem
+  letzten Commit von flakipype. Hat jemand anderes auf den Branch gepusht,
+  lehnt GitHub ab, und nichts wird geschrieben. Direkt davor prüft flakipype,
+  dass der Pull Request noch offen ist. Kein neuer Branch, kein neuer Pull
+  Request, kein Force-Push; die Beschreibung bleibt, ein Kommentar vom Code
+  nennt den Commit und den Versuch und zitiert Titel und Erklärung des
+  Modells. Danach beginnt die Verifikation auf dem neuen Commit von vorn.
+- **Grenzen.** `fix.max_attempts` (Standard 2, höchstens 3) Korrekturen pro
+  Pull Request, die erste eingeschlossen. Ein zweiter Versuch öffnet keinen
+  Pull Request und zählt deshalb nicht gegen die Pull-Request-Limits; seine
+  Tokens, seine Zeit und seine Verifikations-Reruns zählen wie bei jeder
+  Korrektur. Danach bleibt der Pull Request bei dir.
+
 ## Modi
 
 `/mode ask|auto` wechselt den Modus des Chats; `/mode` allein zeigt ihn an.
@@ -359,6 +413,7 @@ Korrektur bleibt für `/mode ask` und `/fix N` in der Sitzung.
 | Pull Requests pro Chat-Sitzung | 3 | `fix.max_prs_per_session` (1–20) |
 | Dateien und geänderte Zeilen pro Korrektur | 10 und 400 | `fix.max_files` (1–50), `fix.max_changed_lines` (10–2.000) |
 | Verifikationsläufe pro Korrektur | 3 | `fix.verify_runs` (1–10) |
+| Korrekturen pro Pull Request (die erste und jeder [zweite Versuch](#zweiter-versuch)) | 2 | `fix.max_attempts` (1–3) |
 | Werkzeugrunden des Fixers | 20 | `fix.max_rounds` (5–60) |
 | Tokens des Fixers (Fixer und Reviewer) | 300.000 | `fix.max_tokens` (10.000–2.000.000) |
 | Laufzeit des Fixers | 10 Minuten | `fix.max_seconds` (60–3.600) |
@@ -388,8 +443,9 @@ supported in this repository“), enthält die Meldung sie.
 - **`fix`** (zwischen `investigate` und `actions`): die Prüfungen
   (`checks.py`), Branch-Name, Pull-Request-Beschreibung und Kommentartexte
   (`texts.py`), die Verifikation (`verify.py`), die Auslieferung
-  (`delivery.py`), der Sitzungszustand der Korrekturen (`state.py`) und der
-  Service mit dem Pull-Request-Budget und der Bestätigung (`service.py`).
+  (`delivery.py`), der Sitzungszustand der Korrekturen (`state.py`), wann ein
+  zweiter Versuch erlaubt ist (`retry.py`) und der Service mit dem
+  Pull-Request-Budget und der Bestätigung (`service.py`).
 - **`github`**: `pulls.py` für Refs, `createCommitOnBranch`, Pull Requests,
   Kommentare, Push-Berechtigung und die Baumauflistung.
 - **`investigate`**: `/fix`, `/mode`, die Workspace-Seite des Werkzeugs
@@ -411,5 +467,9 @@ supported in this repository“), enthält die Meldung sie.
   Signatur, nicht verifizierbar) und der Kommentartext mit einer Fake-Uhr.
 - Das Gate in beiden Modi, einschließlich Warnungen und ausführbarem Code in
   `auto`.
+- Der zweite Versuch: nur nach dem Fehler des Befunds und innerhalb von
+  `fix.max_attempts`, der Fixer mit den Jobs des Korrektur-Branchs, ein Commit
+  auf demselben Branch, ein geschlossener Pull Request und ein fremder Commit
+  auf dem Branch, die nichts pushen, und ein Lauf, der es selbst versucht.
 - Die Bestätigung mit einem Diff und der Modus in der Statuszeile:
   Pilot-Tests und Snapshots.

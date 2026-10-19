@@ -263,6 +263,33 @@ def test_failures_are_classified(
     assert "by chance" not in done.outcome
 
 
+@pytest.mark.parametrize(("log", "jobs"), [(SAME_LOG, (5,)), (OTHER_LOG, ())])
+def test_only_the_findings_error_marks_the_job_for_a_retry(
+    cache: ScanCache, log: str, jobs: tuple[int, ...]
+) -> None:
+    setup = Setup(cache)
+    failing(setup, [job(5, run_id=91, name="e2e")])
+    setup.logs.logs[5] = log
+    current = setup.watching(verification(wanted=1, fingerprints=(same_fingerprint(),)))
+
+    done = setup.step(current)
+
+    assert done.same_error_jobs == jobs
+    assert Verification.from_dict(done.to_dict()) == done
+
+
+def test_a_restarted_verification_follows_the_new_commit_from_the_start(cache: ScanCache) -> None:
+    setup = Setup(cache)
+    failing(setup, [job(5, run_id=91, name="e2e")])
+    setup.logs.logs[5] = SAME_LOG
+    done = setup.step(setup.watching(verification(wanted=1, fingerprints=(same_fingerprint(),))))
+
+    restarted = done.restarted("5eed" + "0" * 36, setup.clock.now)
+
+    assert restarted == replace(verification(wanted=1, fingerprints=(same_fingerprint(),)),
+                                commit="5eed" + "0" * 36)  # fmt: skip
+
+
 def test_a_success_without_the_findings_job_is_no_pass(cache: ScanCache) -> None:
     setup = Setup(cache, runs=FakeRuns(states={91: [state(91, conclusion="success")]}))
     setup.logs.jobs_by_attempt[91, 1] = [
@@ -385,5 +412,6 @@ def test_a_verification_survives_a_resume(cache: ScanCache) -> None:
 def test_a_verification_stored_before_dispatchable_existed_loads() -> None:
     stored = verification().to_dict()
     del stored["dispatchable"]
+    del stored["same_error_jobs"]
 
     assert Verification.from_dict(stored) == verification()
