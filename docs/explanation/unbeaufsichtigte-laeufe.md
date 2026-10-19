@@ -358,7 +358,7 @@ dass der Timer nur läuft, solange du angemeldet bist, und dass
 Benutzerinstallation ohne root:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.3.0/install.sh
+curl -fsSLO https://raw.githubusercontent.com/besessener/flakipype/v0.4.0/install.sh
 sh install.sh
 ```
 
@@ -371,7 +371,7 @@ sh install.sh
    Releases und installiert `uv` nach `~/.local/bin`. Eine Abweichung bricht
    ab und installiert nichts.
 3. Führt `uv tool install --force
-   git+https://github.com/besessener/flakipype@v0.3.0` aus. Das Tag ist
+   git+https://github.com/besessener/flakipype@v0.4.0` aus. Das Tag ist
    dasjenige, mit dem das Skript veröffentlicht wurde. uv nimmt ein Python
    3.12 oder neuer vom System oder lädt eines herunter, das es selbst prüft.
 4. Gibt den nächsten Schritt aus (`flakipype setup`) und einen Hinweis, wenn
@@ -383,8 +383,8 @@ die Smoke-Tests. `uv tool install git+…` bleibt für alle dokumentiert, die
 
 ## Release
 
-Die Version ist `0.3.0` in `pyproject.toml`, und `install.sh` nennt das Tag
-`v0.3.0`; ein Unit-Test prüft, dass beide übereinstimmen. Das Tag auf `main`
+Die Version ist `0.4.0` in `pyproject.toml`, und `install.sh` nennt das Tag
+`v0.4.0`; ein Unit-Test prüft, dass beide übereinstimmen. Das Tag auf `main`
 und das GitHub-Release daraus werden von Hand erstellt. Es gibt keinen
 Release-Workflow und kein PyPI-Paket.
 
