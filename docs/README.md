@@ -49,5 +49,6 @@ geordnet, was du gerade brauchst.
 - [Sicherheitsmodell](explanation/sicherheitsmodell.md) – Modi, Risikostufen, Pull Requests und Budgets.
 
 Verwandte Projekte mit derselben Idee und demselben Aufbau der Dokumentation:
-[PlayMonkey](https://github.com/besessener/PlayMonkey/blob/main/docs/README.md) und
-[Archivist](https://github.com/besessener/Archivist/blob/main/docs/README.md).
+[PlayMonkey](https://github.com/besessener/PlayMonkey/blob/main/docs/README.md),
+[Archivist](https://github.com/besessener/Archivist/blob/main/docs/README.md) und
+[WOMBOT](https://github.com/besessener/WOMBOT/blob/main/docs/README.md).

@@ -3,10 +3,11 @@
 Die Webseite liegt unter `site/` als reines HTML und CSS, ohne Build-Schritt.
 Sie erscheint auf <https://besessener.github.io/flakipype/>. Aufbau,
 Abschnitte und Stylesheet teilt sie mit den Seiten von
-[PlayMonkey](https://besessener.github.io/PlayMonkey/) und
-[Archivist](https://besessener.github.io/Archivist/); nur Texte, Bilder, Icon
-und die Farbtokens oben in `style.css` unterscheiden sich. Eine Änderung am
-Aufbau oder am gemeinsamen Teil von `style.css` gehört in alle drei Seiten.
+[PlayMonkey](https://besessener.github.io/PlayMonkey/),
+[Archivist](https://besessener.github.io/Archivist/) und
+[WOMBOT](https://besessener.github.io/WOMBOT/); nur Texte, Bilder, Icon und die
+Farbtokens oben in `style.css` unterscheiden sich. Eine Änderung am Aufbau oder
+am gemeinsamen Teil von `style.css` gehört in alle vier Seiten.
 
 ## Einmalig: GitHub Pages einschalten
 
