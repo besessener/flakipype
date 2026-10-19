@@ -115,6 +115,10 @@ class FakePullRequests:
     commits: list[CommitRequest] = field(default_factory=list)
     drafts: list[PullRequestText] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
+    # The shas of successive commits; FIX_COMMIT once they are used up.
+    commit_shas: list[str] = field(default_factory=list)
+    # Whether an opened draft is listed among the open pull requests afterwards.
+    keep_opened: bool = False
 
     def _call(self, call: str) -> None:
         self.calls.append(call)
@@ -156,16 +160,19 @@ class FakePullRequests:
     def commit_files(self, repository: str, commit: CommitRequest) -> str:
         self._call(f"commit_files {repository} {commit.branch}")
         self.commits.append(commit)
-        return FIX_COMMIT
+        return self.commit_shas.pop(0) if self.commit_shas else FIX_COMMIT
 
     def open_draft(self, repository: str, pull: PullRequestText) -> PullRequest:
         self._call(f"open_draft {repository} {pull.head}")
         self.drafts.append(pull)
         number = 12 + len(self.drafts) - 1
-        return PullRequest(
+        opened = PullRequest(
             number=number, url=f"https://github.com/{repository}/pull/{number}",
             branch=pull.head, body=pull.body, head_repository=repository,
         )  # fmt: skip
+        if self.keep_opened:
+            self.open.append(opened)
+        return opened
 
 
 @dataclass

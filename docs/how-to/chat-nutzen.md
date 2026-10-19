@@ -36,7 +36,7 @@ Tokens.
 | `/findings`, `/flaky` | Die Befunde des aktuellen Scans auflisten |
 | `/investigate N [N …]` | Befunde nach Nummer untersuchen; `all` für die instabilen Jobs und wiederkehrenden Fehler; `--fresh` ignoriert gespeicherte Urteile |
 | `/why N` | Das Urteil zu Befund N zeigen (untersucht ihn vorher, falls nötig) |
-| `/fix N [--fresh]` | Eine Korrektur für Befund N schreiben und sie nach deiner Bestätigung als Draft-PR pushen; `--fresh` verwirft eine Korrektur, die gezeigt, aber nicht gepusht wurde |
+| `/fix N [--fresh]` | Eine Korrektur für Befund N schreiben und sie nach deiner Bestätigung als Draft-PR pushen, oder eine überarbeiten, deren Verifikation den Fehler wieder zeigte; `--fresh` verwirft eine Korrektur, die gezeigt, aber nicht gepusht wurde |
 | `/rerun N [--all]` | Die fehlgeschlagenen Jobs des neuesten fehlgeschlagenen Laufs von Befund N erneut ausführen; `--all` führt alle Jobs seines neuesten Laufs erneut aus |
 | `/dispatch N [ref] [xK]` | Den Workflow von Befund N auf dem Standardbranch oder `ref` starten, K-mal (1–10) |
 | `/runs` | Die in dieser Sitzung gestarteten Läufe und ihr Zustand |
@@ -104,8 +104,12 @@ Draft-PR an und führt den Workflow auf dem Fix-Branch erneut aus; **Don't
 push** (der Standard, auch Escape) behält die Korrektur in der Sitzung. Bitte
 den Chat um Änderungen („keep the assertion“), und er überarbeitet diese
 Korrektur; `/fix N --fresh` fängt neu an. Das Ergebnis der Verifikation kommt
-als Hinweis und als Kommentar am Pull Request. Mergen bleibt immer dir
-überlassen.
+als Hinweis und als Kommentar am Pull Request. Zeigt sie den Fehler des
+Befunds wieder, sagt der Hinweis das, und `/fix N` lässt den Fixer mit dem
+Log des Fehlschlags eine überarbeitete Korrektur schreiben, die nach deiner
+Bestätigung als weiterer Commit auf denselben Draft-PR geht
+([zweiter Versuch](../explanation/korrekturen.md#zweiter-versuch),
+`fix.max_attempts`). Mergen bleibt immer dir überlassen.
 
 Die Statuszeile zeigt den Modus. In `/mode auto` laufen Aktionen ohne Dialog
 innerhalb der Budgets, aber eine Korrektur wird nur gepusht, wenn sie

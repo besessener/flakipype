@@ -1,12 +1,12 @@
 """Delivery of a confirmed fix: branch, one signed commit, draft pull request, verification."""
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 
 from flakipype.fix.state import OpenedPull, Proposal
-from flakipype.fix.texts import commit_body
+from flakipype.fix.texts import RetryFacts, commit_body, retry_comment
 from flakipype.fix.verify import Verification, Verifier
 from flakipype.github.actions import ApiRateLimitError, GitHubApiError
 from flakipype.github.pulls import CommitRequest, PullRequest, PullRequestText
@@ -24,6 +24,15 @@ class DeliveryPulls(Protocol):
     def commit_files(self, repository: str, commit: CommitRequest) -> str: ...
 
     def open_draft(self, repository: str, pull: PullRequestText) -> PullRequest: ...
+
+    def comment(self, repository: str, number: int, body: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class Retried:
+    pull: OpenedPull
+    # Why the comment about the new commit is missing on the pull request; empty if posted.
+    problem: str
 
 
 class DeliveryError(Exception):
@@ -82,7 +91,47 @@ class Delivery:
             proposal, replace(proposal.verification, pull_number=pull.number, branch=branch,
                               commit=sha, started=self._now()),
         )  # fmt: skip
-        return OpenedPull(proposal.finding, proposal.title, pull.url, branch, verification)
+        return OpenedPull(
+            proposal.finding, proposal.title, pull.url, branch, verification,
+            identity=proposal.identity,
+        )  # fmt: skip
+
+    def deliver_retry(self, proposal: Proposal, max_attempts: int) -> Retried:
+        """One more commit on the pull request's branch, only on top of flakipype's own commit."""
+        pull = proposal.retry_of
+        if pull is None:
+            message = "the proposal is not a retry"
+            raise DeliveryError(message)
+        files = {change.path: change.after.encode("utf-8") for change in proposal.changes}
+        commit = CommitRequest(
+            pull.branch, proposal.commit, proposal.title, commit_body(proposal.explanation), files
+        )
+        try:
+            sha = self._pulls.commit_files(proposal.repository, commit)
+        except GitHubApiError as error:
+            message = (
+                f"Nothing was pushed to {pull.branch}: {fix_refusal(error)} flakipype adds a "
+                f"commit only while the branch still ends at its own commit {proposal.commit[:7]}."
+            )
+            raise DeliveryError(message) from error
+        attempt = pull.attempt + 1
+        facts = RetryFacts(
+            sha, attempt, max_attempts, pull.verification.workflow_name,
+            proposal.verification.wanted,
+        )  # fmt: skip
+        problem = ""
+        try:
+            self._pulls.comment(
+                proposal.repository, pull.verification.pull_number,
+                retry_comment(facts, proposal.title, proposal.explanation),
+            )  # fmt: skip
+        except GitHubApiError as error:
+            problem = f"(The comment could not be posted on the pull request: {error})"
+        verification = self._start_verification(
+            proposal, proposal.verification.restarted(sha, self._now())
+        )
+        opened = replace(pull, title=proposal.title, verification=verification, attempt=attempt)
+        return Retried(opened, problem)
 
     def _create_branch(self, proposal: Proposal) -> str:
         name = proposal.verification.branch

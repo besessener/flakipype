@@ -6,7 +6,10 @@ nicht.
 
 ## Pull Requests, nie der Standardbranch
 
-Jede Korrektur ist ein neuer Branch plus ein Pull Request. flakipype pusht
+Jede Korrektur ist ein neuer Branch plus ein Pull Request; hält sie nicht,
+kommen weitere Commits auf denselben Branch, höchstens `fix.max_attempts`
+Korrekturen insgesamt und nur, solange der Branch auf flakipypes eigenem
+Commit endet ([zweiter Versuch](korrekturen.md#zweiter-versuch)). flakipype pusht
 nie auf den Standardbranch, macht nie einen Force-Push und merget nie –
 Mergen ist immer die Entscheidung eines Menschen nach einem Review. Das gilt
 in jedem Modus und lässt sich nicht wegkonfigurieren.
@@ -55,7 +58,7 @@ ein Werkzeug läuft:
 | --- | --- | --- | --- |
 | `read` | Läufe auflisten, Logs lesen, Dateien lesen, die Kopie des Fixers im Speicher bearbeiten | läuft | läuft |
 | `write` | einen Job erneut ausführen, einen Workflow per Dispatch starten, einen Lauf abbrechen | bestätigen | läuft innerhalb des Budgets |
-| `critical` | einen Korrektur-Branch pushen und einen Draft-PR öffnen | bestätigen, mit dem Diff | läuft innerhalb des Budgets nur für reine Dokumentation ohne Warnung; sonst wartet die Korrektur auf dich |
+| `critical` | einen Korrektur-Branch pushen und einen Draft-PR öffnen, oder einen weiteren Commit auf ihn pushen | bestätigen, mit dem Diff | läuft innerhalb des Budgets nur für reine Dokumentation ohne Warnung; sonst wartet die Korrektur auf dich |
 
 Bearbeitungen sind `read`, weil sie nur den Speicher ändern: Nichts wird
 geklont oder auf die Platte geschrieben, und nichts verlässt den Rechner vor

@@ -53,6 +53,7 @@ max_prs_per_session = 3
 max_files = 10
 max_changed_lines = 400
 verify_runs = 3
+max_attempts = 2
 max_rounds = 20
 max_tokens = 300000
 max_seconds = 600
@@ -94,6 +95,7 @@ store = "auto"
 | `fix.max_files` | `10` | 1–50 geänderte Dateien pro Korrektur |
 | `fix.max_changed_lines` | `400` | 10–2.000 hinzugefügte plus entfernte Zeilen pro Korrektur |
 | `fix.verify_runs` | `3` | 1–10 Läufe des Workflows auf dem Branch der Korrektur; die Reruns zählen gegen `actions.max_per_session` |
+| `fix.max_attempts` | `2` | 1–3 Korrekturen pro Draft-PR, die erste eingeschlossen: Zeigt die Verifikation den Fehler des Befunds wieder, schreibt der Fixer aus dem Fehlschlag einen weiteren Commit auf denselben Branch ([zweiter Versuch](../explanation/korrekturen.md#zweiter-versuch)); `1` schaltet das ab |
 | `fix.max_rounds` | `20` | 5–60 Modellaufrufe des Fixers |
 | `fix.max_tokens` | `300000` | 10k–2M Tokens für den Fixer und seinen Reviewer zusammen |
 | `fix.max_seconds` | `600` | 60–3600 Sekunden für den Fixer |

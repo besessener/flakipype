@@ -2,7 +2,13 @@ from collections.abc import Callable
 from typing import Any
 
 from flakipype.agent.budget import Limits, Stop
-from flakipype.agent.fix_pipeline import FixConfig, FixRequest, FixResult, propose_fix
+from flakipype.agent.fix_pipeline import (
+    FailedVerification,
+    FixConfig,
+    FixRequest,
+    FixResult,
+    propose_fix,
+)
 from flakipype.agent.fixer import FixStatus
 from flakipype.agent.masking import Masker
 from flakipype.agent.messages import ModelSettings
@@ -11,7 +17,7 @@ from flakipype.agent.workcopy import FileChange
 
 from support.fake_anthropic import ScriptedModel, call, message, text, verdict_input
 from support.fake_files import E2E_TEST, FakeFiles
-from support.fake_sources import FakeContents, FakeLogs, evidence, finding
+from support.fake_sources import LOG, FakeContents, FakeLogs, evidence, finding
 
 COMMIT = "3f2a9c1" + "0" * 33
 EDIT = call(
@@ -42,6 +48,7 @@ def propose(
     check_changes: Callable[[list[FileChange]], list[str]] | None = None,
     stop: Stop | None = None,
     max_seconds: float | None = None,
+    failed_verification: FailedVerification | None = None,
 ) -> FixResult:
     answers = iter(check or [])
     config = FixConfig(
@@ -49,7 +56,7 @@ def propose(
         settings=ModelSettings(model="m-1"),
         limits=limits or Limits(rounds=20, tokens=300_000, seconds=600),
         masker=Masker.with_secrets(["sk-hidden-value"]),
-        logs=FakeLogs(),
+        logs=FakeLogs(logs={11: LOG, 777: LOG}),
         contents=FakeContents(),
         files=FakeFiles(),
         clock=lambda: 0.0,
@@ -65,6 +72,7 @@ def propose(
         earlier=earlier,
         instructions=instructions,
         max_seconds=max_seconds,
+        failed_verification=failed_verification,
     )
     return propose_fix(config, request)
 
@@ -312,6 +320,26 @@ def test_an_earlier_proposal_and_the_users_wishes_are_the_starting_point() -> No
     assert "The working copy already holds an earlier proposal." in task
     assert f"<wishes {UNTRUSTED}>\nKeep the assertion.\n</wishes>" in task
     assert "sk-hidden-value" not in model.message_text(1, 0)
+
+
+def test_a_fix_that_did_not_hold_is_revised_with_the_fix_branchs_log() -> None:
+    failed = FailedVerification(
+        "flakipype/fix-ci-1", (777,), "Run 1 failed with the same error as before."
+    )
+    excerpt = message(call("toolu_1", "failure_excerpt", {"job_id": 777}))
+    model = ScriptedModel([excerpt, message(EDIT), submit("toolu_3"), review("accept")])
+
+    result = propose(model, failed_verification=failed)
+
+    assert result.accepted
+    task = model.message_text(0, 0)
+    assert "already pushed to flakipype/fix-ci-1" in task
+    assert "Read the failed job(s) 777 with failure_excerpt" in task
+    assert f"<verification {UNTRUSTED}>\nRun 1 failed with the same error" in task
+    read = model.tool_results(1)["toolu_1"]
+    assert not read.get("is_error")
+    assert '<log job="777"' in read["content"]
+    assert "already pushed" in model.message_text(3, 0)
 
 
 def test_wishes_without_an_earlier_proposal_are_the_fix_to_make() -> None:

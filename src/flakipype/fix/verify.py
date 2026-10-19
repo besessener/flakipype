@@ -19,6 +19,7 @@ WAIT_FOR_RUN = timedelta(minutes=10)
 _STARTED_BY_PUSH = frozenset({"pull_request", "push"})
 _EVENTS = _STARTED_BY_PUSH | {"workflow_dispatch"}
 _UNREADABLE = "failed (its log could not be read)"
+_DID_NOT_HOLD = "failed with the same error as before: the fix did not hold"
 
 
 class Stage(StrEnum):
@@ -49,6 +50,8 @@ class Verification:
     dispatchable: bool = False
     # Why the last poll could not read GitHub; the next poll tries again.
     detail: str = ""
+    # Jobs on the fix branch that failed with one of the fingerprints: the fix did not hold.
+    same_error_jobs: tuple[int, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "started": self.started.isoformat()}
@@ -60,8 +63,16 @@ class Verification:
             "rate": Rate(**data["rate"]), "fingerprints": tuple(data["fingerprints"]),
             "stage": Stage(data["stage"]),
             "watched": tuple(data["watched"]), "results": tuple(data["results"]),
+            "same_error_jobs": tuple(data.get("same_error_jobs", ())),
         }  # fmt: skip
         return cls(**fields)
+
+    def restarted(self, commit: str, started: datetime) -> "Verification":
+        """The same pull request's verification from the start, on a new commit of its branch."""
+        return replace(
+            self, commit=commit, started=started, stage=Stage.WAITING, watched=(), results=(),
+            outcome="", dispatchable=False, detail="", same_error_jobs=(),
+        )  # fmt: skip
 
 
 class CommitRuns(Protocol):
@@ -161,8 +172,11 @@ class Verifier:
         if run.conclusion is None:
             unread = f"; {run.detail}" if run.detail else ""
             return self._finish(verification, f"a run did not finish while it was watched{unread}")
-        result = self._result(verification, run)
-        updated = replace(verification, results=(*verification.results, result))
+        result, same_error_job = self._result(verification, run)
+        updated = replace(
+            verification, results=(*verification.results, result),
+            same_error_jobs=(*verification.same_error_jobs, *same_error_job),
+        )  # fmt: skip
         if len(updated.results) >= updated.wanted:
             return self._finish(updated)
         if result == _did_not_run(verification.job):
@@ -186,11 +200,12 @@ class Verifier:
             return self._finish(verification, str(error))
         return replace(verification, watched=(*verification.watched, rerun.number))
 
-    def _result(self, verification: Verification, run: WatchedRun) -> str:
+    def _result(self, verification: Verification, run: WatchedRun) -> tuple[str, tuple[int, ...]]:
+        """What the run showed, and the job that failed with the finding's error, if one did."""
         if run.run_id is None or run.conclusion not in {"success", *FAILED_CONCLUSIONS}:
-            return str(run.conclusion).replace("_", " ")
+            return str(run.conclusion).replace("_", " "), ()
         if run.conclusion == "success":
-            return self._classify_success(verification, run, run.run_id)
+            return self._classify_success(verification, run, run.run_id), ()
         return self._classify_failure(verification, run, run.run_id)
 
     def _classify_success(self, verification: Verification, run: WatchedRun, run_id: int) -> str:
@@ -203,7 +218,9 @@ class Verifier:
             return "passed"
         return _did_not_run(verification.job)
 
-    def _classify_failure(self, verification: Verification, run: WatchedRun, run_id: int) -> str:
+    def _classify_failure(
+        self, verification: Verification, run: WatchedRun, run_id: int
+    ) -> tuple[str, tuple[int, ...]]:
         try:
             jobs = self._github.logs.attempt_jobs(run.repository, run_id, run.attempt)
             failed = [job for job in jobs if job.failed and job.name == verification.job]
@@ -211,11 +228,12 @@ class Verifier:
                 others = (
                     ", ".join(sorted({job.name for job in jobs if job.failed})) or "another job"
                 )
-                return f"failed in {others}, not in {verification.job}"
+                return f"failed in {others}, not in {verification.job}", ()
             log = self._github.logs.job_log(run.repository, failed[0].job_id)
         except GitHubApiError:
-            return _UNREADABLE
-        return _signature_result(verification.fingerprints, log)
+            return _UNREADABLE, ()
+        result = _signature_result(verification.fingerprints, log)
+        return result, (failed[0].job_id,) if result == _DID_NOT_HOLD else ()
 
     def _run(self, verification: Verification, *, run_id: int | None) -> WatchedRun:
         return WatchedRun(
@@ -251,5 +269,5 @@ def _signature_result(fingerprints: tuple[str, ...], log: str | None) -> str:
     if signature is None:
         return _UNREADABLE
     if signature.fingerprint in fingerprints:
-        return "failed with the same error as before: the fix did not hold"
+        return _DID_NOT_HOLD
     return f"failed with another error: {signature.message}"
