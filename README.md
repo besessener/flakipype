@@ -107,8 +107,8 @@ Dokumentation liegt unter [docs/](docs/README.md), gegliedert nach
 
 ## Verwandte Projekte
 
-flakipype, PlayMonkey und Archivist sind aus derselben agentischen Idee
-entstanden und teilen Grundregeln, Qualitätsprüfungen und den Aufbau der
+flakipype, PlayMonkey, Archivist und WOMBOT sind aus derselben agentischen
+Idee entstanden und teilen Grundregeln, Qualitätsprüfungen und den Aufbau der
 Dokumentation:
 
 - [PlayMonkey](https://github.com/besessener/PlayMonkey) – lässt einen Monkey
@@ -116,6 +116,9 @@ Dokumentation:
   reproduzierbare Fehler.
 - [Archivist](https://github.com/besessener/Archivist) – ein persönlicher,
   agentischer KI-Archivar für Windows.
+- [WOMBOT](https://github.com/besessener/WOMBOT) – ein Agent für Microsoft 365
+  Copilot, der in Mail, Teams und Besprechungen findet, wer dir was zugesagt
+  hat, mit Status und Quelle; er liest nur.
 
 ## Lizenz
 
