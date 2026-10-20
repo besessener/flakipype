@@ -4,7 +4,7 @@
   <g font-family="Segoe UI, Helvetica, Arial, sans-serif" transform="translate(0 -27)">
     <text x="530" y="315" font-size="112" font-weight="700" fill="#ffffff">flakipype</text>
     <rect x="534" y="345" width="96" height="8" rx="4" fill="#ffffff" fill-opacity="0.6"/>
-    <text x="530" y="420" font-size="42" fill="#ffffff" fill-opacity="0.85">Find, explain and fix flaky</text>
-    <text x="530" y="474" font-size="42" fill="#ffffff" fill-opacity="0.85">GitHub Actions pipelines.</text>
+    <text x="530" y="420" font-size="42" fill="#ffffff" fill-opacity="0.85">Instabile GitHub-Actions-Pipelines</text>
+    <text x="530" y="474" font-size="42" fill="#ffffff" fill-opacity="0.85">finden, erklären und beheben</text>
   </g>
 </svg>
