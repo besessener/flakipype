@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#7c2d12"/>
+  <g transform="translate(130 160) scale(10)"><rect width="32" height="32" rx="8" fill="#c2410c"/><path d="M6 20h5l3-8 4 12 3-7h5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" transform="translate(0 -27)">
+    <text x="530" y="315" font-size="112" font-weight="700" fill="#ffffff">flakipype</text>
+    <rect x="534" y="345" width="96" height="8" rx="4" fill="#ffffff" fill-opacity="0.6"/>
+    <text x="530" y="420" font-size="42" fill="#ffffff" fill-opacity="0.85">Find, explain and fix flaky</text>
+    <text x="530" y="474" font-size="42" fill="#ffffff" fill-opacity="0.85">GitHub Actions pipelines.</text>
+  </g>
+</svg>
